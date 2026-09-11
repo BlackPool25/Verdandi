@@ -4,7 +4,9 @@ Companion to `docs/BUILD_BACKLOG.md` (scope) + `docs/SPRINT_PACK.md` (stories) +
 
 Gates repeated for traceability: F1≥0.85, AC@1≥70%, flip<40% per partition per class, p99≤3 steps, wall<600s, grounding≥95%, 0-diverge, 32/32 plant coverage (partitions × channels × classes: 7 classes, 7 channels).
 
-## M0b — detector sensitivity (only open bar; do first)
+## M0b — detector sensitivity (ensemble now per ADR-0013; ORDER: freeze twin → re-baseline → diagnose)
+
+Order trap (audit): M0b-4 twin work changes the baseline M0b-1 diagnoses — so M0.1-exit freeze + re-baseline runs FIRST, diagnosis only on the frozen twin. Ensemble (GDN-light + USAD-small + DLinear, MP-discord guardrail) replaces quantile-only; shadow cross-partition ranker runs alongside, promotion on AC@1≥70% cross evidence.
 
 | Task | Files to touch | Acceptance | Dependency | Owner |
 |---|---|---|---|---|

@@ -5,21 +5,21 @@ ATT-TP-001 v1.0 / 2026-09-11
 ## 2. References
 SRS.md (REQ-001–010), SDD.md, ELENCHUS_DISCOVERY.md V1-§§1–5, BUILD_BACKLOG.md M0b–M5, SPIKES.md.
 ## 3. Introduction
-Prove viva-defensible trace over the entire factory flow: ranked cause + why-explanation per alarm. CONDITIONAL GO (AC@1 0.80–0.8125, flip 14.4–30.3%, 17.7s, grounding 1.00, 0-diverge 5×5; F1 gap → M0b).
+Prove viva-defensible trace over the entire factory flow: ranked cause + why-explanation per alarm. CONDITIONAL GO (line-scale baselines: AC@1 0.80–0.8125, flip 14.4–30.3%, 17.7s, grounding 1.00, 0-diverge 5×5; F1 gap → M0b).
 ## 4. Test items
-twin.py (full-flow M0→M5), detect.py, veto.py, walk.py, pcmci_job.py, narrate.py+verify.py, chaincards.py, replay.py, ui/, trail.py.
+twin.py (32-machine plant Lines A/B/C 10/10/8 + ASM0–2 + RWK0 + AGV/SBUF), detect.py, veto.py, walk.py, pcmci_job.py, narrate.py+verify.py, chaincards.py, replay.py, ui/, trail.py.
 ## 5. Software risk issues
 RSK-001–008 (see REGISTERS.md); top: K1 causal instability, K2 threshold collapse, K3 hallucination.
 ## 6. Features to be tested
 | REQ | TST | Gate |
 |---|---|---|
-| REQ-001/010 | TST-001 battery-F1-full-flow | 20-fault battery covering all 6 machines + all 5 classes; PASS F1≥0.85 raw |
+| REQ-001/010 | TST-001 battery-F1-full-flow | fault-injection battery covering partitions × channels × classes (7 channels × 7 classes per SIM_SPEC §§5/8); PASS F1≥0.85 raw |
 | REQ-001 | TST-002 causal-acc | masked PCMCI 5 seeds; PASS AC@1≥70% |
 | REQ-010 | TST-003 flow-coverage | every machine × every fault class injected ≥1; whole-line replay context intact |
 | REQ-002 | TST-005 grounding | sentence provenance audit; PASS ≥95% (obs. 1.00) |
 | REQ-003 | TST-006 determinism | 5×5 same-seed replay; PASS 0-diverge |
-| REQ-006 | TST-007 perf | CPU E2E; PASS <600s (obs. 17.7s) |
-| REQ-006 flip | TST-003b stability | PASS flip<40% all classes (obs. 14.4–30.3%) |
+| REQ-006 | TST-007 perf | CPU E2E; PASS <600s (line-scale baseline 17.7s) |
+| REQ-006 flip | TST-003b stability | PASS flip<40% per partition per class (line-scale baseline 14.4–30.3%) |
 | REQ latency | TST-004 latency | p99 detection delay ≤3 steps |
 | REQ-007 | TST-008 shed-richness-first | 10x surge → shed rich sentences first, detection/provenance intact; PASS walk result served, no detection drop → TC-006b, TC-009 |
 | REQ-008 | TST-009 per-run-caps | caps $0.005/2.5k tok/iter enforced; breach aborts rich first then hard-abort to chain-cards; PASS ledger audited → TC-007, TC-009 |

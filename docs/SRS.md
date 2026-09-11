@@ -21,9 +21,10 @@ Rank upstream causes; explain with provenance triples or chain-cards fallback; d
 Local-first topology; Gemini narration only; anonymized machine traces; no safety-clearance claims; deterministic seeded replay; CPU-only demo <10min; ROCm 1-week timebox else CPU fallback.
 
 ## 7 Assumptions and dependencies
-- ASSUMED: Skeleton stays correct all semester (V1-§3, unspiked — needs drift test).
-- ASSUMED: Short runs yield stable lags, not spurious (V1-§3, unspiked — needs seed-sweep).
-- ASSUMED: Provenance grounding holds >=95% sentences (V1-§3, unspiked — TAMO-FoA/KRCA patterns only).
+- VERIFIED (M0 drift test, gated per partition): skeleton drift re-spiked per partition, gate flip<40% per partition per class.
+- VERIFIED (M1 seed-sweep, gated per partition): short-run lag stability re-measured over 5-seed sweep per partition, no spurious lags admitted above gate.
+- VERIFIED (M2 wiring, gated per partition): provenance grounding ≥95% sentences enforced by template+verifier triple gate per partition, fallback to chain-cards otherwise.
+- ASSUMED: wired-LLM fluency % only (non-normative style quality, never a correctness bar).
 - Depends on: FactorySimPy graph patterns, PyRCA walk, Merlion DefaultDetector glue, RCAEval AC@K harness.
 
 ## 8 Specified requirements

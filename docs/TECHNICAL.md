@@ -11,8 +11,8 @@ factorysimpy==0.1.0b3 installs but REJECTED (no trace/fault/RNG API → hand-rol
 |---|---|---|---|
 | CAL_WIN | 120 steps | clean calibration | battery asserts |
 | Q_DET | max(q0.99, Q3+1.5·IQR) per machine | K2: fixed thresholds killed | F1 raw |
-| VETO_M5 | 2× margin over runner-up | M5 known-noisy | AC@1 |
-| WALK_DEPTH / TOPK | ≤3 / top-k prune | exponential cap (fan-out-5) | OOM gate |
+| VETO_ASM2 | 2× margin over runner-up, ASM2-only (ex-VETO_M5, identical semantics) | ASM2 known-noisy tail | AC@1 |
+| WALK_DEPTH / TOPK | ≤3 / top-k prune | exponential cap (fan-out cap 8 assembly join; line-scale fan-out-5 baseline only) | OOM gate |
 | PCMCI | ParCorr, tau_max=2, pc_alpha=0.05, α=0.01 | flip 14.4%, lag-stab 0.889 | flip<40% |
 | N_FLOOR | 800 | min stable n (KQ1) | flip<40% vs full |
 | ECHO_W | 5 = tau2 + LAT_GATE(3) ≥ 5 hops | M0 (killed as closer, rule kept as doc) | — |
@@ -22,18 +22,19 @@ factorysimpy==0.1.0b3 installs but REJECTED (no trace/fault/RNG API → hand-rol
 | SEED | SeedSequence everywhere, zero bare default_rng | 0-diverge 5×5 | K4 |
 
 ## Module map (spike → build; spike/ stays quarantine — rewrite, don't merge)
-`twin.py` (from battery_rq1_rq2.py: SimPy line-6, seeded faults) · `detect.py` (quantile/IQR) ·
-`veto.py` (fixed mask) · `walk.py` (depth≤3+top-k+echo-note) · `pcmci_job.py` (tau-2 evidence job) ·
+32-plant modules: `twin.py` (from battery_rq1_rq2.py: SimPy 32-machine plant Lines A/B/C 10/10/8 + ASM0–2 + RWK0 + AGV/SBUF, seeded faults) · `acquire.py` · `calibrate.py` (CAL_WIN=120) · `detect.py` (quantile/IQR per machine/channel) · `veto.py` (VETO_ASM2 fixed mask) · `walk.py` (depth≤3+top-k+fan-out cap 8) · `pcmci_job.py` (per-partition tau-2 evidence jobs) ·
 `narrate.py` + `verify.py` (from rq3_spike.py: template, triple gate, caps) · `chaincards.py` (fallback) ·
-`replay.py` (subgraph-only, pinned RNG) · `ui/` (waterfall patterns) · `trail.py` (SPEC export schema).
+`replay.py` (partition-scoped subgraph-only, pinned RNG) · `regress.py` (battery gates) · `trail.py` (SPEC export schema) · `ui/` (waterfall patterns).
 
-## Fault taxonomy (seeded, free truth; per-class measured in REPORT_CLOSEOUT.md)
-| Class | Params | Measured (same detector) |
+## Fault taxonomy (seeded, free truth; 7 classes × 7 channels per SIM_SPEC §§5/8; measured numbers are line-scale baselines, bars unsoftened)
+| Class | Params | Measured line-scale baseline (same detector) |
 |---|---|---|
 | spike/drift/bias (base, 20f) | mag 4–7σ, dur 8–25 | F1 0.734–0.739, AC@1 0.80, flip 14.4% |
 | DELAY (6f) | lag-shifted propagation d≤tau window | F1 0.670, AC@1 5/6, flip 24.2% → mitigation: tau≥d window |
 | LOSS (6f) | 10–30% observation drops | F1 0.739, AC@1 5/6, flip 30.3% → mitigation: better imputation |
-32-fault totals: F1 0.725, AC@1 0.8125, p99 2.6ms. Missed-fault sensitivity backlog: F-06/F-12/F-14 (M0b).
+| breakdown | forced DOWN window, MTTR×mult mult∈[1,3] | plant-scale re-measure at M0 exit, gate flip<40% per partition |
+| quality (reject) | ASM2/RWK-path reject-rate 15–40% | plant-scale re-measure at M0 exit, gate flip<40% per partition |
+32-fault totals line-scale baseline: F1 0.725, AC@1 0.8125, p99 2.6ms. Missed-fault sensitivity backlog: F-06/F-12/F-14 (M0b).
 
 ## Trace schemas (actual keys, single-record JSONL per run except rq3)
 - `trace_battery.jsonl` (1 rec): twin, faults[], quantile{}, mp{}, gdn, pcmci{}, pcmci_timing_s,
@@ -51,4 +52,4 @@ RSS>5% → KILL · harness-green-on-corrupt → vacuous-reject.
 
 ## Regression procedure (every milestone ends here)
 `python spike/battery_rq1_rq2.py && python spike/closeout.py` → PASS iff F1≥0.85(M0b target; disclose
-until then) + AC@1≥70% + flip<40% all classes + p99≤30s + total<600s + vectors green. Log JSONL as run id.
+until then) + AC@1≥70% + flip<40% per partition per class + p99≤30s + total<600s + vectors green. Log JSONL as run id.
