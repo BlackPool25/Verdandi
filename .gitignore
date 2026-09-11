@@ -15,3 +15,5 @@ audit.json
 .env
 .DS_Store
 .serena/
+# Held locally until token gains workflow scope (upload ci.yml via web UI):
+.github/
