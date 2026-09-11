@@ -63,8 +63,8 @@ Twitter-AD archived 2021 (friction) · EGADS stale (premature) · TensorZero arc
 $47K agent loop (no caps → caps mandatory) [Tiers 2–3] · GAD-in-wild OOM 500k–1M [Tier2] ·
 TCN-GAT SWaT 0.886→0.281 collapse [Tier1 IEEE].
 10x test: NO 10x for prod upkeep (linear) → prod framing KILLED · NO 10x raw GNN scale → scale framing
-KILLED · PASS guardrailed LLM-RCA only (cache+routing+filter+caps >10× $/incident <$0.50 <60s; TAMO-FoA
-76.3% −34%MTTR + KRCA −77.3%, two-domain Tier1/2). Semester inversion: sim ownership zeroes upkeep + free
+ KILLED · PASS guardrailed LLM-RCA only (cache+routing+filter+caps >10× $/incident <$0.50 <60s; TAMO-FoA
+76.3% −34%MTTR + KRCA −77.3%, two-domain Tier1/2 — cited papers' fleet-level figures, not project claims; our bar is per-alarm: 30–60min hand-triage → ranked cause + replay in seconds). Semester inversion: sim ownership zeroes upkeep + free
 ground truth/replay (Predix logic NOT transferred); threshold fragility + hallucination DO transfer
 (strict bars + verifier mandatory).
 

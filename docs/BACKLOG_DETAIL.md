@@ -67,6 +67,7 @@ Kill-bar: none new; K3/K4 re-checked through UI path (ungrounded sentence or div
 | M5-3 Dependency-smoke (pinned stack) | `requirements.txt` pins (simpy/tigramite/networkx/numpy/psutil/scipy per SDD §1) + smoke script | Clean-env install + import + 1-episode twin run green; numpy-version RNG assert recorded in trace | M4 | twin-owner |
 | M5-4 Trace-retention pin | `src/trail.py` (retention policy: keep battery JSONL + timing + trail exports per run) | Retention window pinned in trail config; dry-run verifies last N runs replayable from retained traces | M4-2 | data-owner |
 | M5-5 Monthly recalibration gate | `src/detect.py`, `src/trail.py` (recal schedule: re-fit quantiles per partition, re-run battery) | Monthly recal run logged with per-partition F1/flip vs stored artifact; drift beyond K2 threshold raises alarm, stale artifact blocks release | M5-1 | detect-owner |
+| M5-6 Quarterly competitor re-audit (14-row matrix) | `docs/competitor-matrix-YYYYQn.csv` (new per quarter; 14 tracked competitors incl. Eadro/RCAEval rows, scored on the T+P+R conjunction) | Matrix refreshed quarterly; ≥1 competitor full-row hit (matches T+P+R) retires the wedge claim, fallback to packaging/pedagogy | M5-2 | demo-owner |
 
 ## Parked pivots (add iff trigger; not scheduled)
 

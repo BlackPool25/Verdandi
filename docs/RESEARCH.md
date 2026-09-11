@@ -11,8 +11,9 @@ Method: librarian-defense (Context7 ≤3/query + academic) vs prosecutor (invers
 - **RQ2 PCMCI stability:** contract (/jakobrunge/tigramite) [Tier1]; 5-seed flip tau2 14.4% / tau3 21.2%,
   lag-stab 0.889, n-stable 800 (spikes). Spurious-risk literature survives → tau=2 + flip gate (K1).
 - **RQ3 grounding:** pattern 2-domain (TAMO-FoA 76.3% −34%MTTR https://doi.org/10.1109/ccwc67433.2026.11393712
-  [Tier1] + KRCA 0.88/0.79 −77.3% https://arxiv.org/html/2607.01788 [Tier2→1]); template spike 1.00@50coro;
-  vs OpenRCA2.0 38.5% ungrounded https://doi.org/10.48550/arxiv.2606.27154 [Tier1] → verifier+fallback mandatory.
+   [Tier1] + KRCA 0.88/0.79 −77.3% https://arxiv.org/html/2607.01788 [Tier2→1]); template spike 1.00@50coro;
+   vs OpenRCA2.0 38.5% ungrounded https://doi.org/10.48550/arxiv.2606.27154 [Tier1] → verifier+fallback mandatory.
+   (−34%MTTR / −77.3% are the cited papers' fleet-level figures, not project claims; our bar is per-alarm: 30–60min hand-triage → ranked cause + replay in seconds, grounding ≥95%.)
 - **RQ4 replay:** 0-diverge 5×5 (SeedSequence) harness + battery; FactorySimPy discrete-only/static [Tier2] →
   hand-rolled twin pinned.
 - **RQ5 perf:** CPU 17.7s/32-faults, p99 ≤3.8ms; ROCm default KILLED (gfx1100 #12045 + SVM #5952 + VM-faults #6529 [Tier2]).

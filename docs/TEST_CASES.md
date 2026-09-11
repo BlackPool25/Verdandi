@@ -2,7 +2,7 @@
 
 Source of truth for gates: `docs/TEST_PLAN.md`. Kill bars: K1 AC@1<30% or flip>40% → cut learning, keep topology+stats. K2 F1 drop>30pts vs quantile → per-machine quantile mandatory, global thresholds excluded. K3 >5% ungrounded → cut LLM to chain-cards. K4 any diverge → subgraph-only replay. K5 ROCm sink >1wk → CPU-baseline. No gate softening. `spike/` is quarantine, rewrite-don't-merge.
 
-Global pass conjunct (every TC that asserts release): F1≥0.85 AND AC@1≥70% (intra-partition AND cross-partition via gateway buffers) AND flip<40% per partition per class incl. breakdown/quality AND p99 detection delay ≤3 steps AND wall <600s via partitioning AND grounding ≥95% AND 0-diverge AND full-plant coverage (all partitions × channels × classes, no empty cell). Any conjunct fails or any sev-1 open → K-pivot fires. Plant-scale note: line-scale battery numbers (17.7s, flip 14.4–30.3%, fan-out-5) are carried as baselines; walk fan-out and wall time are re-measured at plant scale as M0 exit measurements — no invented plant numbers in this file. K-gates K1/K2 evaluate per partition (only failing partition falls back); K3/K4/K5 stay plant-wide.
+Global pass conjunct (every TC that asserts release): F1≥0.85 AND AC@1≥70% (intra-partition AND cross-partition via gateway buffers) AND flip<40% per partition per class incl. breakdown/quality AND p99 detection delay ≤3 steps AND wall <600s via partitioning AND grounding ≥95% AND 0-diverge AND full-plant coverage (all partitions × channels × classes, no empty cell). Any conjunct fails or any sev-1 open → K-pivot fires. Plant-scale note: line-scale battery numbers (17.7s, flip 14.4–30.3%, fan-out-5) are carried as baselines; walk fan-out and wall time are re-measured at plant scale as M0 exit measurements — no invented plant numbers in this file. K-gates K1/K2 evaluate per partition (only failing partition falls back); K3/K4/K5 stay plant-wide. M0b runs under frozen pre-registration `docs/M0B_PREREG.md` (fault list, fixed-percentile calibration, PA-off primary + PA-on control, no-subsetting rule) — no battery runs outside the prereg.
 
 Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault battery set (`spike/trace_battery.jsonl`); F-21..F-26 = DELAY class (seed 777); F-27..F-32 = LOSS class (seed 999); total 32-fault set = `spike/trace_closeout.jsonl`. Plant scale: 32 machines per SIM_SPEC (Lines A/B/C 10/10/8 + ASM0–2 + RWK0, AGV pool + shared overflow buffer, mass-flow-conserved); PCMCI runs one evidence job per partition (never full-plant graph — banned: O(N²×tau) at N=32 breaks CPU bar). PCMCI seeds always {7,11,13,17,19}, ParCorr pc_alpha=0.05, alpha_level=0.01, tau_max=2 (tau=3 evidence-only in PCMCI jobs, never production/walk). Detector frozen: per-machine `max(q0.99, Q3+1.5·IQR)` on clean cal window 120 + fixed veto-mask VETO_ASM2 only (ex-VETO_M5, identical 2x-margin semantics; ASM2-test needs 2x margin over runner-up, no other mask). Scoring raw point-wise only, point-adjusted inadmissible. Walk: depth≤3 intra-partition + 1 gateway hop exempt from depth cross-partition; fan-out cap 8 for the assembly join per SIM_SPEC §7.3 (line-scale fan-out-5 carried as baseline only, plant fan-out re-measured at M0 exit). Name disambiguation: ECHO_W=5 (echo suppression window) vs GAP_MIN=5 (min inter-window gap same machine per SIM_SPEC §4.3).
 
@@ -30,6 +30,15 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   4. Apply one targeted fix only (echo-aware attribution preferred per REPORT_BATTERY), re-run full 20-fault battery.
 - Expected: fix attribution documented; F-06/F-12/F-14 recall >0; full-set F1≥0.85; no other fault flips from TP to FN.
 
+## TC-002b — PA-on control arm (protocol neutrality, per M0B_PREREG.md §3)
+
+- TST: TST-001 (REQ-001).
+- Preconditions: TC-001 artifacts present.
+- Steps:
+  1. Score the identical battery PA-on alongside the PA-off primary.
+  2. Compare detector ranking and top-gap under both protocols.
+- Expected: PA-on flips the detector ranking OR compresses the top-gap by ≥0.30 (protocol-neutrality demonstrated on our own data). Else protocol-neutrality fails — results are not reported as PA-robust, and the primary claim stays PA-off-only.
+
 ## TC-003 — TST-002 causal accuracy (partitioned PCMCI, 5 seeds)
 
 - TST: TST-002 (REQ-001).
@@ -40,6 +49,21 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   2. Extract edges/seed per partition (line-scale baseline [26,29,29,28,~27]), flip rate per partition, lag-stability (edge present ≥4/5 seeds).
   3. Compute AC@1 = top-1 ranked cause == injected machine over 20 faults, split into intra-partition AC@1 and cross-partition AC@1 (gateway-hop path).
 - Expected: AC@1≥70% intra AND cross-partition (observed line-scale 0.80, closeout 32-fault 0.8125 — carried as baseline, re-measured at plant scale); flip<40% per partition (observed line-scale tau2 14.4%); lag-stability ≈0.889 per partition; per-partition PCMCI run <120s cap (observed line-scale mean 0.21s, max 0.39s). K1 evaluates per partition.
+
+## TC-003a — masked-vs-blind PCMCI+ (same battery, mask-signal check)
+
+- TST: TST-002 (REQ-001). Preconditions: TC-001 battery traces, seed hashes logged.
+- Test data: same fault battery, both arms, ≥5 seeds, n≥800 per arm.
+- Steps:
+  1. Masked arm (topology prior on) vs blind arm (no prior) on identical seeds.
+  2. Record flip rate per arm per partition.
+- Expected: masked flip ≤14.4% AND blind gap ≥10pp (masked minus blind). Kill-tripwire: masked >14.4% or blind within ±5pp → mask carries no signal; demote mask-dependent reading (blind suffices at this scale).
+
+## TC-003b — 10% mask-corruption arm (prior-sensitivity)
+
+- TST: TST-002. Preconditions: TC-003a artifacts.
+- Steps: randomly corrupt 10% of mask entries, re-run masked arm on same seeds.
+- Expected: flip degrades ≥3pp vs clean mask (mask carries signal). Else mask demoted — result does not depend on mask quality (prior-fragility wins).
 
 ## TC-004 — TST-003b stability per class per partition (flip gate)
 
@@ -52,6 +76,15 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   3. Assert each class flip<40% independently in every partition (partition-level gate, not plant-averaged).
 - Expected: line-scale baselines base 14.4%, DELAY 24.2%, LOSS 30.3% (all <40%, K1 SURVIVE per class per partition). If any partition × class >40% → K1 partition-pivot: widen PCMCI window to tau≥d evidence-only in that partition, detector unchanged elsewhere.
 
+## TC-004a — graph-free ablation (BARO-style) + DELAY/LOSS miss-tagging
+
+- TST: TST-002/TST-003b. Preconditions: TC-003/TC-004 artifacts, same battery and seeds.
+- Steps:
+  1. BARO-style graph-free ranking arm (no causal graph, no topology prior) on the full battery; record AC@1.
+  2. Tag every miss per M0B_PREREG.md §6 (DELAY / LOSS / GATEWAY / NOVEL).
+  3. Compute DELAY:LOSS miss-rate ratio.
+- Expected: AC@1≥0.70 AND graph-vs-graphfree gap ≥10pp (topology prior earns its keep). Gap <10pp → concede BARO parity for this twin. Ratio ≥2:1 confirms the RCAEval-hard reading; uniform misses (±10pp) force the unambitious-battery reading (faults too easy — re-seed harder).
+
 ## TC-005 — TST-004 latency p99 ≤3 steps
 
 - TST: TST-004 (REQ latency).
@@ -62,6 +95,19 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   2. From `trace_closeout.jsonl` repeat for F-21..F-32.
   3. Compute p99 over 32 faults; also AC@1-lat3 fraction.
 - Expected: p99 ≤3 steps; AC@1-lat3 reported (observed base 0.65, closeout totals 0.719, DELAY/LOSS 0.83 each). Wall-clock p99/fault ≤30s (observed 3.7ms battery, 2.6ms closeout).
+
+## TC-005-ext — H4 RAG-control audit (template+verifier vs open+RAG, n≥50 alarms)
+
+- TST: TST-005 (REQ-002) on the TST-004 alarm set.
+- Preconditions: M2 narration wiring built (template+verifier+chain-cards; NLI critic deberta-v3 inside verifier per ADR-0013, NLI-critic-only). Open+RAG arm = same model with retrieval over the same traces but no template, no verifier, no fallback.
+- Test data: SAME alarm set for both arms, n≥50: all 32 plant-battery fault alarms + ≥18 RQ3 hostile/coroutine alarms (5 adversarial prompts + 429/drop injections). Neither arm sees a different set.
+- Steps:
+  1. Run template+verifier arm on all n alarms; log per sentence: text, provenance triple (fault-window, edge-id, detector-output) or fallback flag, verifier accept/reject.
+  2. Run open+RAG arm on the identical n alarms; apply the same per-sentence provenance-ID check (triple resolves or the sentence is an escape).
+  3. Classify every non-fallback sentence without a resolving triple into the escape taxonomy: (i) forced-hallucination-to-satisfy-grammar (fluent filler invented to complete a template/grammar slot), (ii) invented edge-id, (iii) wrong fault-window, (iv) detector-output mismatch, (v) unverifiable entity. Fallback-flagged sentences are not escapes; they count toward the fallback-fire rate.
+  4. Log fallback-fire rate (fallback sentences / total sentences) per arm to `alarm-audit.csv` (columns: alarm_id, arm, sentence_id, triple_ok, escape_class, fallback).
+- Expected (close-out): template+verifier arm ≥95% sentences with resolving triple (relax to ≥90% only with wiring-time measurement evidence recorded in the trail); AND zero non-fallback escapes in the template arm. Open+RAG arm reported as-is as the control.
+- Kill-tripwires (fire on measurement, no re-interpretation): template arm <90% → drop the template-superiority claim, ship fallback-only per K3; open+RAG arm ≥80% grounded → drop the verifier-necessity claim, verifier becomes optional hardening; verifier rejects constantly (fallback-fire rate ≈100%) → report the system as effectively-fallback-only, no template victory claimed.
 
 ## TC-006 — TST-003 full-plant coverage (partitions × channels × classes)
 

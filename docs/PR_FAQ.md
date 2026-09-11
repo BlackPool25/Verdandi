@@ -16,6 +16,12 @@ A BTech team running a FactorySimPy twin used to hand-triage every alarm for 30�
 - **COGS:** CPU-only, per-run token/USD/iteration caps (答 $47K-loop precedent); full battery 17.7s wall.
 - **Consensus SPOF:** None — no consensus, no shared mutable state across processes.
 
+## Provenance-first wedge (conditional on H4 audit)
+Moat is the provenance leg Eadro/RCAEval lack: every sentence resolves to a (fault-window, edge-id, detector-output) triple or serves explicit fallback.
+Wedge is the conjunction T+P+R (template + provenance triple + seeded replay), not any single leg.
+If H4 fails, packaging/pedagogy fallback is pre-agreed: ship chain-cards + trail as the product, no verifier-superiority claim.
+Brownfield transfer disclosure: topology drift, sensor noise, and operator trust are unmeasured and out-of-semester; the wedge holds for the sim twin only.
+
 ## Top 3 reasons this will not succeed (+ proving evidence)
 1. **Precision never reaches 0.85** (echo FPs resist attribution) → prove by M0 battery re-run F1≥0.85; else ship at 0.734 with disclosed precision + viva framing on recall/rank.
 2. **Full-LLM grounding collapses at wiring time** (template 1.00 ≠ LLM fluency) → prove by wiring-time grounding measurement; K3 fallback (chain-cards) already armed and spiked.
