@@ -14,3 +14,4 @@ bandit.json
 audit.json
 .env
 .DS_Store
+.serena/
