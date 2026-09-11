@@ -1,0 +1,10 @@
+{
+ "simpy": "4.1.2",
+ "jitter_ms": 200,
+ "drop_rate": 0.1,
+ "propagated": true,
+ "same_fault_deterministic": true,
+ "thread_leak": 0,
+ "threads": 1,
+ "simpy_single_thread_ok": true
+}

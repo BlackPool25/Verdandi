@@ -1,0 +1,13 @@
+{
+ "1000": {
+  "rss_mb": 46.0,
+  "growth_pct": 0.0
+ },
+ "10000": {
+  "rss_mb": 46.0,
+  "growth_pct": 0.0
+ },
+ "base_mb": 46.0,
+ "kill_gate": ">5%@10k -> KILL",
+ "verdict": "SURVIVE"
+}

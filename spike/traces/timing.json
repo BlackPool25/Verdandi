@@ -1,0 +1,23 @@
+{
+ "nfault": 20,
+ "total_s": 0.001,
+ "budget_600s": true,
+ "per_fault_p99_s": 0.0001,
+ "p99_gate_30s": true,
+ "depth3_fanout": {
+  "0": 8,
+  "1": 8,
+  "2": 8,
+  "3": 5,
+  "4": 7,
+  "5": 5,
+  "6": 4,
+  "7": 4,
+  "8": 2,
+  "9": 2,
+  "10": 2,
+  "11": 1
+ },
+ "worst_fanout": 8,
+ "kingman_note": "richness-shed@scale>6 keeps per-fault p99 flat; 80%-shed knee adopted, 70% insufficient headroom"
+}

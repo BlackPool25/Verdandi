@@ -1,0 +1,57 @@
+{
+ "curve": [
+  {
+   "scale": 1,
+   "faults": 20,
+   "total_s": 0.002,
+   "per_fault_s": 0.0001,
+   "rich": true,
+   "oom": false
+  },
+  {
+   "scale": 2,
+   "faults": 40,
+   "total_s": 0.004,
+   "per_fault_s": 0.0001,
+   "rich": true,
+   "oom": false
+  },
+  {
+   "scale": 4,
+   "faults": 80,
+   "total_s": 0.006,
+   "per_fault_s": 0.0001,
+   "rich": true,
+   "oom": false
+  },
+  {
+   "scale": 6,
+   "faults": 120,
+   "total_s": 0.01,
+   "per_fault_s": 0.0001,
+   "rich": true,
+   "oom": false
+  },
+  {
+   "scale": 8,
+   "faults": 160,
+   "total_s": 0.014,
+   "per_fault_s": 0.0001,
+   "rich": false,
+   "oom": false
+  },
+  {
+   "scale": 10,
+   "faults": 200,
+   "total_s": 0.015,
+   "per_fault_s": 0.0001,
+   "rich": false,
+   "oom": false
+  }
+ ],
+ "shedding_point_scale": 8,
+ "shed_what": "richness-first (detection+provenance never shed)",
+ "collapse_scale": null,
+ "oom_without_shedding": false,
+ "verdict": "SURVIVE-with-shedding"
+}

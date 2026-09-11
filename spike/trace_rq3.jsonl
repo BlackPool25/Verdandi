@@ -1,0 +1,37 @@
+{"vector": "V1", "n": 50, "sentences": 100, "grounded": "1.000"}
+{"vector": "V2", "iters": 1000, "rss_MB": 23.81}
+{"vector": "V2", "iters": 5000, "rss_MB": 23.81}
+{"vector": "V2", "iters": 10000, "rss_MB": 23.81}
+{"vector": "V3", "fault": 20, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 21, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 22, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 23, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 24, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 25, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 26, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 27, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 28, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 29, "mode": "drop", "fallback": true, "err": "socket dropped"}
+{"vector": "V3", "fault": 10, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 11, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 12, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 13, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 14, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 15, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 16, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 17, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 18, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "fault": 19, "mode": "429", "fallback": true, "err": "429 rate-limited"}
+{"vector": "V3", "total": 30, "served": 30, "fallbacks": 20, "secs": 0.39}
+{"vector": "V4", "reason": "null-bytes", "accepted": false}
+{"vector": "V4", "reason": "oversize>10KB", "accepted": false}
+{"vector": "V4", "reason": "truncated-json", "accepted": false}
+{"vector": "V4", "reason": "prompt-injection", "accepted": false}
+{"vector": "V4", "reason": "prompt-injection", "accepted": false}
+{"vector": "V4", "reason": "ok", "accepted": true}
+{"vector": "V4", "reason": "ok", "accepted": true}
+{"vector": "V5", "ingress": 50, "rich": true, "grounded": 1.0}
+{"vector": "V5", "ingress": 200, "rich": true, "grounded": 1.0}
+{"vector": "V5", "ingress": 500, "rich": false, "grounded": 1.0}
+{"vector": "V6", "base": 1.0, "corrupt_rate": 0.0, "flipped": 1.0, "vacuous": false}
+{"summary": {"V1": {"sentences": 100, "grounded": 1.0, "pass": true}, "V2": {"rss0_MB": 23.81, "rss1_MB": 23.81, "growth_pct": 0.0, "py_peak_KB": 41.6, "pass": true}, "V3": {"total": 30, "served": 30, "fallbacks": 20, "secs": 0.39, "pass": true}, "V4": {"corpus": 7, "rejected": 5, "unsafe_pass": 0, "egress": 0, "pass": true}, "V5": {"points": [{"ingress": 50, "grounded": 1.0}, {"ingress": 200, "grounded": 1.0}, {"ingress": 500, "grounded": 1.0}], "shed_point": 500, "pass": true}, "V6": {"base": 1.0, "corrupt_rate": 0.0, "inverted_verdict": 1.0, "pass": true}, "caps": {"tokens": 2500, "usd": 0.005, "max_iters": 10000}, "RSS_verdict": "FEASIBLE"}}

@@ -1,0 +1,8 @@
+{
+ "n": 50,
+ "wall_s": 0.004,
+ "p99_lat_s": 0.0001,
+ "max_lat_s": 0.0001,
+ "threads": 1,
+ "det_ok": true
+}

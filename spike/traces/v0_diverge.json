@@ -1,0 +1,61 @@
+{
+ "rng": "numpy==2.4.6/PCG64/SeedSequence",
+ "seeds": {
+  "7": {
+   "hashes": [
+    "beadb9e2b556fbd0a8ae53dbf631c2453f1c609f8129bd23eb090eed69e3c10a",
+    "beadb9e2b556fbd0a8ae53dbf631c2453f1c609f8129bd23eb090eed69e3c10a",
+    "beadb9e2b556fbd0a8ae53dbf631c2453f1c609f8129bd23eb090eed69e3c10a",
+    "beadb9e2b556fbd0a8ae53dbf631c2453f1c609f8129bd23eb090eed69e3c10a",
+    "beadb9e2b556fbd0a8ae53dbf631c2453f1c609f8129bd23eb090eed69e3c10a"
+   ],
+   "diverge": 0,
+   "zero_diverge": true
+  },
+  "11": {
+   "hashes": [
+    "8fe04a3c23e2c1536835012fa4233159102bc98bbe0ae1a818b754445127c73e",
+    "8fe04a3c23e2c1536835012fa4233159102bc98bbe0ae1a818b754445127c73e",
+    "8fe04a3c23e2c1536835012fa4233159102bc98bbe0ae1a818b754445127c73e",
+    "8fe04a3c23e2c1536835012fa4233159102bc98bbe0ae1a818b754445127c73e",
+    "8fe04a3c23e2c1536835012fa4233159102bc98bbe0ae1a818b754445127c73e"
+   ],
+   "diverge": 0,
+   "zero_diverge": true
+  },
+  "13": {
+   "hashes": [
+    "a819b2617e0c60530ac5cea3263e05722f350e9f3a628db2689430361481937d",
+    "a819b2617e0c60530ac5cea3263e05722f350e9f3a628db2689430361481937d",
+    "a819b2617e0c60530ac5cea3263e05722f350e9f3a628db2689430361481937d",
+    "a819b2617e0c60530ac5cea3263e05722f350e9f3a628db2689430361481937d",
+    "a819b2617e0c60530ac5cea3263e05722f350e9f3a628db2689430361481937d"
+   ],
+   "diverge": 0,
+   "zero_diverge": true
+  },
+  "17": {
+   "hashes": [
+    "f74f940a518e28ed7e529c58d0a0483fddf0cb393870a66121f88b10532f9e0f",
+    "f74f940a518e28ed7e529c58d0a0483fddf0cb393870a66121f88b10532f9e0f",
+    "f74f940a518e28ed7e529c58d0a0483fddf0cb393870a66121f88b10532f9e0f",
+    "f74f940a518e28ed7e529c58d0a0483fddf0cb393870a66121f88b10532f9e0f",
+    "f74f940a518e28ed7e529c58d0a0483fddf0cb393870a66121f88b10532f9e0f"
+   ],
+   "diverge": 0,
+   "zero_diverge": true
+  },
+  "19": {
+   "hashes": [
+    "9aaa59ea2b9e44ee2e7ba6d6be4778673be49f2c0b898c6349a6880bdced3ea2",
+    "9aaa59ea2b9e44ee2e7ba6d6be4778673be49f2c0b898c6349a6880bdced3ea2",
+    "9aaa59ea2b9e44ee2e7ba6d6be4778673be49f2c0b898c6349a6880bdced3ea2",
+    "9aaa59ea2b9e44ee2e7ba6d6be4778673be49f2c0b898c6349a6880bdced3ea2",
+    "9aaa59ea2b9e44ee2e7ba6d6be4778673be49f2c0b898c6349a6880bdced3ea2"
+   ],
+   "diverge": 0,
+   "zero_diverge": true
+  }
+ },
+ "total_diverge": 0
+}
