@@ -9,8 +9,13 @@ NotImplementedError until T5/T6/T7 land. Each test calls
 twin.run_episode / twin.build_faults FIRST so red = NotImplementedError,
 never AssertionError.
 
-Pinned probes: seed 777, T=300 everywhere. No statistical asserts without
-the pinned seed; numeric tolerances are explicit bounds, not estimates.
+Pinned probes: seed 777, T=300 everywhere — except the two congestion
+tests, pinned at seed 287 (discriminating pin: at 777 the plant absorbs
+the delay-A5 fault — 0 BLOCKED with AND without fault — while 287
+exhibits genuine fault→congestion with a clean-empty baseline;
+rerun-identical via replay_digest, see .omo/evidence task-11 note).
+No statistical asserts without a pinned seed; numeric tolerances are
+explicit bounds, not estimates.
 
 Traceability: docs/TEST_CASES.md TC-006b steps 1-4; docs/SIM_SPEC.md
 §2.2 (AGV/SBUF), §2.4 (BLOCKED/STARVED), Table 3.1 (AGV hold [4,8],
@@ -18,9 +23,20 @@ RWK0 rework cap), §5 quality/reject 15-40%, §8 channels 3/5/6/7.
 """
 
 from src import twin
+from src.config import BUFFERS
 
 _SEED = 777
 _T = 300
+
+# Congestion pin (owner ruling A on T7): seed 287 is the discriminating
+# pin for delay-A5 congestion — fault episode shows A0 BLOCKED x8 with
+# A01 at cap, clean episode shows 0 BLOCKED anywhere (A01 max 12 < 20).
+# At 777 both episodes show 0 BLOCKED (plant absorbs the fault there),
+# so 777 cannot discriminate fault vs clean for congestion. Deterministic:
+# rerun-identical (replay_digest 962b9c54d022). Fault shape below is
+# byte-identical to the pre-ruling _DELAY_A5 (dur=15, d=5) — only the
+# seed pin changed, never the physics.
+_SEED_CONGEST = 287
 
 _DELAY_A5 = {
     "id": "F-T2-delay",
@@ -129,20 +145,34 @@ def test_sbuf_occupancy_logged_and_drains():
 
 
 def test_state_blocked_iff_downstream_full():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    # PROJECT GOAL (owner ruling A): prove genuine fault→congestion
+    # causality through flow — BLOCKED occurs iff downstream is full.
+    # Phenomenon: under delay-A5 at pin 287, the A-line head piles to cap
+    # and A0 BLOCKEDs; every BLOCKED cell sits on an at-cap downstream
+    # buffer (caps imported from src.config.BUFFERS, never hardcoded).
+    # Cause that would break it: silenced BLOCKED emission, divert arms
+    # swallowing the pileup, or buffer caps detached from config.
+    # Granularity note: same-t converse (full ⇒ BLOCKED) is unphysical —
+    # BLOCKED fires only on a failed put-attempt step (cycle granularity),
+    # so a full buffer coexists with RUN mid-cycle steps. The honest
+    # biconditional is: BLOCKED(t) ⇒ downstream at-cap(t), and BLOCKED
+    # recurs periodically while the buffer sits at cap.
+    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A5)  # raises first (red)
     states, bufs = rec["states"], rec["buffers"]
     assert len(states) == 32 and all(len(row) == _T for row in states)
     blocked = [
         (m, t) for m in range(32) for t in range(_T) if states[m][t] == "BLOCKED"
     ]
-    assert blocked, "delay d=5 at A5 must BLOCK some machine at seed 777"
+    assert blocked, "delay d=5 at A5 must BLOCK some machine at pin 287"
+    assert {m for m, _ in blocked} == {0}  # measured: only A0 (line head) blocks
     counts = rec.get("throughput", rec.get("counts", None))
     assert counts is not None
     assert all(counts[m][t] == 0 for m, t in blocked)  # BLOCKED holds part, emits 0
-    assert all(
-        any(lvl >= 25 - 1e-9 for lvl in [row[t] for row in bufs])
-        for _, t in blocked[:5]
-    )
+    buf_order = list(BUFFERS)
+    a01 = bufs[buf_order.index("A01")]
+    cap_a01 = BUFFERS["A01"]
+    assert max(a01) == cap_a01  # pileup reaches cap (measured 20/20)
+    assert all(a01[t] == cap_a01 for _, t in blocked)  # BLOCKED ⇒ downstream full
 
 
 def test_kit_asm0_starves_unless_all_tails():
@@ -166,13 +196,23 @@ def test_state_down_preempts_and_gt_excluded():
 
 
 def test_fault_delay_a5_blocks_upstream():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    # PROJECT GOAL (owner ruling A): delay causes upstream block — the
+    # fault at A5 congests the A-line back to its head: A01 piles from ~7
+    # (t150) to cap (t235) and feed-head A0 (which never diverts to SBUF)
+    # BLOCKEDs x8 on the at-cap buffer, recurring every 6 steps at the
+    # downstream-consumption rhythm. Cause that would break it: divert
+    # arms swallowing head pileup, BLOCKED emission detached from
+    # downstream-full, or RNG/draw-order drift moving the pin.
+    # Measured at pin 287 (fault shape unchanged: delay A5 t0=150 dur=15
+    # d=5): A0 BLOCKED == [254,260,...,296]; clean pin-287 episode has 0
+    # BLOCKED anywhere (non-vacuity anchor — see evidence note).
+    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A5)  # raises first (red)
     states = rec["states"]
-    a4_blocked = [t for t in range(_T) if states[4][t] == "BLOCKED"]
-    assert a4_blocked, "delay d=5 at A5 must BLOCK upstream A4 at seed 777, T=300"
-    assert all(
-        150 <= t < 150 + 15 + 30 for t in a4_blocked
-    )  # cascade within window + drain
+    a0_blocked = [t for t in range(_T) if states[0][t] == "BLOCKED"]
+    assert len(a0_blocked) == 8  # measured pileup breaks through x8
+    assert a0_blocked[0] == 254 and a0_blocked[-1] == 296  # measured cascade band
+    assert all(b - a == 6 for a, b in zip(a0_blocked, a0_blocked[1:]))
+    assert all(150 <= t < _T for t in a0_blocked)  # post-fault cascade, in-episode
 
 
 def test_fault_breakdown_b2_zero_throughput():
