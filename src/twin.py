@@ -450,7 +450,11 @@ def _transition(shared, idx, name, prev, new, t, detail=None, fault_id=None):
 
 
 def _shed_to_sbuf(env, shared, sbuf, name, cfg, t, part):
-    """Maintenance shed: divert held WIP to SBUF (T6 §2.2 overflow policy)."""
+    """Maintenance shed: divert held WIP to SBUF (T6 §2.2 overflow policy).
+
+    Tails (A9/B9/C7) never divert SBUF-direct — they ride the AGV path
+    (callers guard `name not in _TAILS`); C7 stages in the dedicated
+    cap-15 _C7TAIL store, not the C67 gap buffer."""
     part["diverted"] = True
     yield sbuf.put(part)
     _emit(

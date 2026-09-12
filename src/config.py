@@ -22,7 +22,8 @@ AGV_CAP = 2
 AGV_STEPS = (4, 8)  # ints: uniform transit per trip, sampled on rng_place stream
 SBUF_CAP = 30
 # Owner ruling 2026-09-12: process/finish divert, feed/form never; inspect
-# tails included (draft reviewer note: Scope/Config lines govern).
+# tails excluded — A9/B9/C7 ride the AGV path, never SBUF-direct
+# (guard `cfg["class"] in SBUF_DIVERT_CLASSES and name not in _TAILS`).
 SBUF_DIVERT_CLASSES = frozenset({"process", "finish", "inspect-tail"})
 
 # Rework loop (SIM_SPEC §2.1; TEST_CASES TC-006b max-passes cap).
@@ -136,8 +137,8 @@ MACHINE_INDEX = (
 
 # Buffer roster: 29 gap buffers + 1 rework return + SBUF = 31 (SIM_SPEC §2.2).
 # Gap caps mirror the upstream machine's "buffer after (cap)"; tail gateways
-# GA9/GB9 cap 15; C7 tail stages in the C67 gap buffer (short-line shorthand,
-# tail cap 15 governs the shared staging buffer over C6's nominal 25).
+# GA9/GB9 cap 15; C7 tail stages in the dedicated cap-15 _C7TAIL store
+# (AGV-drained, NOT the C67 gap buffer; tail cap 15 governs _C7TAIL).
 _BUFFER_ROWS = (
     [(f"A{i}{i + 1}", 25 if 2 <= i <= 7 else (20 if i <= 1 else 15)) for i in range(9)]
     + [
