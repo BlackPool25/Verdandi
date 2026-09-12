@@ -110,8 +110,79 @@ def test_cal_win_same_machine_gap():
 def test_cal_win_zero_faults_before_120():
     faults = twin.build_faults(777)  # raises first (red)
     assert all(f["t0"] >= 120 for f in faults)
+    # _validate enforces the same floor: calibration window is fault-free.
+    early = dict(_PROBE_FAULT, t0=119)
+    with pytest.raises(ValueError):
+        twin._validate(777, early)
+
+
+def test_cal_win_t0_spread_uniform():
+    faults = twin.build_faults(777)  # raises first (red)
+    t0s = [f["t0"] for f in faults if not f.get("rep")]
+    assert len(t0s) >= 200
+    at_floor = sum(1 for t in t0s if t == 120)
+    assert at_floor < 0.10 * len(t0s), f"cursor-packed: {at_floor}/{len(t0s)} at CAL_WIN"
+    edges = [120, 163, 206, 249, 293]
+    bins = [0, 0, 0, 0]
+    for t in t0s:
+        for i in range(4):
+            if edges[i] <= t < edges[i + 1]:
+                bins[i] += 1
+                break
+    for i, b in enumerate(bins):
+        assert b >= 0.15 * len(t0s), f"quartile {i} thin: {bins}"
 
 
 def test_calibration_window_shape():
     clean = twin.run_calibration(777)  # raises first (red)
     assert clean.shape == (120, 32)
+
+
+def test_omitted_mag_materializes_in_fault_range():
+    from src.config import FAULT_RANGES
+
+    fault = {"id": "F-T", "class": "drift", "origin": "B5", "t0": 150, "dur": 12}
+    flist = twin._validate(777, fault)
+    assert flist[0].get("mag_sigma") is None
+    _, place, _, _, _ = twin._spawn_streams(777)
+    specs = twin._materialize(place, flist)
+    mlo, mhi = FAULT_RANGES["mag_sigma"]
+    assert mlo <= specs[0]["mag"] <= mhi
+
+
+def test_explicit_mag_preserved():
+    fault = {
+        "id": "F-T",
+        "class": "drift",
+        "origin": "B5",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 5.2,
+    }
+    flist = twin._validate(777, fault)
+    assert flist[0]["mag_sigma"] == 5.2
+    _, place, _, _, _ = twin._spawn_streams(777)
+    specs = twin._materialize(place, flist)
+    assert specs[0]["mag"] == 5.2
+
+
+def test_validate_rejects_t0_before_cal_win():
+    for bad_t0 in (0, 119):
+        with pytest.raises(ValueError):
+            twin._validate(777, dict(_PROBE_FAULT, t0=bad_t0))
+    ok = twin._validate(777, dict(_PROBE_FAULT, t0=120))
+    assert ok[0]["t0"] == 120
+
+
+def test_validate_rejects_unknown_origin():
+    bad = dict(_PROBE_FAULT, origin="ZZZ-NOPE")
+    with pytest.raises(ValueError):
+        twin.run_episode(777, bad)
+    # No explicitly-global fault class exists (all 7 _FAULT_CLASSES are
+    # origin-scoped), so origin=None must also raise.
+    missing = {k: v for k, v in _PROBE_FAULT.items() if k != "origin"}
+    with pytest.raises(ValueError):
+        twin.run_episode(777, missing)
+    none_origin = dict(_PROBE_FAULT, origin=None)
+    with pytest.raises(ValueError):
+        twin.run_episode(777, none_origin)
