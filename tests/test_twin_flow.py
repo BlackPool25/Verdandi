@@ -24,8 +24,12 @@ RWK0 rework cap), §5 quality/reject 15-40%, §8 channels 3/5/6/7.
 
 from itertools import pairwise
 
+import pytest
+
 from src import twin
 from src.config import BUFFERS
+
+pytestmark = pytest.mark.k2
 
 _SEED = 777
 _T = 300

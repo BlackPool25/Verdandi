@@ -14,7 +14,11 @@ NotImplementedError until T5/T6/T7 land.
 import itertools
 import pathlib
 
+import pytest
+
 from src import twin
+
+pytestmark = pytest.mark.k1
 
 _TWIN_SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "twin.py"
 

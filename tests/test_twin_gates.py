@@ -29,6 +29,8 @@ import pytest
 
 from src import twin
 
+pytestmark = pytest.mark.k3
+
 _SRC_DIR = pathlib.Path(__file__).resolve().parent.parent / "src"
 
 # TC-006 scope: 5 partition groups (TEST_CASES.md:116: Line-A/B/C, assembly
@@ -269,6 +271,7 @@ def test_determinism_zero_diverge():
             assert diverge == 0
 
 
+@pytest.mark.k4
 def test_wall_tripwire_projection():
     # Fixture numbers ONLY (extrapolation math + exit-2 trigger logic).
     # The real wall budget is MEASURED at T5/T8, never arithmetic proof here.
@@ -297,6 +300,7 @@ def _grep_src(pattern):
     return hits
 
 
+@pytest.mark.k4
 def test_quarantine_no_banned_strings():
     assert _grep_src(_QUARANTINE_PATTERN) == []
     proc = subprocess.run(
@@ -305,5 +309,6 @@ def test_quarantine_no_banned_strings():
     assert proc.returncode != 0
 
 
+@pytest.mark.k4
 def test_clearance_no_restart_strings():
     assert _grep_src(_RESTART_PATTERN) == []
