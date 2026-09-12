@@ -66,9 +66,16 @@ STUCK_IS_BREAKDOWN = {"STUCK": "breakdown"}
 
 
 def _row(cls, base, sigma, cycle, mttf, mttr, buffer_cap, transit):
-    return {"class": cls, "base": base, "sigma": sigma, "cycle": cycle,
-            "mttf": mttf, "mttr": mttr, "buffer_cap": buffer_cap,
-            "transit": transit}
+    return {
+        "class": cls,
+        "base": base,
+        "sigma": sigma,
+        "cycle": cycle,
+        "mttf": mttf,
+        "mttr": mttr,
+        "buffer_cap": buffer_cap,
+        "transit": transit,
+    }
 
 
 # Per-machine Table 3.1 rows: (name, entry). Rows expand the class lines of
@@ -133,8 +140,14 @@ MACHINE_INDEX = (
 # tail cap 15 governs the shared staging buffer over C6's nominal 25).
 _BUFFER_ROWS = (
     [(f"A{i}{i + 1}", 25 if 2 <= i <= 7 else (20 if i <= 1 else 15)) for i in range(9)]
-    + [(f"B{i}{i + 1}", 25 if 2 <= i <= 7 else (20 if i <= 1 else 15)) for i in range(9)]
-    + [(f"C{i}{i + 1}", 25 if 2 <= i <= 5 else (20 if i <= 1 else 15)) for i in range(7)]
+    + [
+        (f"B{i}{i + 1}", 25 if 2 <= i <= 7 else (20 if i <= 1 else 15))
+        for i in range(9)
+    ]
+    + [
+        (f"C{i}{i + 1}", 25 if 2 <= i <= 5 else (20 if i <= 1 else 15))
+        for i in range(7)
+    ]
     + [("ASM01", 25), ("ASM12", 25), ("GA9", 15), ("GB9", 15)]
     + [("RWK_RET", 10), ("SBUF", SBUF_CAP)]
 )

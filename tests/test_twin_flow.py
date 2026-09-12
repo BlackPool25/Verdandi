@@ -17,8 +17,6 @@ Traceability: docs/TEST_CASES.md TC-006b steps 1-4; docs/SIM_SPEC.md
 RWK0 rework cap), §5 quality/reject 15-40%, §8 channels 3/5/6/7.
 """
 
-import pytest
-
 from src import twin
 
 _SEED = 777
@@ -57,6 +55,7 @@ _QUALITY_ASM2 = {
 
 # --- (a) AGV: tail→ASM0 transfers -------------------------------------------
 
+
 def test_agv_hold_in_range():
     rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
     assert rec["T"] == _T
@@ -84,6 +83,7 @@ def test_agv_no_transfer_without_hold():
 
 # --- (b) rework: ASM2→RWK0→ASM0, passes<=2 ----------------------------------
 
+
 def test_rework_passes_capped_and_scrap():
     rec = twin.run_episode(_SEED, _QUALITY_ASM2)  # raises first (red)
     assert rec["T"] == _T
@@ -101,6 +101,7 @@ def test_rework_no_infinite_loop():
 
 
 # --- (c) SBUF overflow -------------------------------------------------------
+
 
 def test_sbuf_divert_process_finish_allowed():
     rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
@@ -126,16 +127,22 @@ def test_sbuf_occupancy_logged_and_drains():
 
 # --- (d) states + concrete probes --------------------------------------------
 
+
 def test_state_blocked_iff_downstream_full():
     rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
     states, bufs = rec["states"], rec["buffers"]
     assert len(states) == 32 and all(len(row) == _T for row in states)
-    blocked = [(m, t) for m in range(32) for t in range(_T) if states[m][t] == "BLOCKED"]
+    blocked = [
+        (m, t) for m in range(32) for t in range(_T) if states[m][t] == "BLOCKED"
+    ]
     assert blocked, "delay d=5 at A5 must BLOCK some machine at seed 777"
     counts = rec.get("throughput", rec.get("counts", None))
     assert counts is not None
     assert all(counts[m][t] == 0 for m, t in blocked)  # BLOCKED holds part, emits 0
-    assert all(any(lvl >= 25 - 1e-9 for lvl in [row[t] for row in bufs]) for _, t in blocked[:5])
+    assert all(
+        any(lvl >= 25 - 1e-9 for lvl in [row[t] for row in bufs])
+        for _, t in blocked[:5]
+    )
 
 
 def test_kit_asm0_starves_unless_all_tails():
@@ -146,13 +153,15 @@ def test_kit_asm0_starves_unless_all_tails():
 
 
 def test_state_down_preempts_and_gt_excluded():
-    faults = twin.build_faults(_SEED)  # raises first (red)
+    _faults = twin.build_faults(_SEED)  # raises first (red)
     rec = twin.run_episode(_SEED, _BREAKDOWN_B2)
     states = rec["states"]
     assert any(s == "DOWN" for row in states for s in row)
     natural = [e for e in rec.get("events", []) if e.get("event") in ("DOWN", "UP")]
-    assert all(e.get("natural", False) or e.get("fault_id") is not None for e in natural)
-    gt_windows = [(f["t0"], f["t0"] + f["dur"]) for f in rec["faults"]]
+    assert all(
+        e.get("natural", False) or e.get("fault_id") is not None for e in natural
+    )
+    _gt_windows = [(f["t0"], f["t0"] + f["dur"]) for f in rec["faults"]]
     assert all(e.get("gt_excluded", True) for e in natural if e.get("natural"))
 
 
@@ -161,7 +170,9 @@ def test_fault_delay_a5_blocks_upstream():
     states = rec["states"]
     a4_blocked = [t for t in range(_T) if states[4][t] == "BLOCKED"]
     assert a4_blocked, "delay d=5 at A5 must BLOCK upstream A4 at seed 777, T=300"
-    assert all(150 <= t < 150 + 15 + 30 for t in a4_blocked)  # cascade within window + drain
+    assert all(
+        150 <= t < 150 + 15 + 30 for t in a4_blocked
+    )  # cascade within window + drain
 
 
 def test_fault_breakdown_b2_zero_throughput():
@@ -169,4 +180,4 @@ def test_fault_breakdown_b2_zero_throughput():
     counts = rec.get("throughput", rec.get("counts", None))
     assert counts is not None
     b2 = counts[12]  # B2 index: A0-9 (0-9), B0=10, B1=11, B2=12
-    assert all(c == 0 for c in b2[150:150 + 12])  # origin throughput 0 over window
+    assert all(c == 0 for c in b2[150 : 150 + 12])  # origin throughput 0 over window

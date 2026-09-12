@@ -36,8 +36,13 @@ _SRC_DIR = pathlib.Path(__file__).resolve().parent.parent / "src"
 # sect 5). T8 runs validate_coverage on the real manifest.
 PARTITIONS = ["line-A", "line-B", "line-C", "cell", "rework"]
 CHANNELS = [
-    "vibration", "temperature", "throughput", "quality",
-    "state", "buffer", "event",
+    "vibration",
+    "temperature",
+    "throughput",
+    "quality",
+    "state",
+    "buffer",
+    "event",
 ]
 CLASSES = ["spike", "drift", "bias", "delay", "loss", "breakdown", "quality"]
 
@@ -46,20 +51,62 @@ CLASSES = ["spike", "drift", "bias", "delay", "loss", "breakdown", "quality"]
 # SIM_SPEC:251). Kept as a literal constant so T8 cannot fit the validator
 # to the manifest under test.
 ORACLE_REP_FAULTS = [
-    {"id": "F-06", "class": "spike", "origin": "A0",
-     "t0": 150, "dur": 10, "mag_sigma": 5.0},
-    {"id": "F-21", "class": "drift", "origin": "B5",
-     "t0": 150, "dur": 12, "mag_sigma": 5.2},
-    {"id": "F-22", "class": "bias", "origin": "B6",
-     "t0": 160, "dur": 12, "mag_sigma": 5.0},
-    {"id": "F-23", "class": "delay", "origin": "B4",
-     "t0": 170, "dur": 12, "extra": {"d": 4}},
-    {"id": "F-24", "class": "loss", "origin": "B7",
-     "t0": 180, "dur": 12, "extra": {"drop_rate": 0.2}},
-    {"id": "F-25", "class": "breakdown", "origin": "B2",
-     "t0": 190, "dur": 12, "extra": {"mttr_mult": 2}},
-    {"id": "F-26", "class": "quality", "origin": "B9",
-     "t0": 200, "dur": 12, "extra": {"reject_rate": 0.25}},
+    {
+        "id": "F-06",
+        "class": "spike",
+        "origin": "A0",
+        "t0": 150,
+        "dur": 10,
+        "mag_sigma": 5.0,
+    },
+    {
+        "id": "F-21",
+        "class": "drift",
+        "origin": "B5",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 5.2,
+    },
+    {
+        "id": "F-22",
+        "class": "bias",
+        "origin": "B6",
+        "t0": 160,
+        "dur": 12,
+        "mag_sigma": 5.0,
+    },
+    {
+        "id": "F-23",
+        "class": "delay",
+        "origin": "B4",
+        "t0": 170,
+        "dur": 12,
+        "extra": {"d": 4},
+    },
+    {
+        "id": "F-24",
+        "class": "loss",
+        "origin": "B7",
+        "t0": 180,
+        "dur": 12,
+        "extra": {"drop_rate": 0.2},
+    },
+    {
+        "id": "F-25",
+        "class": "breakdown",
+        "origin": "B2",
+        "t0": 190,
+        "dur": 12,
+        "extra": {"mttr_mult": 2},
+    },
+    {
+        "id": "F-26",
+        "class": "quality",
+        "origin": "B9",
+        "t0": 200,
+        "dur": 12,
+        "extra": {"reject_rate": 0.25},
+    },
 ]
 
 
@@ -67,21 +114,41 @@ def _full_manifest():
     """5-row fixture: one row per partition group, each row declaring full
     channel x class coverage plus its fault ids (union covers the oracle)."""
     return [
-        {"partition": "line-A", "machine": "A0",
-         "channels": list(CHANNELS), "classes": list(CLASSES),
-         "fault_ids": ["F-06"]},
-        {"partition": "line-B", "machine": "B5",
-         "channels": list(CHANNELS), "classes": list(CLASSES),
-         "fault_ids": ["F-21", "F-22", "F-23", "F-24", "F-25"]},
-        {"partition": "line-C", "machine": "C2",
-         "channels": list(CHANNELS), "classes": list(CLASSES),
-         "fault_ids": ["F-07"]},
-        {"partition": "cell", "machine": "ASM1",
-         "channels": list(CHANNELS), "classes": list(CLASSES),
-         "fault_ids": ["F-08"]},
-        {"partition": "rework", "machine": "RWK0",
-         "channels": list(CHANNELS), "classes": list(CLASSES),
-         "fault_ids": ["F-26"]},
+        {
+            "partition": "line-A",
+            "machine": "A0",
+            "channels": list(CHANNELS),
+            "classes": list(CLASSES),
+            "fault_ids": ["F-06"],
+        },
+        {
+            "partition": "line-B",
+            "machine": "B5",
+            "channels": list(CHANNELS),
+            "classes": list(CLASSES),
+            "fault_ids": ["F-21", "F-22", "F-23", "F-24", "F-25"],
+        },
+        {
+            "partition": "line-C",
+            "machine": "C2",
+            "channels": list(CHANNELS),
+            "classes": list(CLASSES),
+            "fault_ids": ["F-07"],
+        },
+        {
+            "partition": "cell",
+            "machine": "ASM1",
+            "channels": list(CHANNELS),
+            "classes": list(CLASSES),
+            "fault_ids": ["F-08"],
+        },
+        {
+            "partition": "rework",
+            "machine": "RWK0",
+            "channels": list(CHANNELS),
+            "classes": list(CLASSES),
+            "fault_ids": ["F-26"],
+        },
     ]
 
 
@@ -102,9 +169,14 @@ def test_coverage_rep_subset_oracle():
     twin.build_faults(777)  # raises first (red); validator target below
     gaps = twin.validate_coverage(_full_manifest(), ORACLE_REP_FAULTS)
     assert gaps == []
-    assert any(f["id"] == "F-21" and f["origin"] == "B5"
-               and f["t0"] == 150 and f["dur"] == 12
-               and f["mag_sigma"] == 5.2 for f in ORACLE_REP_FAULTS)
+    assert any(
+        f["id"] == "F-21"
+        and f["origin"] == "B5"
+        and f["t0"] == 150
+        and f["dur"] == 12
+        and f["mag_sigma"] == 5.2
+        for f in ORACLE_REP_FAULTS
+    )
 
 
 def test_coverage_planted_empty_cell_fails():
@@ -127,16 +199,46 @@ def test_coverage_malformed_row_rejected():
 
 # TC-008: 5 representative faults (one per base class incl. F-06) x 5 seeds.
 _DETERMINISM_FAULTS = [
-    {"id": "F-06", "class": "spike", "origin": "A0",
-     "t0": 150, "dur": 10, "mag_sigma": 5.0},
-    {"id": "F-21", "class": "drift", "origin": "B5",
-     "t0": 150, "dur": 12, "mag_sigma": 5.2},
-    {"id": "F-12", "class": "bias", "origin": "A4",
-     "t0": 160, "dur": 12, "mag_sigma": 5.0},
-    {"id": "F-14", "class": "delay", "origin": "A5",
-     "t0": 170, "dur": 12, "extra": {"d": 4}},
-    {"id": "F-16", "class": "loss", "origin": "A6",
-     "t0": 180, "dur": 12, "extra": {"drop_rate": 0.2}},
+    {
+        "id": "F-06",
+        "class": "spike",
+        "origin": "A0",
+        "t0": 150,
+        "dur": 10,
+        "mag_sigma": 5.0,
+    },
+    {
+        "id": "F-21",
+        "class": "drift",
+        "origin": "B5",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 5.2,
+    },
+    {
+        "id": "F-12",
+        "class": "bias",
+        "origin": "A4",
+        "t0": 160,
+        "dur": 12,
+        "mag_sigma": 5.0,
+    },
+    {
+        "id": "F-14",
+        "class": "delay",
+        "origin": "A5",
+        "t0": 170,
+        "dur": 12,
+        "extra": {"d": 4},
+    },
+    {
+        "id": "F-16",
+        "class": "loss",
+        "origin": "A6",
+        "t0": 180,
+        "dur": 12,
+        "extra": {"drop_rate": 0.2},
+    },
 ]
 _DETERMINISM_SEEDS = [777, 1234, 999, 42, 2026]
 
@@ -147,8 +249,7 @@ _WALLCLOCK_KEYS = {"wall_s", "timestamp", "clock", "elapsed"}
 
 def _canonical_hash(record):
     scrubbed = {k: v for k, v in record.items() if k not in _WALLCLOCK_KEYS}
-    return hashlib.sha256(
-        json.dumps(scrubbed, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(scrubbed, sort_keys=True).encode()).hexdigest()
 
 
 def test_determinism_replay_hash_identical():
@@ -199,7 +300,8 @@ def _grep_src(pattern):
 def test_quarantine_no_banned_strings():
     assert _grep_src(_QUARANTINE_PATTERN) == []
     proc = subprocess.run(
-        [sys.executable, "-c", "import torch"], capture_output=True)
+        [sys.executable, "-c", "import torch"], capture_output=True, check=False
+    )
     assert proc.returncode != 0
 
 

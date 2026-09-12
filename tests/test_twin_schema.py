@@ -11,9 +11,8 @@ RED STEP: no twin logic exists yet — every test here MUST fail with
 NotImplementedError until T5/T6/T7 land.
 """
 
+import itertools
 import pathlib
-
-import pytest
 
 from src import twin
 
@@ -34,9 +33,19 @@ def test_record_keys():
     # Full documented contract: T6 added the additive Scope channels 6/7
     # keys (throughput/events reads per TC-006b) on top of the T1 nine.
     assert set(rec) == {
-        "seed", "T", "cal_win", "obs", "states",
-        "buffers", "throughput", "events", "sbuf_stats", "flow_stats",
-        "agv_waits", "parts", "faults",
+        "seed",
+        "T",
+        "cal_win",
+        "obs",
+        "states",
+        "buffers",
+        "throughput",
+        "events",
+        "sbuf_stats",
+        "flow_stats",
+        "agv_waits",
+        "parts",
+        "faults",
     }
 
 
@@ -90,7 +99,7 @@ def test_cal_win_same_machine_gap():
         by_machine.setdefault(f["origin"], []).append((f["t0"], f["dur"]))
     for windows in by_machine.values():
         windows.sort()
-        for (t0a, da), (t0b, _db) in zip(windows, windows[1:]):
+        for (t0a, da), (t0b, _db) in itertools.pairwise(windows):
             assert t0b - (t0a + da) >= 5
 
 
