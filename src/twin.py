@@ -32,9 +32,12 @@ Stream slots per SIM_SPEC 6.2: 0-31 noise, 32 place, 33 drop, 34 agv,
 35 fail.
 """
 
+import argparse
+import concurrent.futures
 import hashlib
 import json
 import math
+import os
 import sys
 import time
 
@@ -1162,6 +1165,376 @@ def _calibrate(path):
     print(f"mean_per_episode_s={mean:.4f} episodes={len(episodes)} -> {path}")
 
 
+# ---- T8 full-battery runner (multiprocessing, measured wall math) ----
+#
+# Seed rule (documented, deterministic): episode i of a manifest built with
+# master seed M runs run_episode(seed=M * 1000 + i, fault=row_i). Worker
+# tasks are picklable (index, seed, fault-dict) triples; workers hold no
+# shared RNG (run_episode spawns its own SeedSequence streams per seed) and
+# results are assembled in input order via Executor.map (which preserves
+# input order per CPython docs; as_completed would not), so the joined
+# digest is identical for any --jobs value.
+_BATTERY_MASTER_SEED = 12345  # == build_faults default master seed
+_BATTERY_SEED_STRIDE = 1000  # episode seed = master * stride + row index
+_BATTERY_BUDGET_S = 600.0  # SIM_SPEC sect 10 normative battery wall bar
+_BATTERY_TRIPWIRE_S = 500.0  # T8 plan: first-8 measured mean extrapolated
+_BATTERY_WATCHDOG_S = 120.0  # per-episode anomaly log threshold
+_BATTERY_QUICK_ROWS = 16  # --manifest quick smoke subset (first N rows)
+_BATTERY_TRIPWIRE_N = 8  # first-N measured episodes feeding the tripwire
+# Walk topology prior (SIM_SPEC 7.2-7.3; SDD 4.4 walk(depth=3, topk=8);
+# fan-out cap 8 for the assembly join). Recorded as config, not measured.
+_BATTERY_TOPOLOGY = {"depth_max": 3, "topk": 8, "fanout_cap": 8}
+_BATTERY_CALIBRATION = \
+    ".omo/evidence/task-5-minipro-16-m01-twin.calibration.json"
+_BATTERY_EVIDENCE_DIR = ".omo/evidence"
+
+
+def battery_episode_seed(master_seed: int, row_index: int) -> int:
+    """Episode seed rule: master * stride + row index (documented above)."""
+    return master_seed * _BATTERY_SEED_STRIDE + row_index
+
+
+def _partition_of_machine(name):
+    """Manifest origin machine -> coverage partition group."""
+    if name is None:
+        raise ValueError("manifest row missing origin machine")
+    if name.startswith("ASM"):
+        return "cell"
+    if name.startswith("RWK"):
+        return "rework"
+    if name.startswith("A"):
+        return "line-A"
+    if name.startswith("B"):
+        return "line-B"
+    if name.startswith("C"):
+        return "line-C"
+    raise ValueError(f"unknown partition for machine {name!r}")
+
+
+def manifest_coverage_rows(manifest):
+    """Manifest fault rows -> validate_coverage schema rows.
+
+    Each episode records all 7 channels (full-plant replay context, never
+    subgraph-clipped), so every row declares the full channel list; the
+    class axis carries the row's own class and fault_ids its own id. The
+    union over rows is what the T3 gate asserts.
+    """
+    rows = []
+    for r in manifest:
+        rows.append({
+            "partition": _partition_of_machine(r.get("origin")),
+            "machine": r.get("origin"),
+            "channels": list(_CHANNELS),
+            "classes": [r.get("class")],
+            "fault_ids": [r.get("id")],
+        })
+    return rows
+
+
+def validate_manifest(manifest, oracle=None):
+    """T8 manifest gate: rep-subset ⊆ manifest AND every machine x class ≥1.
+
+    Reuses the T3 pure helpers (validate_coverage over the coverage rows;
+    check_wall_tripwire lives with the runner below). Returns the gap list
+    ([] == pass); the CLI fails LOUD naming the gap, never ships a gap.
+    """
+    if oracle is None:
+        oracle = list(_ORACLE_REP)
+    gaps = validate_coverage(manifest_coverage_rows(manifest), oracle)
+    have_mc = {(r.get("origin"), r.get("class")) for r in manifest}
+    order = sorted(MACHINE_INDEX, key=MACHINE_INDEX.get)
+    for m in order:
+        for c in _FAULT_CLASSES:
+            if (m, c) not in have_mc:
+                gaps.append(f"{m}: class {c} missing")
+    return gaps
+
+
+def _battery_worker(task):
+    """Pool worker: (index, seed, fault) -> measured result row (picklable).
+
+    No shared RNG state: run_episode spawns its own SeedSequence streams.
+    fanout is the honest downstream-touch count for this episode: distinct
+    non-origin machines with fault-linked events (fault_id tag) plus
+    distinct non-origin machines on DEGRADE/REJECT part records.
+    """
+    index, seed, fault = task
+    start = time.perf_counter()
+    rec = run_episode(seed, {"id": fault.get("id"),
+                             "class": fault.get("class"),
+                             "origin": fault.get("origin"),
+                             "t0": fault.get("t0"), "dur": fault.get("dur"),
+                             "mag_sigma": fault.get("mag_sigma", 0.0),
+                             "extra": dict(fault.get("extra") or {})})
+    wall = time.perf_counter() - start
+    fid, origin = fault.get("id"), fault.get("origin")
+    touched = set()
+    for e in rec["events"]:
+        tag = e.get("fault_id", None)
+        if tag is None:
+            detail = e.get("detail", {})
+            tag = detail.get("fault_id", None) if detail else None
+        if tag == fid and e.get("machine") != origin:
+            touched.add(e.get("machine"))
+    for p in rec["parts"]:
+        if p.get("flag", "OK") != "OK" and p.get("machine") != origin:
+            touched.add(p.get("machine"))
+    return {"index": index, "seed": seed, "fault_id": fid,
+            "digest": replay_digest(rec), "wall_s": wall,
+            "fanout": len(touched)}
+
+
+def _run_tasks_ordered(tasks, jobs):
+    """Run worker tasks, assembling results in input order (deterministic).
+
+    jobs == 1 runs inline (same code path, no pool); jobs > 1 uses
+    ProcessPoolExecutor.map, which yields in input order. Either way the
+    joined per-episode digest is identical for fixed (master, manifest).
+    """
+    if jobs == 1:
+        return [_battery_worker(t) for t in tasks]
+    with concurrent.futures.ProcessPoolExecutor(
+            max_workers=jobs) as pool:
+        return list(pool.map(_battery_worker, tasks))
+
+
+def _load_manifest(spec, master_seed):
+    """Resolve --manifest full|quick|FILE to (rows, label)."""
+    if spec == "full":
+        return build_faults(master_seed), "full"
+    if spec == "quick":
+        return build_faults(master_seed)[:_BATTERY_QUICK_ROWS], "quick"
+    try:
+        with open(spec) as fh:
+            payload = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"cannot load manifest file {spec!r}: {exc}")
+    if isinstance(payload, dict) and "manifest" in payload:
+        payload = payload["manifest"]
+    if not isinstance(payload, list) or not payload:
+        raise ValueError(f"manifest file {spec!r} holds no fault rows")
+    return payload, spec
+
+
+def _load_calibration(path):
+    """Read the T5 calibration mean (budget input); never hardcoded here."""
+    try:
+        with open(path) as fh:
+            payload = json.load(fh)
+        return float(payload["mean_per_episode_s"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError(
+            f"cannot read calibration mean from {path!r}: {exc}")
+
+
+def _write_json(path, payload):
+    with open(path, "w") as fh:
+        json.dump(payload, fh, indent=2)
+
+
+def _battery_parser():
+    parser = argparse.ArgumentParser(
+        description="T8 full cross-product battery runner with wall "
+                    "tripwire (seed rule: episode seed = master * 1000 "
+                    "+ row index; identical digests for any --jobs).")
+    parser.add_argument("--manifest", default="full",
+                        help="full | quick (first 16 rows) | FILE (json "
+                             "fault-row list)")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
+                        help="worker processes (>=1)")
+    parser.add_argument("--seed", type=int, default=_BATTERY_MASTER_SEED,
+                        help="master seed for manifest + episode seeds")
+    parser.add_argument("--subset", type=int, default=None,
+                        help="run first N manifest rows only (digest proof)")
+    parser.add_argument("--wall-report", action="store_true",
+                        help="emit wall_report.json + coverage_matrix.json "
+                             "+ fanout.json")
+    parser.add_argument("--calibration", default=_BATTERY_CALIBRATION,
+                        help="T5 calibration JSON path (budget input)")
+    parser.add_argument("--evidence-dir", default=_BATTERY_EVIDENCE_DIR,
+                        help="artifact directory for --wall-report")
+    parser.add_argument("--budget-override", type=float, default=None,
+                        help="TEST-ONLY failing-first demo flag: replaces "
+                             "the 600s budget in the tripwire/budget check "
+                             "to prove the exit-2 path. Never a default.")
+    parser.add_argument("--calibrate", default=None,
+                        help="legacy T5 entry: time clean+F-21 episodes to "
+                             "PATH and exit")
+    return parser
+
+
+def _fail(msg):
+    print(f"battery FAIL LOUD: {msg}", file=sys.stderr)
+    return 2
+
+
+def main(argv=None):
+    parser = _battery_parser()
+    args = parser.parse_args(argv)
+    if args.calibrate is not None:
+        _calibrate(args.calibrate)
+        return 0
+    if args.jobs is None or args.jobs < 1:
+        parser.error("--jobs must be an integer >= 1")
+    if args.seed is None or args.seed < 0:
+        parser.error("--seed must be a non-negative integer")
+    try:
+        manifest, label = _load_manifest(args.manifest, args.seed)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.subset is not None:
+        if args.subset < 1:
+            parser.error("--subset must be >= 1")
+    n = len(manifest)
+    gaps = validate_manifest(manifest)
+    if gaps:
+        return _fail(f"manifest {label} coverage gap: {gaps[0]} "
+                     f"({len(gaps)} total)")
+    full_cov_rows = manifest_coverage_rows(manifest)
+    if args.subset is not None:
+        manifest = manifest[:args.subset]
+        label = f"{label}[:{args.subset}]"
+    n = len(manifest)
+    try:
+        cal_mean = _load_calibration(args.calibration)
+    except ValueError as exc:
+        return _fail(str(exc))
+    budget_cap = args.budget_override if args.budget_override is not None \
+        else _BATTERY_BUDGET_S
+    tasks = [(i, battery_episode_seed(args.seed, i), manifest[i])
+             for i in range(n)]
+    first = min(_BATTERY_TRIPWIRE_N, n)
+    wall_open = time.perf_counter()
+    try:
+        head = _run_tasks_ordered(tasks[:first], args.jobs)
+    except KeyboardInterrupt:
+        _write_partial(args, manifest, [], args.seed, cal_mean, budget_cap)
+        return _fail("interrupted during tripwire phase; partial "
+                     "artifacts written")
+    mean8 = sum(r["wall_s"] for r in head) / len(head)
+    extrapolated = mean8 * n
+    if extrapolated > _BATTERY_TRIPWIRE_S and args.jobs == 1:
+        return _fail(
+            f"tripwire: first-{first} measured mean {mean8:.4f}s/ep "
+            f"extrapolates to {extrapolated:.1f}s sequential-equivalent "
+            f"(>{_BATTERY_TRIPWIRE_S:.0f}s) with --jobs 1; remedy: "
+            f"parallelize first (raise --jobs), never shrink scope")
+    branch = "parallel-already" if args.jobs > 1 else "sequential-ok"
+    try:
+        tail = _run_tasks_ordered(tasks[first:], args.jobs)
+    except KeyboardInterrupt:
+        _write_partial(args, manifest, head, args.seed, cal_mean,
+                       budget_cap)
+        return _fail("interrupted mid-battery; partial artifacts written")
+    rows = head + tail
+    rows.sort(key=lambda r: r["index"])
+    wall_total = time.perf_counter() - wall_open
+    walls = [r["wall_s"] for r in rows]
+    fresh_mean = sum(walls) / n
+    seq_equiv = wall_total * args.jobs
+    budget = cal_mean * n
+    projected = fresh_mean * n
+    total, tripped = check_wall_tripwire([wall_total], budget=budget_cap)
+    verdict = "PASS" if not tripped else "FAIL"
+    anomalies = [r["fault_id"] for r in rows
+                 if r["wall_s"] > _BATTERY_WATCHDOG_S]
+    joined = hashlib.sha256(
+        "\n".join(r["digest"] for r in rows).encode()).hexdigest()
+    cov_rows = full_cov_rows
+    cov_gaps = validate_coverage(cov_rows,
+                                 [{"id": r["id"]} for r in _ORACLE_REP])
+    cells = {}
+    for p in _PARTITIONS:
+        prows = [r for r in cov_rows if r["partition"] == p]
+        cells[p] = {
+            "channels": sorted({c for r in prows for c in r["channels"]}),
+            "classes": sorted({c for r in prows for c in r["classes"]}),
+            "n_rows": len(prows),
+            "n_faults": sum(len(r["fault_ids"]) for r in prows),
+        }
+    empty_cells = [g for g in cov_gaps]
+    fanout_measured = max([r["fanout"] for r in rows] + [0])
+    if args.wall_report:
+        import pathlib
+        evdir = pathlib.Path(args.evidence_dir)
+        evdir.mkdir(parents=True, exist_ok=True)
+        _write_json(evdir / "wall_report.json", {
+            "per_episode_s": walls,
+            "calibration_mean_s": cal_mean,
+            "calibration_path": args.calibration,
+            "fresh_mean_s": fresh_mean,
+            "wall_total_s": wall_total,
+            "jobs": args.jobs,
+            "sequential_equivalent_s": seq_equiv,
+            "budget_s": budget,
+            "budget_cap_s": budget_cap,
+            "projected_total_s": projected,
+            "tripwire": {
+                "first_n": first,
+                "first_n_mean_s": mean8,
+                "extrapolated_s": extrapolated,
+                "threshold_s": _BATTERY_TRIPWIRE_S,
+                "branch": branch,
+            },
+            "n_episodes": n,
+            "manifest": label,
+            "master_seed": args.seed,
+            "seed_rule": "episode_seed = master_seed*1000+row_index",
+            "joined_digest": joined,
+            "anomalies_over_120s": anomalies,
+            "verdict": verdict,
+        })
+        _write_json(evdir / "coverage_matrix.json", {
+            "partitions": list(_PARTITIONS),
+            "channels": list(_CHANNELS),
+            "classes": list(_FAULT_CLASSES),
+            "cells": cells,
+            "empty_cells": empty_cells,
+        })
+        _write_json(evdir / "fanout.json", {
+            "fanout_measured": fanout_measured,
+            "metric": "max over battery episodes of distinct non-origin "
+                      "machines with fault-linked events (fault_id tag) "
+                      "plus DEGRADE/REJECT part records",
+            "topology": dict(_BATTERY_TOPOLOGY),
+            "partitions": list(_PARTITIONS),
+            "note": "walk execution belongs to M1",
+        })
+    cap_label = (f"{budget_cap:.0f}" if budget_cap >= 10
+                 else f"{budget_cap:.2f}")
+    print(f"battery {label}: n={n} jobs={args.jobs} "
+          f"wall_total_s={wall_total:.2f} (<{cap_label}) "
+          f"seq_equiv_s={seq_equiv:.1f} budget_s={budget:.2f} "
+          f"projected_s={projected:.2f} fanout={fanout_measured} "
+          f"empty_cells={len(empty_cells)} verdict={verdict} "
+          f"digest={joined[:12]}")
+    if tripped:
+        return _fail(f"over budget: wall_total {wall_total:.1f}s > "
+                     f"{cap_label}s; remedy: parallelize first "
+                     f"(raise --jobs), never shrink scope")
+    return 0
+
+
+def _write_partial(args, manifest, rows, master, cal_mean, budget_cap):
+    """Interrupted-battery artifacts, labeled partial (adversarial probe)."""
+    if not args.wall_report:
+        return
+    import pathlib
+    evdir = pathlib.Path(args.evidence_dir)
+    evdir.mkdir(parents=True, exist_ok=True)
+    walls = [r["wall_s"] for r in rows]
+    _write_json(evdir / "wall_report.json", {
+        "partial": True,
+        "per_episode_s": walls,
+        "calibration_mean_s": cal_mean,
+        "wall_total_s": sum(walls),
+        "jobs": args.jobs,
+        "n_episodes": len(manifest),
+        "n_finished": len(rows),
+        "budget_cap_s": budget_cap,
+        "verdict": "PARTIAL",
+    })
+
+
 if __name__ == "__main__":
-    _calibrate(sys.argv[1] if len(sys.argv) > 1 else
-               ".omo/evidence/task-5-minipro-16-m01-twin.calibration.json")
+    sys.exit(main())
