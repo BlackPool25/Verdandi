@@ -1175,6 +1175,9 @@ def run_episode(
         "seed": seed,
         "T": T,
         "cal_win": CAL_WIN,
+        # Table 3.1 roster snapshot (SIM_SPEC §4.4): per-machine operating
+        # points so a serialized episode carries its own roster metadata.
+        "machines": {name: dict(cfg) for name, cfg in MACHINES.items()},
         "obs": shared["obs"],
         "states": shared["states"],
         "buffers": buf_rows,
