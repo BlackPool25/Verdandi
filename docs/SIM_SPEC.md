@@ -250,6 +250,14 @@ in `[0,300)`, scores floats in `[0,1]`, `edge_id` string `"X->Y"` (flow
 edge, buffer/AGV hops named e.g. `"A9~AGV~ASM0"`, rework `"ASM2~RWK0~ASM0"`).
 One running example: fault `F-21` (drift, B5, t0=150, dur=12, mag=5.2σ).
 
+Measured note (owner ruling A, 2026-09-12): at seed 777 the F-21 episode
+shows GT window exact (150,162) plus 3 DEGRADE parts arriving downstream via
+AGV at B9, with B56 max 2/25 and zero non-RUN states at B5/B6/B7. So the
+B6 BLOCKED / B7 STARVED sentences and B56 24/25 levels in the examples below
+are illustrative of the triple and contract format, not measured twin output.
+Measured congestion pin is seed 287 (delay-A5: A01 piles 7 to cap 20, feed-head
+A0 BLOCKED x8 on a 6-step rhythm while A01 sits at cap); suite 34/34.
+
 ### 9.1. Alarm
 
 ```json
