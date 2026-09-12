@@ -206,7 +206,7 @@ def _validate(seed, fault):
     normed = []
     for i, f in enumerate(flist):
         origin = f.get("origin")
-        if origin is not None and origin not in MACHINES:
+        if origin not in MACHINES:
             raise ValueError(f"unknown fault origin {origin!r}")
         cls = f.get("class")
         if cls not in allowed:
@@ -217,13 +217,13 @@ def _validate(seed, fault):
             or not isinstance(t0, int)
             or isinstance(dur, bool)
             or not isinstance(dur, int)
-            or t0 < 0
+            or t0 < CAL_WIN
             or dur < 1
             or t0 + dur > T
         ):
             raise ValueError(
                 f"fault window out of range: t0={t0!r} "
-                f"dur={dur!r} (need 0<=t0, dur>=1, t0+dur<=T)"
+                f"dur={dur!r} (need t0>=CAL_WIN, dur>=1, t0+dur<=T)"
             )
         extra = f.get("extra", {})
         if extra is None:
@@ -237,7 +237,7 @@ def _validate(seed, fault):
                 "origin": origin,
                 "t0": t0,
                 "dur": dur,
-                "mag_sigma": f.get("mag_sigma", 0.0),
+                "mag_sigma": f.get("mag_sigma", None),
                 "extra": dict(extra),
             }
         )
@@ -312,10 +312,15 @@ def _materialize(place, fault_list):
 
 
 def _inj_down(fx, t):
-    """Injected-breakdown spec active on this machine at step t (or None)."""
+    """Injected-breakdown spec active on this machine at step t (or None).
+
+    Forced-DOWN window scales with spec mttr_mult: [t0, t0+ceil(dur*mult)).
+    """
     for s in fx:
-        if s["class"] == "breakdown" and s["t0"] <= t < s["t1"]:
-            return s
+        if s["class"] == "breakdown":
+            end = s["t0"] + math.ceil(s["dur"] * float(s.get("mttr_mult", 1.0)))
+            if s["t0"] <= t < end:
+                return s
     return None
 
 
@@ -327,11 +332,11 @@ def _gw_at(shared, t):
     return False
 
 
-def _quality_rate(shared, t):
-    """Max active quality reject rate at step t (0.0 when none active)."""
+def _quality_rate(shared, t, origin):
+    """Max active quality reject rate at step t for this origin (0.0 none)."""
     rate = 0.0
-    for a, b, r in shared["qwin"]:
-        if a <= t < b and r > rate:
+    for a, b, r, o in shared["qwin"]:
+        if o == origin and a <= t < b and r > rate:
             rate = r
     return rate
 
@@ -378,7 +383,7 @@ def _delay_d(fx, t):
 
 
 def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
-    """One step of the SIM_SPEC 4.1 clean-signal eq; returns (obs, temp).
+    """One step of the SIM_SPEC 4.1 clean-signal eq; returns (obs, temp, ar).
 
     dev is the origin-only fault deviation (§5); 0.0 reproduces the exact
     T5/T6 clean path (clamp included).
@@ -728,14 +733,18 @@ def _asm0_process(env, asm01, kit, shared):
             pid = shared["pid"][0]
             shared["pid"][0] += 1
             kit_flag = (
-                "DEGRADE" if any(p.get("flag") == "DEGRADE" for p in batch) else "OK"
+                "REJECT"
+                if any(p.get("flag") == "REJECT" for p in batch)
+                else "DEGRADE"
+                if any(p.get("flag") == "DEGRADE" for p in batch)
+                else "OK"
             )
             yield asm01.put(
                 {
                     "id": pid,
                     "line": "ASM",
                     "kit": [p["id"] for p in batch],
-                    "passes": 0,
+                    "passes": max(p.get("passes", 0) for p in batch),
                     "flag": kit_flag,
                 }
             )
@@ -816,9 +825,13 @@ def _asm_mid_process(env, name, up, down, shared):
             rem -= 1
             st, tput = "RUN", 0
         elif down is None:
-            # ASM2 sink with quality-driven reject (see docstring).
-            rate = _quality_rate(shared, t)
-            rej = rate > 0.0 and shared["place"].random() < rate
+            # ASM2 sink with quality-driven reject (see docstring). A held
+            # REJECT part never re-rolls: full RWK_RET holds it BLOCKED with
+            # flag/passes intact until a slot frees, then it enqueues.
+            rate = _quality_rate(shared, t, name)
+            rej = part.get("flag") == "REJECT" or (
+                rate > 0.0 and shared["place"].random() < rate
+            )
             if rej:
                 part["flag"] = "REJECT"
                 if part.get("passes", 0) >= REWORK_MAX_PASSES:
@@ -961,7 +974,7 @@ def _rwk0_process(env, shared):
         elif rem > 1:
             rem -= 1
             st, tput = "RUN", 0
-        elif _quality_rate(shared, t) > 0.0:
+        elif _quality_rate(shared, t, "ASM2") > 0.0:
             # Quality storm: rework cannot restore the part yet — requeue
             # for another pass (surge). The intake cap above guarantees
             # termination via the scrap sink.
@@ -1049,7 +1062,7 @@ def run_episode(
     stores = {n: simpy.Store(env, capacity=c) for n, c in BUFFERS.items()}
     stores["_C7TAIL"] = simpy.Store(
         env, capacity=MACHINES["C7"]["buffer_cap"]
-    )  # AGV drains this
+    )  # AGV drains this; dedicated cap-15 tail store (==15), never the C67 gap
     assert len(MACHINES) == N_MACHINES and len(BUFFERS) == N_BUFFERS
     order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
     fx: dict[str, list[Any]] = {}
@@ -1085,7 +1098,7 @@ def run_episode(
         "fx": fx,
         "gwin": [(s["t0"], s["t1"]) for s in specs],
         "qwin": [
-            (s["t0"], s["t1"], s["reject_rate"])
+            (s["t0"], s["t1"], s["reject_rate"], s["origin"])
             for s in specs
             if s["class"] == "quality"
         ],
@@ -1171,32 +1184,40 @@ def run_episode(
         "flow_stats": flow_stats,
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
-        "faults": fault_list,
+        "faults": specs,
     }
 
 
 def run_calibration(seed: int):
-    """Return (120, 32) clean window: breakdowns off, first CAL_WIN steps."""
+    """Return (CAL_WIN, 32) clean window: breakdowns off, first CAL_WIN steps."""
     rec = run_episode(seed, None, enable_natural_breakdown=False)
     return np.asarray(rec["obs"], dtype=float)[:, :CAL_WIN].T
 
 
-def _try_place(taken, durs):
-    """Greedily lay windows at/after 120 with ≥5-step gaps; None if unfit."""
+def _try_place(rng, taken, durs, tries=50):
+    """Draw t0 ~uniform over [CAL_WIN, T-dur] with ≥5-step gap retry.
+
+    Per window, draw up to `tries` uniform candidates; keep the first
+    that holds a ≥5-step gap against taken + already-placed blocks.
+    Return None when a window exhausts its retries (caller falls back).
+    """
     blocks = sorted(taken)
-    out, cursor = [], 120
+    out = []
     for dur in durs:
-        t = cursor
-        for a, b in blocks:
-            if t + dur + 5 <= a:
-                break
-            t = max(t, b + 5)
-        if t + dur > T:
+        hi = T - dur
+        if hi < CAL_WIN:
             return None
-        out.append(t)
-        blocks.append((t, t + dur))
+        found = None
+        for _ in range(tries):
+            t = int(rng.integers(CAL_WIN, hi + 1))
+            if all(t + dur + 5 <= a or b + 5 <= t for a, b in blocks):
+                found = t
+                break
+        if found is None:
+            return None
+        out.append(found)
+        blocks.append((found, found + dur))
         blocks.sort()
-        cursor = t + dur + 5
     return out
 
 
@@ -1205,12 +1226,11 @@ def build_faults(seed: int = 12345) -> list[dict]:
 
     Full machine x class cross-product (32 machines x 7 classes = 224
     rows); the oracle representative subset (incl. F-21 drift B5 t0=150
-    dur=12 mag=5.2) is pinned with rep=True. t0 ~ uniform on [120,
+    dur=12 mag=5.2) is pinned with rep=True. t0 ~ uniform on [CAL_WIN,
     300-dur] from rng_place = children[32]; same-machine windows keep a
-    ≥5-step gap (greedy cursor; dur-8 fallback, which always fits: 7
-    windows need at most 7*8+6*5=86 steps of the ~180-step range, and a
-    pinned window splits the range into two intervals the fallback fills
-    left-to-right).
+    ≥5-step gap (uniform draw + bounded retry; dur-8 fallback, which
+    always fits: 7 windows need at most 7*8+6*5=86 steps of the
+    ~180-step range).
     """
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
@@ -1269,11 +1289,11 @@ def build_faults(seed: int = 12345) -> list[dict]:
                 mag = _params(cls, extra)
                 todo.append([cls, dur, mag, extra, f"F-{m}-{cls}"])
         durs = [d for (_, d, _, _, _) in todo]
-        t0s = _try_place(taken, durs)
+        t0s = _try_place(rng_place, taken, durs)
         if t0s is None:  # pathological dur draw: retry with minimal durs
             for entry in todo:
                 entry[1] = 8
-            t0s = _try_place(taken, [8] * len(todo))
+            t0s = _try_place(rng_place, taken, [8] * len(todo))
             assert t0s is not None
         for (cls, dur, mag, extra, fid), t0 in zip(todo, t0s):
             rows.append(
@@ -1368,7 +1388,7 @@ def _calibrate(path):
                     "fault": tag,
                     "wall_s": wall,
                     "enable_natural_breakdown": True,
-                    "faultdev_applied": False,
+                    "faultdev_applied": fault is not None,
                 }
             )
     mean = sum(e["wall_s"] for e in episodes) / len(episodes)
@@ -1431,10 +1451,13 @@ def _partition_of_machine(name):
 def manifest_coverage_rows(manifest):
     """Manifest fault rows -> validate_coverage schema rows.
 
-    Each episode records all 7 channels (full-plant replay context, never
-    subgraph-clipped), so every row declares the full channel list; the
-    class axis carries the row's own class and fault_ids its own id. The
-    union over rows is what the T3 gate asserts.
+    DECISION (Wave-4 T-C1, Copilot :1446; owner flag): every row DECLARES
+    all 7 channels (full-plant replay intent — each episode records the
+    whole-plant replay context, never a subgraph clip), not the MEASURED
+    per-episode channel subset. The T3 gate asserts the union over rows
+    per partition, so measured channels would punch holes in that union;
+    keep declared. The class axis carries the row's own class and
+    fault_ids its own id.
     """
     rows = []
     for r in manifest:
@@ -1487,7 +1510,7 @@ def _battery_worker(task):
             "origin": fault.get("origin"),
             "t0": fault.get("t0"),
             "dur": fault.get("dur"),
-            "mag_sigma": fault.get("mag_sigma", 0.0),
+            "mag_sigma": fault.get("mag_sigma"),
             "extra": dict(fault.get("extra") or {}),
         },
     )
@@ -1532,7 +1555,7 @@ def _load_manifest(spec, master_seed):
     if spec == "full":
         return build_faults(master_seed), "full"
     if spec == "quick":
-        return build_faults(master_seed)[:_BATTERY_QUICK_ROWS], "quick"
+        return build_faults(master_seed), "quick"
     try:
         with open(spec) as fh:
             payload = json.load(fh)
@@ -1642,7 +1665,8 @@ def main(argv=None):
     gaps = validate_manifest(manifest)
     if gaps:
         return _fail(f"manifest {label} coverage gap: {gaps[0]} ({len(gaps)} total)")
-    full_cov_rows = manifest_coverage_rows(manifest)
+    if label == "quick":
+        manifest = manifest[:_BATTERY_QUICK_ROWS]
     if args.subset is not None:
         manifest = manifest[: args.subset]
         label = f"{label}[:{args.subset}]"
@@ -1650,7 +1674,7 @@ def main(argv=None):
     try:
         cal_mean = _load_calibration(args.calibration)
     except ValueError as exc:
-        return _fail(str(exc))
+        return _fail(f"{exc}; bootstrap: run --calibrate {args.calibration} to create it")
     budget_cap = (
         args.budget_override if args.budget_override is not None else _BATTERY_BUDGET_S
     )
@@ -1689,7 +1713,7 @@ def main(argv=None):
     verdict = "PASS" if not tripped else "FAIL"
     anomalies = [r["fault_id"] for r in rows if r["wall_s"] > _BATTERY_WATCHDOG_S]
     joined = hashlib.sha256("\n".join(r["digest"] for r in rows).encode()).hexdigest()
-    cov_rows = full_cov_rows
+    cov_rows = manifest_coverage_rows(manifest)
     cov_gaps = validate_coverage(cov_rows, [{"id": r["id"]} for r in _ORACLE_REP])
     cells = {}
     for p in _PARTITIONS:
@@ -1739,6 +1763,8 @@ def main(argv=None):
         _write_json(
             evdir / "coverage_matrix.json",
             {
+                "manifest": label,
+                "n_episodes": n,
                 "partitions": list(_PARTITIONS),
                 "channels": list(_CHANNELS),
                 "classes": list(_FAULT_CLASSES),

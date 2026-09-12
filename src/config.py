@@ -19,7 +19,7 @@ N_STREAMS = 36
 
 # Shared resources (SIM_SPEC §2.2).
 AGV_CAP = 2
-AGV_STEPS = (4, 8)  # ints: uniform transit per trip, sampled on rng_place stream
+AGV_STEPS = (4, 8)  # ints: uniform transit per trip, sampled on rng_agv stream
 SBUF_CAP = 30
 # Owner ruling 2026-09-12: process/finish divert, feed/form never; inspect
 # tails excluded — A9/B9/C7 ride the AGV path, never SBUF-direct
@@ -111,6 +111,7 @@ _MACHINE_ROWS = [
     ("C5", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
     ("C6", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
     # C7 "finish" label is line shorthand only (Table 3.1 note); params are inspect.
+    # buffer_cap=15 (tail cap governs dedicated _C7TAIL store); mttr=8 is repair, not cap.
     ("C7", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
     # ASM0 cycle 5 explicit per Table 3.1 (assembly/kit).
     ("ASM0", _row("assembly-kit", 65.0, 1.3, 5, 1000, 12, 25, 2)),
