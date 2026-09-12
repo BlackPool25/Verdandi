@@ -221,9 +221,157 @@ def test_fault_delay_a5_blocks_upstream():
     assert all(150 <= t < _T for t in a0_blocked)  # post-fault cascade, in-episode
 
 
+def test_rework_asm0_kit_preserves_reject_and_passes():
+    # ASM0 kitting rebuild must preserve passes/REJECT (Copilot :739,
+    # blocks T-A8): a REJECT-flagged rework part re-entering via kit C
+    # keeps its flag and max passes in the rebuilt kit (no passes:0 reset).
+    import simpy
+
+    from src.config import BUFFERS, N_MACHINES, T
+
+    noise, _place, drop, _agv, fail = twin._spawn_streams(_SEED)
+    shared = {
+        "noise": noise,
+        "drop": drop,
+        "fail": fail,
+        "enable_bd": False,
+        "obs": [[0.0] * T for _ in range(N_MACHINES)],
+        "states": [["RUN"] * T for _ in range(N_MACHINES)],
+        "tput": [[0] * T for _ in range(N_MACHINES)],
+        "events": [],
+        "pid": [1000],
+        "held": [None] * N_MACHINES,
+        "flow": {"asm_created": 0},
+        "fx": {},
+        "gwin": [],
+        "qwin": [],
+    }
+    kit = {
+        "A": [{"id": 1, "line": "A", "flag": "OK", "passes": 0}],
+        "B": [{"id": 2, "line": "B", "flag": "OK", "passes": 0}],
+        "C": [{"id": 3, "line": "C", "flag": "REJECT", "passes": 1}],
+    }
+    env = simpy.Environment()
+    asm01 = simpy.Store(env, capacity=BUFFERS["ASM01"])
+    env.process(twin._asm0_process(env, asm01, kit, shared))
+    env.run(until=20)
+    assert len(asm01.items) == 1
+    built = asm01.items[0]
+    assert built["flag"] == "REJECT"
+    assert built["passes"] == 1
+
+
+def test_fault_breakdown_mttr_mult_scales_down():
+    # mttr_mult scales the injected DOWN window (Copilot :303): same
+    # origin/dur, mult=3 must hold origin DOWN longer than mult=1.
+    # Deterministic: seed 777, natural breakdown off (isolates injected).
+    from src.config import MACHINE_INDEX
+
+    def _mk(mult):
+        return {
+            "id": "F-T2-mttr",
+            "class": "breakdown",
+            "origin": "B2",
+            "t0": 150,
+            "dur": 12,
+            "mag_sigma": 0.0,
+            "extra": {"mttr_mult": mult},
+        }
+
+    r1 = twin.run_episode(_SEED, _mk(1.0), enable_natural_breakdown=False)
+    r3 = twin.run_episode(_SEED, _mk(3.0), enable_natural_breakdown=False)
+    b2 = MACHINE_INDEX["B2"]
+    n1 = sum(1 for s in r1["states"][b2] if s == "DOWN")
+    n3 = sum(1 for s in r3["states"][b2] if s == "DOWN")
+    assert n3 > n1, f"mttr_mult=3 must extend DOWN: {n3} <= {n1}"
+    assert n1 == 12  # mult=1 keeps the exact window
+
+
 def test_fault_breakdown_b2_zero_throughput():
     rec = twin.run_episode(_SEED, _BREAKDOWN_B2)  # raises first (red)
     counts = rec.get("throughput", rec.get("counts", None))
     assert counts is not None
     b2 = counts[12]  # B2 index: A0-9 (0-9), B0=10, B1=11, B2=12
     assert all(c == 0 for c in b2[150 : 150 + 12])  # origin throughput 0 over window
+
+
+_QUALITY_B2 = {
+    "id": "F-T2-quality-scope",
+    "class": "quality",
+    "origin": "B2",
+    "t0": 150,
+    "dur": 20,
+    "mag_sigma": 0.0,
+    "extra": {"reject_rate": 0.40},
+}
+
+
+def test_rework_quality_scoped_to_origin():
+    # Quality reject windows are origin-scoped: a 40% quality fault at B2
+    # must NOT raise the ASM2 reject rate (zero rejects, zero scraps, no
+    # RWK0 rework — same as a clean episode). Pinned at seed 777 with the
+    # default breakdown stream: the unscoped window leaks one reject here.
+    rec = twin.run_episode(_SEED, _QUALITY_B2)
+    assert rec["flow_stats"]["rejected"] == 0
+    assert rec["flow_stats"]["scrapped"] == 0
+    assert not [p for p in rec["parts"] if p.get("via") == "RWK0"]
+
+
+def test_rework_asm2_holds_reject_when_rwk_full():
+    # ASM2 full-buffer hold (Wave-1 T-A8, depends on T-A7): a REJECT part
+    # facing a full RWK_RET holds ASM2 BLOCKED with flag/passes preserved
+    # (no re-roll to OK on the next step); freeing a slot enqueues it.
+    # Deterministic: scripted place draws (reject once, then accept-bait),
+    # natural breakdown off, RWK_RET pre-filled to cap.
+    import simpy
+
+    from src.config import BUFFERS, MACHINE_INDEX, N_MACHINES, T
+
+    noise, _place, drop, _agv, fail = twin._spawn_streams(_SEED)
+    draws = iter([0.1] + [0.9] * 64)
+
+    class _ScriptedPlace:
+        def random(self):
+            return next(draws)
+
+    asm2_idx = MACHINE_INDEX["ASM2"]
+    shared = {
+        "noise": noise,
+        "place": _ScriptedPlace(),
+        "drop": drop,
+        "fail": fail,
+        "enable_bd": False,
+        "obs": [[0.0] * T for _ in range(N_MACHINES)],
+        "states": [["RUN"] * T for _ in range(N_MACHINES)],
+        "tput": [[0] * T for _ in range(N_MACHINES)],
+        "events": [],
+        "parts": [],
+        "pid": [1000],
+        "held": [None] * N_MACHINES,
+        "flow": {"sunk": 0, "scrapped": 0, "rejected": 0},
+        "fx": {},
+        "gwin": [],
+        "qwin": [(0, T, 0.4, "ASM2")],
+    }
+    env = simpy.Environment()
+    up = simpy.Store(env, capacity=BUFFERS["ASM12"])
+    rwk = simpy.Store(env, capacity=BUFFERS["RWK_RET"])
+    for i in range(BUFFERS["RWK_RET"]):
+        rwk.items.append({"id": 900 + i, "line": "ASM", "flag": "REJECT", "passes": 1})
+    up.items.append({"id": 7, "line": "ASM", "flag": "OK", "passes": 0})
+    shared["rwk_ret"] = rwk
+    env.process(twin._asm_mid_process(env, "ASM2", up, None, shared))
+    env.run(until=6)
+    assert "BLOCKED" in shared["states"][asm2_idx][:6]
+    held = shared["held"][asm2_idx]
+    assert held is not None and held["id"] == 7
+    assert held["flag"] == "REJECT"  # no re-roll to OK while held
+    assert held.get("passes", 0) == 0
+    assert shared["flow"]["sunk"] == 0
+    assert shared["flow"]["rejected"] == 0
+    rwk.items.pop(0)  # free one slot: held part must enqueue, not re-roll
+    env.run(until=12)
+    assert shared["flow"]["rejected"] == 1
+    assert shared["held"][asm2_idx] is None
+    assert held["passes"] == 1 and held["flag"] == "REJECT"
+    assert any(p["id"] == 7 for p in rwk.items)
