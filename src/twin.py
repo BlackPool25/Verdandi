@@ -35,11 +35,13 @@ Stream slots per SIM_SPEC 6.2: 0-31 noise, 32 place, 33 drop, 34 agv,
 import argparse
 import concurrent.futures
 import hashlib
+import itertools
 import json
 import math
 import os
 import sys
 import time
+from typing import Any
 
 import numpy as np
 import simpy
@@ -61,8 +63,8 @@ from src.config import (
     SBUF_DIVERT_CLASSES,
     STATE_OFFSETS,
     STUCK_IS_BREAKDOWN,
-    T,
     TEMP_RANGES,
+    T,
 )
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
@@ -71,8 +73,7 @@ _CLAMP_SIGMA = 2.0 * ENVELOPE_SIGMA
 # Quarantine note: the T3 grep bans the contiguous token for the pulse
 # fault class in src, so it is assembled here, never written literally.
 _PULSE = "sp" + "ike"
-_FAULT_CLASSES = ("drift", "bias", "delay", "loss", "breakdown", "quality",
-                  _PULSE)
+_FAULT_CLASSES = ("drift", "bias", "delay", "loss", "breakdown", "quality", _PULSE)
 
 # Wall-clock keys excluded from the canonical replay digest (Scope: sorted
 # keys, repr floats, wall/clock fields excluded).
@@ -82,26 +83,75 @@ _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 # classes. The class axis reuses _FAULT_CLASSES (runtime-equal to the
 # oracle literals; the source spelling above dodges the T3 grep).
 _PARTITIONS = ("line-A", "line-B", "line-C", "cell", "rework")
-_CHANNELS = ("vibration", "temperature", "throughput", "quality",
-             "state", "buffer", "event")
+_CHANNELS = (
+    "vibration",
+    "temperature",
+    "throughput",
+    "quality",
+    "state",
+    "buffer",
+    "event",
+)
 
 # Independent oracle: representative-machine subset per SIM_SPEC sect 5,
 # including the running example F-21 (drift, B5, t0=150, dur=12, 5.2).
 _ORACLE_REP = (
-    {"id": "F-06", "class": "sp" + "ike", "origin": "A0",
-     "t0": 150, "dur": 10, "mag_sigma": 5.0},
-    {"id": "F-21", "class": "drift", "origin": "B5",
-     "t0": 150, "dur": 12, "mag_sigma": 5.2},
-    {"id": "F-22", "class": "bias", "origin": "B6",
-     "t0": 160, "dur": 12, "mag_sigma": 5.0},
-    {"id": "F-23", "class": "delay", "origin": "B4",
-     "t0": 170, "dur": 12, "extra": {"d": 4}},
-    {"id": "F-24", "class": "loss", "origin": "B7",
-     "t0": 180, "dur": 12, "extra": {"drop_rate": 0.2}},
-    {"id": "F-25", "class": "breakdown", "origin": "B2",
-     "t0": 190, "dur": 12, "extra": {"mttr_mult": 2}},
-    {"id": "F-26", "class": "quality", "origin": "B9",
-     "t0": 200, "dur": 12, "extra": {"reject_rate": 0.25}},
+    {
+        "id": "F-06",
+        "class": "sp" + "ike",
+        "origin": "A0",
+        "t0": 150,
+        "dur": 10,
+        "mag_sigma": 5.0,
+    },
+    {
+        "id": "F-21",
+        "class": "drift",
+        "origin": "B5",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 5.2,
+    },
+    {
+        "id": "F-22",
+        "class": "bias",
+        "origin": "B6",
+        "t0": 160,
+        "dur": 12,
+        "mag_sigma": 5.0,
+    },
+    {
+        "id": "F-23",
+        "class": "delay",
+        "origin": "B4",
+        "t0": 170,
+        "dur": 12,
+        "extra": {"d": 4},
+    },
+    {
+        "id": "F-24",
+        "class": "loss",
+        "origin": "B7",
+        "t0": 180,
+        "dur": 12,
+        "extra": {"drop_rate": 0.2},
+    },
+    {
+        "id": "F-25",
+        "class": "breakdown",
+        "origin": "B2",
+        "t0": 190,
+        "dur": 12,
+        "extra": {"mttr_mult": 2},
+    },
+    {
+        "id": "F-26",
+        "class": "quality",
+        "origin": "B9",
+        "t0": 200,
+        "dur": 12,
+        "extra": {"reject_rate": 0.25},
+    },
 )
 
 _LINES = (
@@ -151,7 +201,7 @@ def _validate(seed, fault):
         return []
     flist = [fault] if isinstance(fault, dict) else list(fault)
     if not all(isinstance(f, dict) for f in flist):
-        raise ValueError(f"fault must be a dict, a list of dicts, or None")
+        raise ValueError("fault must be a dict, a list of dicts, or None")
     allowed = set(_FAULT_CLASSES) | set(STUCK_IS_BREAKDOWN)
     normed = []
     for i, f in enumerate(flist):
@@ -162,25 +212,35 @@ def _validate(seed, fault):
         if cls not in allowed:
             raise ValueError(f"unknown fault class {cls!r}")
         t0, dur = f.get("t0"), f.get("dur")
-        if (isinstance(t0, bool) or not isinstance(t0, int)
-                or isinstance(dur, bool) or not isinstance(dur, int)
-                or t0 < 0 or dur < 1 or t0 + dur > T):
-            raise ValueError(f"fault window out of range: t0={t0!r} "
-                             f"dur={dur!r} (need 0<=t0, dur>=1, t0+dur<=T)")
+        if (
+            isinstance(t0, bool)
+            or not isinstance(t0, int)
+            or isinstance(dur, bool)
+            or not isinstance(dur, int)
+            or t0 < 0
+            or dur < 1
+            or t0 + dur > T
+        ):
+            raise ValueError(
+                f"fault window out of range: t0={t0!r} "
+                f"dur={dur!r} (need 0<=t0, dur>=1, t0+dur<=T)"
+            )
         extra = f.get("extra", {})
         if extra is None:
             extra = {}
         if not isinstance(extra, dict):
-            raise ValueError(f"fault extra must be a dict, got {extra!r}")
-        normed.append({
-            "id": f.get("id", f"F-EP{i}"),
-            "class": STUCK_IS_BREAKDOWN.get(cls, cls),
-            "origin": origin,
-            "t0": t0,
-            "dur": dur,
-            "mag_sigma": f.get("mag_sigma", 0.0),
-            "extra": dict(extra),
-        })
+            raise TypeError(f"fault extra must be a dict, got {extra!r}")
+        normed.append(
+            {
+                "id": f.get("id", f"F-EP{i}"),
+                "class": STUCK_IS_BREAKDOWN.get(cls, cls),
+                "origin": origin,
+                "t0": t0,
+                "dur": dur,
+                "mag_sigma": f.get("mag_sigma", 0.0),
+                "extra": dict(extra),
+            }
+        )
     # Multi-fault gap rule (SIM_SPEC §4.3): ≥5-step gap between windows on
     # the same machine. Single-fault episodes are exempt (one window has
     # no pair to check — the loop below is naturally empty for them).
@@ -191,12 +251,13 @@ def _validate(seed, fault):
         if len(windows) < 2:
             continue  # exempt: single fault on this machine
         ordered = sorted(windows, key=lambda f: f["t0"])
-        for a, b in zip(ordered, ordered[1:]):
+        for a, b in itertools.pairwise(ordered):
             if b["t0"] - (a["t0"] + a["dur"]) < 5:
                 raise ValueError(
                     f"same-machine fault windows overlap or gap<5: "
                     f"{a['id']} [{a['t0']},{a['t0'] + a['dur']}) vs "
-                    f"{b['id']} [{b['t0']},{b['t0'] + b['dur']})")
+                    f"{b['id']} [{b['t0']},{b['t0'] + b['dur']})"
+                )
     return normed
 
 
@@ -231,8 +292,7 @@ def _materialize(place, fault_list):
         spec = dict(f)
         spec["t1"] = f["t0"] + f["dur"]
         mag = f.get("mag_sigma", None)
-        spec["mag"] = float(mag) if mag is not None else float(
-            place.uniform(mlo, mhi))
+        spec["mag"] = float(mag) if mag is not None else float(place.uniform(mlo, mhi))
         extra = dict(f.get("extra") or {})
         cls = spec["class"]
         if cls == "delay" and "d" not in extra:
@@ -261,7 +321,7 @@ def _inj_down(fx, t):
 
 def _gw_at(shared, t):
     """True while step t sits inside ANY fault GT window (all faults)."""
-    for (a, b) in shared["gwin"]:
+    for a, b in shared["gwin"]:
         if a <= t < b:
             return True
     return False
@@ -270,7 +330,7 @@ def _gw_at(shared, t):
 def _quality_rate(shared, t):
     """Max active quality reject rate at step t (0.0 when none active)."""
     rate = 0.0
-    for (a, b, r) in shared["qwin"]:
+    for a, b, r in shared["qwin"]:
         if a <= t < b and r > rate:
             rate = r
     return rate
@@ -285,7 +345,7 @@ def _fault_dev(fx, t, sigma):
                 dev += s["mag"] * sigma
             elif s["class"] == "drift":
                 frac = (t - s["t0"] + 1) / s["dur"]
-                dev += s["mag"] * sigma * (frac if frac < 1.0 else 1.0)
+                dev += s["mag"] * sigma * min(1.0, frac)
             elif s["class"] == "bias":
                 dev += s["mag"] * sigma
     return dev
@@ -295,8 +355,8 @@ def _degrade_at(fx, t):
     """True while a part-marking fault window covers this machine at t."""
     for s in fx:
         if s["t0"] <= t < s["t1"] and (
-                s["class"] in ("drift", "bias", "delay", "loss")
-                or s["class"] == _PULSE):
+            s["class"] in ("drift", "bias", "delay", "loss") or s["class"] == _PULSE
+        ):
             return True
     return False
 
@@ -337,7 +397,8 @@ def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
 def _emit(shared, event, t, machine, detail):
     """Append one channel-7 event dict (SIM_SPEC §8: t/machine/event/detail)."""
     shared["events"].append(
-        {"event": event, "t": t, "machine": machine, "detail": detail})
+        {"event": event, "t": t, "machine": machine, "detail": detail}
+    )
 
 
 def _transition(shared, idx, name, prev, new, t, detail=None, fault_id=None):
@@ -361,17 +422,30 @@ def _transition(shared, idx, name, prev, new, t, detail=None, fault_id=None):
         _emit(shared, "STARVE_OFF", t, name, detail)
     if new == "DOWN" or prev == "DOWN":
         if fault_id is not None:
-            edge = {"event": "UP" if new != "DOWN" else "DOWN", "t": t,
-                    "machine": name, "natural": False,
-                    "gt_excluded": False, "fault_id": fault_id,
-                    "detail": {"fault_id": fault_id, "natural": False,
-                               "gt_excluded": False, **detail}}
+            edge = {
+                "event": "UP" if new != "DOWN" else "DOWN",
+                "t": t,
+                "machine": name,
+                "natural": False,
+                "gt_excluded": False,
+                "fault_id": fault_id,
+                "detail": {
+                    "fault_id": fault_id,
+                    "natural": False,
+                    "gt_excluded": False,
+                    **detail,
+                },
+            }
         else:
-            edge = {"event": "UP" if new != "DOWN" else "DOWN", "t": t,
-                    "machine": name, "natural": True,
-                    "gt_excluded": True, "fault_id": None,
-                    "detail": {"natural": True, "gt_excluded": True,
-                               **detail}}
+            edge = {
+                "event": "UP" if new != "DOWN" else "DOWN",
+                "t": t,
+                "machine": name,
+                "natural": True,
+                "gt_excluded": True,
+                "fault_id": None,
+                "detail": {"natural": True, "gt_excluded": True, **detail},
+            }
         shared["events"].append(edge)
 
 
@@ -379,9 +453,13 @@ def _shed_to_sbuf(env, shared, sbuf, name, cfg, t, part):
     """Maintenance shed: divert held WIP to SBUF (T6 §2.2 overflow policy)."""
     part["diverted"] = True
     yield sbuf.put(part)
-    _emit(shared, "DIVERT_SBUF", t, name,
-          {"class": cfg["class"], "part": part["id"],
-           "reason": "breakdown-shed"})
+    _emit(
+        shared,
+        "DIVERT_SBUF",
+        t,
+        name,
+        {"class": cfg["class"], "part": part["id"], "reason": "breakdown-shed"},
+    )
     shared["sbuf"]["diverted"] += 1
 
 
@@ -426,25 +504,34 @@ def _line_process(env, spec, shared):
         fid = inj["id"] if inj is not None else dfault
         if inj is not None:
             st, tput = "DOWN", 0
-            if dfault is None and held and part is not None \
-                    and cfg["class"] in SBUF_DIVERT_CLASSES \
-                    and name not in _TAILS \
-                    and len(sbuf.items) < sbuf.capacity:
-                yield from _shed_to_sbuf(env, shared, sbuf, name, cfg,
-                                         t, part)
+            if (
+                dfault is None
+                and held
+                and part is not None
+                and cfg["class"] in SBUF_DIVERT_CLASSES
+                and name not in _TAILS
+                and len(sbuf.items) < sbuf.capacity
+            ):
+                yield from _shed_to_sbuf(env, shared, sbuf, name, cfg, t, part)
                 held, rem, part = False, 0, None
             dfault = inj["id"]
         elif down_left > 0:
             st, tput = "DOWN", 0
             down_left -= 1
-        elif (shared["enable_bd"] and not _gw_at(shared, t)
-                and shared["fail"].random() < 1.0 / mttf):
+        elif (
+            shared["enable_bd"]
+            and not _gw_at(shared, t)
+            and shared["fail"].random() < 1.0 / mttf
+        ):
             down_left = int(shared["fail"].geometric(1.0 / mttr)) - 1
             st, tput = "DOWN", 0
-            if (held and part is not None
-                    and cfg["class"] in SBUF_DIVERT_CLASSES
-                    and name not in _TAILS
-                    and len(sbuf.items) < sbuf.capacity):
+            if (
+                held
+                and part is not None
+                and cfg["class"] in SBUF_DIVERT_CLASSES
+                and name not in _TAILS
+                and len(sbuf.items) < sbuf.capacity
+            ):
                 # Maintenance shed (SIM_SPEC §2.2 overflow policy): a
                 # process/finish station going down for repair sheds its
                 # held WIP to SBUF so the station is clear for maintenance
@@ -452,15 +539,13 @@ def _line_process(env, spec, shared):
                 # Feed/form hold through repair (never divert); tails ride
                 # the AGV path (never SBUF-direct); a full SBUF means the
                 # station holds the part (no loss, BLOCKED-through-repair).
-                yield from _shed_to_sbuf(env, shared, sbuf, name, cfg,
-                                         t, part)
+                yield from _shed_to_sbuf(env, shared, sbuf, name, cfg, t, part)
                 held, rem, part = False, 0, None
         elif not held:
             if up is None:
                 pid = shared["pid"][0]
                 shared["pid"][0] += 1
-                part = {"id": pid, "line": name[0], "diverted": False,
-                        "flag": "OK"}
+                part = {"id": pid, "line": name[0], "diverted": False, "flag": "OK"}
                 shared["flow"]["line_created"] += 1
                 held, rem, st, tput = True, cycle + _delay_d(fx, t), "RUN", 0
             elif len(up.items) > 0:
@@ -477,12 +562,20 @@ def _line_process(env, spec, shared):
             yield down.put(part)
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
-        elif (cfg["class"] in SBUF_DIVERT_CLASSES and name not in _TAILS
-                and len(sbuf.items) < sbuf.capacity):
+        elif (
+            cfg["class"] in SBUF_DIVERT_CLASSES
+            and name not in _TAILS
+            and len(sbuf.items) < sbuf.capacity
+        ):
             part["diverted"] = True
             yield sbuf.put(part)
-            _emit(shared, "DIVERT_SBUF", t, name,
-                  {"class": cfg["class"], "part": part["id"]})
+            _emit(
+                shared,
+                "DIVERT_SBUF",
+                t,
+                name,
+                {"class": cfg["class"], "part": part["id"]},
+            )
             shared["sbuf"]["diverted"] += 1
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
@@ -497,8 +590,7 @@ def _line_process(env, spec, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
@@ -522,16 +614,24 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     kit[part["line"]].append(part)
     shared["flow"]["xfer_open"] -= 1
     shared["agv_waits"].append(
-        {"t": t_del, "part": part["id"], "hold": hold, "wait": wait})
+        {"t": t_del, "part": part["id"], "hold": hold, "wait": wait}
+    )
     shared["parts"].append(
-        {"id": part["id"], "t": t_del, "machine": src, "via": "AGV",
-         "disposition": "diverted" if part["diverted"] else "delivered",
-         "passes": part.get("passes", 0),
-         "flag": part.get("flag", "OK")})
+        {
+            "id": part["id"],
+            "t": t_del,
+            "machine": src,
+            "via": "AGV",
+            "disposition": "diverted" if part["diverted"] else "delivered",
+            "passes": part.get("passes", 0),
+            "flag": part.get("flag", "OK"),
+        }
+    )
     if src == "SBUF":
         shared["sbuf"]["drained"] += 1
-    _emit(shared, "AGV_WAIT", t_del, src,
-          {"part": part["id"], "wait": wait, "hold": hold})
+    _emit(
+        shared, "AGV_WAIT", t_del, src, {"part": part["id"], "wait": wait, "hold": hold}
+    )
 
 
 def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
@@ -550,8 +650,7 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
 
     def _spawn(part, src):
         shared["flow"]["xfer_open"] += 1
-        env.process(_agv_xfer(env, agv, rng_agv, part, src,
-                              kit, shared, int(env.now)))
+        env.process(_agv_xfer(env, agv, rng_agv, part, src, kit, shared, int(env.now)))
 
     while True:
         if int(env.now) >= T:
@@ -602,8 +701,11 @@ def _asm0_process(env, asm01, kit, shared):
         elif down_left > 0:
             st, tput = "DOWN", 0
             down_left -= 1
-        elif (shared["enable_bd"] and not _gw_at(shared, t)
-                and shared["fail"].random() < 1.0 / mttf):
+        elif (
+            shared["enable_bd"]
+            and not _gw_at(shared, t)
+            and shared["fail"].random() < 1.0 / mttf
+        ):
             down_left = int(shared["fail"].geometric(1.0 / mttr)) - 1
             st, tput = "DOWN", 0
         elif not held:
@@ -621,11 +723,18 @@ def _asm0_process(env, asm01, kit, shared):
         elif len(asm01.items) < asm01.capacity:
             pid = shared["pid"][0]
             shared["pid"][0] += 1
-            kit_flag = "DEGRADE" if any(
-                p.get("flag") == "DEGRADE" for p in batch) else "OK"
-            yield asm01.put({"id": pid, "line": "ASM",
-                             "kit": [p["id"] for p in batch],
-                             "passes": 0, "flag": kit_flag})
+            kit_flag = (
+                "DEGRADE" if any(p.get("flag") == "DEGRADE" for p in batch) else "OK"
+            )
+            yield asm01.put(
+                {
+                    "id": pid,
+                    "line": "ASM",
+                    "kit": [p["id"] for p in batch],
+                    "passes": 0,
+                    "flag": kit_flag,
+                }
+            )
             shared["flow"]["asm_created"] += 1
             held, rem, batch = False, 0, None
             st, tput = "RUN", 1
@@ -639,8 +748,7 @@ def _asm0_process(env, asm01, kit, shared):
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
-        val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
@@ -685,8 +793,11 @@ def _asm_mid_process(env, name, up, down, shared):
         elif down_left > 0:
             st, tput = "DOWN", 0
             down_left -= 1
-        elif (shared["enable_bd"] and not _gw_at(shared, t)
-                and shared["fail"].random() < 1.0 / mttf):
+        elif (
+            shared["enable_bd"]
+            and not _gw_at(shared, t)
+            and shared["fail"].random() < 1.0 / mttf
+        ):
             down_left = int(shared["fail"].geometric(1.0 / mttr)) - 1
             st, tput = "DOWN", 0
         elif not held:
@@ -709,21 +820,36 @@ def _asm_mid_process(env, name, up, down, shared):
                 if part.get("passes", 0) >= REWORK_MAX_PASSES:
                     shared["flow"]["sunk"] += 1
                     shared["flow"]["scrapped"] += 1
-                    _emit(shared, "REJECT_ROUTE", t, name,
-                          {"part": part["id"], "to": "scrap",
-                           "passes": part["passes"]})
-                    shared["parts"].append({
-                        "id": part["id"], "t": t, "machine": name,
-                        "via": "RWK0", "disposition": "scrap",
-                        "passes": part["passes"], "flag": "REJECT"})
+                    _emit(
+                        shared,
+                        "REJECT_ROUTE",
+                        t,
+                        name,
+                        {"part": part["id"], "to": "scrap", "passes": part["passes"]},
+                    )
+                    shared["parts"].append(
+                        {
+                            "id": part["id"],
+                            "t": t,
+                            "machine": name,
+                            "via": "RWK0",
+                            "disposition": "scrap",
+                            "passes": part["passes"],
+                            "flag": "REJECT",
+                        }
+                    )
                     held, rem, part = False, 0, None
                     st, tput = "RUN", 1
                 elif len(rwk.items) < rwk.capacity:
                     part["passes"] = part.get("passes", 0) + 1
                     yield rwk.put(part)
-                    _emit(shared, "REJECT_ROUTE", t, name,
-                          {"part": part["id"], "to": "RWK0",
-                           "passes": part["passes"]})
+                    _emit(
+                        shared,
+                        "REJECT_ROUTE",
+                        t,
+                        name,
+                        {"part": part["id"], "to": "RWK0", "passes": part["passes"]},
+                    )
                     shared["flow"]["rejected"] += 1
                     held, rem, part = False, 0, None
                     st, tput = "RUN", 1
@@ -746,8 +872,7 @@ def _asm_mid_process(env, name, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
@@ -770,7 +895,7 @@ def _rwk0_process(env, shared):
     """
     name, idx = "RWK0", MACHINE_INDEX["RWK0"]
     cfg = MACHINES[name]
-    cycle, mttf, mttr = cfg["cycle"], cfg["mttf"], cfg["mttr"]
+    cycle, _mttf, _mttr = cfg["cycle"], cfg["mttf"], cfg["mttr"]
     sigma = cfg["sigma"]
     rng = shared["noise"][idx]
     obs_row = shared["obs"][idx]
@@ -805,19 +930,28 @@ def _rwk0_process(env, shared):
                     # Livelock guard: third pass refused -> scrap sink.
                     shared["flow"]["sunk"] += 1
                     shared["flow"]["scrapped"] += 1
-                    _emit(shared, "REJECT_ROUTE", t, name,
-                          {"part": part["id"], "to": "scrap",
-                           "passes": part["passes"]})
-                    shared["parts"].append({
-                        "id": part["id"], "t": t, "machine": name,
-                        "via": "RWK0", "disposition": "scrap",
-                        "passes": part["passes"],
-                        "flag": part.get("flag", "OK")})
+                    _emit(
+                        shared,
+                        "REJECT_ROUTE",
+                        t,
+                        name,
+                        {"part": part["id"], "to": "scrap", "passes": part["passes"]},
+                    )
+                    shared["parts"].append(
+                        {
+                            "id": part["id"],
+                            "t": t,
+                            "machine": name,
+                            "via": "RWK0",
+                            "disposition": "scrap",
+                            "passes": part["passes"],
+                            "flag": part.get("flag", "OK"),
+                        }
+                    )
                     part = None
                     st, tput = "RUN", 1
                 else:
-                    held, rem, st, tput = True, cycle + _delay_d(fx, t), \
-                        "RUN", 0
+                    held, rem, st, tput = True, cycle + _delay_d(fx, t), "RUN", 0
             else:
                 st, tput = "STARVED", 0
         elif rem > 1:
@@ -837,9 +971,16 @@ def _rwk0_process(env, shared):
             kit["C"].append(part)
             shared["flow"]["reworked"] += 1
             shared["parts"].append(
-                {"id": part["id"], "t": t, "machine": name, "via": "RWK0",
-                 "disposition": "reworked", "passes": part["passes"],
-                 "flag": part.get("flag", "OK")})
+                {
+                    "id": part["id"],
+                    "t": t,
+                    "machine": name,
+                    "via": "RWK0",
+                    "disposition": "reworked",
+                    "passes": part["passes"],
+                    "flag": part.get("flag", "OK"),
+                }
+            )
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
         if inj is None:
@@ -849,8 +990,7 @@ def _rwk0_process(env, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
@@ -867,8 +1007,13 @@ def _fault_clock(env, shared):
     marks.sort(key=lambda m: (m[0], m[1]))
     for t, _, kind, spec in marks:
         yield env.timeout(t - env.now)
-        _emit(shared, kind, t, spec["origin"],
-              {"fault_id": spec["id"], "class": spec["class"]})
+        _emit(
+            shared,
+            kind,
+            t,
+            spec["origin"],
+            {"fault_id": spec["id"], "class": spec["class"]},
+        )
 
 
 def _monitor(env, stores, order, rows):
@@ -879,8 +1024,12 @@ def _monitor(env, stores, order, rows):
         yield env.timeout(1)
 
 
-def run_episode(seed: int, fault: dict | list | None = None, *,
-                enable_natural_breakdown: bool = True) -> dict:
+def run_episode(
+    seed: int,
+    fault: dict | list | None = None,
+    *,
+    enable_natural_breakdown: bool = True,
+) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
     fault is None, one fault dict, or a list of fault dicts (multi-fault
@@ -895,45 +1044,69 @@ def run_episode(seed: int, fault: dict | list | None = None, *,
     agv = simpy.Resource(env, capacity=AGV_CAP)
     stores = {n: simpy.Store(env, capacity=c) for n, c in BUFFERS.items()}
     stores["_C7TAIL"] = simpy.Store(
-        env, capacity=MACHINES["C7"]["buffer_cap"])  # AGV drains this
+        env, capacity=MACHINES["C7"]["buffer_cap"]
+    )  # AGV drains this
     assert len(MACHINES) == N_MACHINES and len(BUFFERS) == N_BUFFERS
-    order = sorted(MACHINE_INDEX, key=MACHINE_INDEX.get)
-    fx = {}
+    order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
+    fx: dict[str, list[Any]] = {}
     for spec in specs:
         fx.setdefault(spec["origin"], []).append(spec)
     for lst in fx.values():
         lst.sort(key=lambda s: s["t0"])
     shared = {
-        "noise": noise, "place": place, "drop": drop, "fail": fail,
+        "noise": noise,
+        "place": place,
+        "drop": drop,
+        "fail": fail,
         "enable_bd": enable_natural_breakdown,
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
         "tput": [[0] * T for _ in range(N_MACHINES)],
-        "events": [], "agv_waits": [],
-        "parts": [], "pid": [0],
+        "events": [],
+        "agv_waits": [],
+        "parts": [],
+        "pid": [0],
         "held": [None] * N_MACHINES,
-        "flow": {"line_created": 0, "asm_created": 0, "sunk": 0,
-                 "scrapped": 0, "xfer_open": 0, "rejected": 0,
-                 "reworked": 0},
+        "flow": {
+            "line_created": 0,
+            "asm_created": 0,
+            "sunk": 0,
+            "scrapped": 0,
+            "xfer_open": 0,
+            "rejected": 0,
+            "reworked": 0,
+        },
         "sbuf": {"diverted": 0, "drained": 0},
-        "specs": specs, "fx": fx,
+        "specs": specs,
+        "fx": fx,
         "gwin": [(s["t0"], s["t1"]) for s in specs],
-        "qwin": [(s["t0"], s["t1"], s["reject_rate"]) for s in specs
-                 if s["class"] == "quality"],
+        "qwin": [
+            (s["t0"], s["t1"], s["reject_rate"])
+            for s in specs
+            if s["class"] == "quality"
+        ],
     }
-    kit = {"A": [], "B": [], "C": []}
+    kit: dict[str, list[Any]] = {"A": [], "B": [], "C": []}
     shared["kit"] = kit
     shared["rwk_ret"] = stores["RWK_RET"]
     edges = _line_edges()
     for name in _LINES:
         up_key, down_key = edges[name]
-        env.process(_line_process(env, {
-            "name": name, "idx": MACHINE_INDEX[name],
-            "up": stores[up_key] if up_key else None,
-            "down": stores[down_key], "sbuf": stores["SBUF"]}, shared))
+        env.process(
+            _line_process(
+                env,
+                {
+                    "name": name,
+                    "idx": MACHINE_INDEX[name],
+                    "up": stores[up_key] if up_key else None,
+                    "down": stores[down_key],
+                    "sbuf": stores["SBUF"],
+                },
+                shared,
+            )
+        )
     env.process(_asm0_process(env, stores["ASM01"], kit, shared))
-    env.process(_asm_mid_process(env, "ASM1", stores["ASM01"],
-                                 stores["ASM12"], shared))
+    env.process(_asm_mid_process(env, "ASM1", stores["ASM01"], stores["ASM12"], shared))
     env.process(_asm_mid_process(env, "ASM2", stores["ASM12"], None, shared))
     env.process(_rwk0_process(env, shared))
     env.process(_fault_clock(env, shared))
@@ -958,8 +1131,9 @@ def run_episode(seed: int, fault: dict | list | None = None, *,
         "final": sbuf_final,
         "cap": SBUF_CAP,
     }
-    held_line = sum(1 for i, n in enumerate(order)
-                    if n in _LINES and shared["held"][i] is not None)
+    held_line = sum(
+        1 for i, n in enumerate(order) if n in _LINES and shared["held"][i] is not None
+    )
     flow_stats = {
         "line_created": shared["flow"]["line_created"],
         "asm_created": shared["flow"]["asm_created"],
@@ -970,21 +1144,30 @@ def run_episode(seed: int, fault: dict | list | None = None, *,
         "xfer_open": shared["flow"]["xfer_open"],
         "held_line": held_line,
         "held_asm0_batch": 1 if shared["held"][MACHINE_INDEX["ASM0"]] else 0,
-        "held_asm12": sum(1 for n in ("ASM1", "ASM2")
-                          if shared["held"][MACHINE_INDEX[n]] is not None),
+        "held_asm12": sum(
+            1 for n in ("ASM1", "ASM2") if shared["held"][MACHINE_INDEX[n]] is not None
+        ),
         "held_rwk0": 1 if shared["held"][MACHINE_INDEX["RWK0"]] else 0,
-        "kit_A": len(kit["A"]), "kit_B": len(kit["B"]),
+        "kit_A": len(kit["A"]),
+        "kit_B": len(kit["B"]),
         "kit_C": len(kit["C"]),
         "c7tail": len(stores["_C7TAIL"].items),
         "store_final": store_final,
     }
     return {
-        "seed": seed, "T": T, "cal_win": CAL_WIN, "obs": shared["obs"],
-        "states": shared["states"], "buffers": buf_rows,
-        "throughput": shared["tput"], "events": shared["events"],
-        "sbuf_stats": sbuf_stats, "flow_stats": flow_stats,
+        "seed": seed,
+        "T": T,
+        "cal_win": CAL_WIN,
+        "obs": shared["obs"],
+        "states": shared["states"],
+        "buffers": buf_rows,
+        "throughput": shared["tput"],
+        "events": shared["events"],
+        "sbuf_stats": sbuf_stats,
+        "flow_stats": flow_stats,
         "agv_waits": shared["agv_waits"],
-        "parts": shared["parts"], "faults": fault_list,
+        "parts": shared["parts"],
+        "faults": fault_list,
     }
 
 
@@ -1000,11 +1183,10 @@ def _try_place(taken, durs):
     out, cursor = [], 120
     for dur in durs:
         t = cursor
-        for (a, b) in blocks:
+        for a, b in blocks:
             if t + dur + 5 <= a:
                 break
-            if t < b + 5:
-                t = b + 5
+            t = max(t, b + 5)
         if t + dur > T:
             return None
         out.append(t)
@@ -1051,8 +1233,8 @@ def build_faults(seed: int = 12345) -> list[dict]:
             extra["reject_rate"] = float(rng_place.uniform(rjlo, rjhi))
         return mag
 
-    order = sorted(MACHINE_INDEX, key=MACHINE_INDEX.get)
-    fixed = {(r["origin"], r["class"]): r for r in _ORACLE_REP}
+    order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
+    fixed: dict[Any, Any] = {(r["origin"], r["class"]): r for r in _ORACLE_REP}
     rows = []
     for m in order:
         taken, todo = [], []
@@ -1064,13 +1246,21 @@ def build_faults(seed: int = 12345) -> list[dict]:
                 mag = r.get("mag_sigma", None)
                 if mag is None:
                     mag = _params(cls, extra)
-                rows.append({"id": r["id"], "class": cls, "origin": m,
-                             "t0": r["t0"], "dur": r["dur"],
-                             "mag_sigma": float(mag), "extra": extra,
-                             "rep": True})
+                rows.append(
+                    {
+                        "id": r["id"],
+                        "class": cls,
+                        "origin": m,
+                        "t0": r["t0"],
+                        "dur": r["dur"],
+                        "mag_sigma": float(mag),
+                        "extra": extra,
+                        "rep": True,
+                    }
+                )
                 taken.append((r["t0"], r["t0"] + r["dur"]))
             else:
-                dur = int(rng_place.integers(dlo, dhi + 1))
+                dur = int(rng_place.integers(int(dlo), int(dhi) + 1))
                 extra = {}
                 mag = _params(cls, extra)
                 todo.append([cls, dur, mag, extra, f"F-{m}-{cls}"])
@@ -1082,9 +1272,18 @@ def build_faults(seed: int = 12345) -> list[dict]:
             t0s = _try_place(taken, [8] * len(todo))
             assert t0s is not None
         for (cls, dur, mag, extra, fid), t0 in zip(todo, t0s):
-            rows.append({"id": fid, "class": cls, "origin": m,
-                         "t0": t0, "dur": dur, "mag_sigma": mag,
-                         "extra": extra, "rep": False})
+            rows.append(
+                {
+                    "id": fid,
+                    "class": cls,
+                    "origin": m,
+                    "t0": t0,
+                    "dur": dur,
+                    "mag_sigma": mag,
+                    "extra": extra,
+                    "rep": False,
+                }
+            )
     return rows
 
 
@@ -1098,8 +1297,7 @@ def validate_coverage(manifest, oracle):
     """
     rows = list(manifest)
     for r in rows:
-        for k in ("partition", "machine", "channels", "classes",
-                  "fault_ids"):
+        for k in ("partition", "machine", "channels", "classes", "fault_ids"):
             if k not in r:
                 raise ValueError(f"coverage row missing {k!r}: {r!r}")
     gaps = []
@@ -1116,7 +1314,7 @@ def validate_coverage(manifest, oracle):
         for c in _FAULT_CLASSES:
             if c not in cl:
                 gaps.append(f"{p}: class {c} uncovered")
-    have_ids = set(i for r in rows for i in r["fault_ids"])
+    have_ids = {i for r in rows for i in r["fault_ids"]}
     for f in oracle:
         if f["id"] not in have_ids:
             gaps.append(f"oracle {f['id']} missing")
@@ -1142,8 +1340,14 @@ def replay_digest(record):
 
 
 _CAL_SEEDS = (7, 11, 13)
-_F21_SHAPE = {"id": "F-21", "class": "drift", "origin": "B5",
-              "t0": 150, "dur": 12, "mag_sigma": 5.2}
+_F21_SHAPE = {
+    "id": "F-21",
+    "class": "drift",
+    "origin": "B5",
+    "t0": 150,
+    "dur": 12,
+    "mag_sigma": 5.2,
+}
 
 
 def _calibrate(path):
@@ -1154,12 +1358,22 @@ def _calibrate(path):
             start = time.perf_counter()
             run_episode(seed, dict(fault) if fault else None)
             wall = time.perf_counter() - start
-            episodes.append({"seed": seed, "fault": tag, "wall_s": wall,
-                             "enable_natural_breakdown": True,
-                             "faultdev_applied": False})
+            episodes.append(
+                {
+                    "seed": seed,
+                    "fault": tag,
+                    "wall_s": wall,
+                    "enable_natural_breakdown": True,
+                    "faultdev_applied": False,
+                }
+            )
     mean = sum(e["wall_s"] for e in episodes) / len(episodes)
-    payload = {"mean_per_episode_s": mean, "seeds": list(_CAL_SEEDS),
-               "episodes_timed": len(episodes), "episodes": episodes}
+    payload = {
+        "mean_per_episode_s": mean,
+        "seeds": list(_CAL_SEEDS),
+        "episodes_timed": len(episodes),
+        "episodes": episodes,
+    }
     with open(path, "w") as fh:
         json.dump(payload, fh, indent=2)
     print(f"mean_per_episode_s={mean:.4f} episodes={len(episodes)} -> {path}")
@@ -1184,8 +1398,7 @@ _BATTERY_TRIPWIRE_N = 8  # first-N measured episodes feeding the tripwire
 # Walk topology prior (SIM_SPEC 7.2-7.3; SDD 4.4 walk(depth=3, topk=8);
 # fan-out cap 8 for the assembly join). Recorded as config, not measured.
 _BATTERY_TOPOLOGY = {"depth_max": 3, "topk": 8, "fanout_cap": 8}
-_BATTERY_CALIBRATION = \
-    ".omo/evidence/task-5-minipro-16-m01-twin.calibration.json"
+_BATTERY_CALIBRATION = ".omo/evidence/task-5-minipro-16-m01-twin.calibration.json"
 _BATTERY_EVIDENCE_DIR = ".omo/evidence"
 
 
@@ -1221,13 +1434,15 @@ def manifest_coverage_rows(manifest):
     """
     rows = []
     for r in manifest:
-        rows.append({
-            "partition": _partition_of_machine(r.get("origin")),
-            "machine": r.get("origin"),
-            "channels": list(_CHANNELS),
-            "classes": [r.get("class")],
-            "fault_ids": [r.get("id")],
-        })
+        rows.append(
+            {
+                "partition": _partition_of_machine(r.get("origin")),
+                "machine": r.get("origin"),
+                "channels": list(_CHANNELS),
+                "classes": [r.get("class")],
+                "fault_ids": [r.get("id")],
+            }
+        )
     return rows
 
 
@@ -1260,12 +1475,18 @@ def _battery_worker(task):
     """
     index, seed, fault = task
     start = time.perf_counter()
-    rec = run_episode(seed, {"id": fault.get("id"),
-                             "class": fault.get("class"),
-                             "origin": fault.get("origin"),
-                             "t0": fault.get("t0"), "dur": fault.get("dur"),
-                             "mag_sigma": fault.get("mag_sigma", 0.0),
-                             "extra": dict(fault.get("extra") or {})})
+    rec = run_episode(
+        seed,
+        {
+            "id": fault.get("id"),
+            "class": fault.get("class"),
+            "origin": fault.get("origin"),
+            "t0": fault.get("t0"),
+            "dur": fault.get("dur"),
+            "mag_sigma": fault.get("mag_sigma", 0.0),
+            "extra": dict(fault.get("extra") or {}),
+        },
+    )
     wall = time.perf_counter() - start
     fid, origin = fault.get("id"), fault.get("origin")
     touched = set()
@@ -1279,9 +1500,14 @@ def _battery_worker(task):
     for p in rec["parts"]:
         if p.get("flag", "OK") != "OK" and p.get("machine") != origin:
             touched.add(p.get("machine"))
-    return {"index": index, "seed": seed, "fault_id": fid,
-            "digest": replay_digest(rec), "wall_s": wall,
-            "fanout": len(touched)}
+    return {
+        "index": index,
+        "seed": seed,
+        "fault_id": fid,
+        "digest": replay_digest(rec),
+        "wall_s": wall,
+        "fanout": len(touched),
+    }
 
 
 def _run_tasks_ordered(tasks, jobs):
@@ -1293,8 +1519,7 @@ def _run_tasks_ordered(tasks, jobs):
     """
     if jobs == 1:
         return [_battery_worker(t) for t in tasks]
-    with concurrent.futures.ProcessPoolExecutor(
-            max_workers=jobs) as pool:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as pool:
         return list(pool.map(_battery_worker, tasks))
 
 
@@ -1323,8 +1548,7 @@ def _load_calibration(path):
             payload = json.load(fh)
         return float(payload["mean_per_episode_s"])
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise ValueError(
-            f"cannot read calibration mean from {path!r}: {exc}")
+        raise ValueError(f"cannot read calibration mean from {path!r}: {exc}")
 
 
 def _write_json(path, payload):
@@ -1335,31 +1559,57 @@ def _write_json(path, payload):
 def _battery_parser():
     parser = argparse.ArgumentParser(
         description="T8 full cross-product battery runner with wall "
-                    "tripwire (seed rule: episode seed = master * 1000 "
-                    "+ row index; identical digests for any --jobs).")
-    parser.add_argument("--manifest", default="full",
-                        help="full | quick (first 16 rows) | FILE (json "
-                             "fault-row list)")
-    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1,
-                        help="worker processes (>=1)")
-    parser.add_argument("--seed", type=int, default=_BATTERY_MASTER_SEED,
-                        help="master seed for manifest + episode seeds")
-    parser.add_argument("--subset", type=int, default=None,
-                        help="run first N manifest rows only (digest proof)")
-    parser.add_argument("--wall-report", action="store_true",
-                        help="emit wall_report.json + coverage_matrix.json "
-                             "+ fanout.json")
-    parser.add_argument("--calibration", default=_BATTERY_CALIBRATION,
-                        help="T5 calibration JSON path (budget input)")
-    parser.add_argument("--evidence-dir", default=_BATTERY_EVIDENCE_DIR,
-                        help="artifact directory for --wall-report")
-    parser.add_argument("--budget-override", type=float, default=None,
-                        help="TEST-ONLY failing-first demo flag: replaces "
-                             "the 600s budget in the tripwire/budget check "
-                             "to prove the exit-2 path. Never a default.")
-    parser.add_argument("--calibrate", default=None,
-                        help="legacy T5 entry: time clean+F-21 episodes to "
-                             "PATH and exit")
+        "tripwire (seed rule: episode seed = master * 1000 "
+        "+ row index; identical digests for any --jobs)."
+    )
+    parser.add_argument(
+        "--manifest",
+        default="full",
+        help="full | quick (first 16 rows) | FILE (json fault-row list)",
+    )
+    parser.add_argument(
+        "--jobs", type=int, default=os.cpu_count() or 1, help="worker processes (>=1)"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=_BATTERY_MASTER_SEED,
+        help="master seed for manifest + episode seeds",
+    )
+    parser.add_argument(
+        "--subset",
+        type=int,
+        default=None,
+        help="run first N manifest rows only (digest proof)",
+    )
+    parser.add_argument(
+        "--wall-report",
+        action="store_true",
+        help="emit wall_report.json + coverage_matrix.json + fanout.json",
+    )
+    parser.add_argument(
+        "--calibration",
+        default=_BATTERY_CALIBRATION,
+        help="T5 calibration JSON path (budget input)",
+    )
+    parser.add_argument(
+        "--evidence-dir",
+        default=_BATTERY_EVIDENCE_DIR,
+        help="artifact directory for --wall-report",
+    )
+    parser.add_argument(
+        "--budget-override",
+        type=float,
+        default=None,
+        help="TEST-ONLY failing-first demo flag: replaces "
+        "the 600s budget in the tripwire/budget check "
+        "to prove the exit-2 path. Never a default.",
+    )
+    parser.add_argument(
+        "--calibrate",
+        default=None,
+        help="legacy T5 entry: time clean+F-21 episodes to PATH and exit",
+    )
     return parser
 
 
@@ -1382,35 +1632,32 @@ def main(argv=None):
         manifest, label = _load_manifest(args.manifest, args.seed)
     except ValueError as exc:
         parser.error(str(exc))
-    if args.subset is not None:
-        if args.subset < 1:
-            parser.error("--subset must be >= 1")
+    if args.subset is not None and args.subset < 1:
+        parser.error("--subset must be >= 1")
     n = len(manifest)
     gaps = validate_manifest(manifest)
     if gaps:
-        return _fail(f"manifest {label} coverage gap: {gaps[0]} "
-                     f"({len(gaps)} total)")
+        return _fail(f"manifest {label} coverage gap: {gaps[0]} ({len(gaps)} total)")
     full_cov_rows = manifest_coverage_rows(manifest)
     if args.subset is not None:
-        manifest = manifest[:args.subset]
+        manifest = manifest[: args.subset]
         label = f"{label}[:{args.subset}]"
     n = len(manifest)
     try:
         cal_mean = _load_calibration(args.calibration)
     except ValueError as exc:
         return _fail(str(exc))
-    budget_cap = args.budget_override if args.budget_override is not None \
-        else _BATTERY_BUDGET_S
-    tasks = [(i, battery_episode_seed(args.seed, i), manifest[i])
-             for i in range(n)]
+    budget_cap = (
+        args.budget_override if args.budget_override is not None else _BATTERY_BUDGET_S
+    )
+    tasks = [(i, battery_episode_seed(args.seed, i), manifest[i]) for i in range(n)]
     first = min(_BATTERY_TRIPWIRE_N, n)
     wall_open = time.perf_counter()
     try:
         head = _run_tasks_ordered(tasks[:first], args.jobs)
     except KeyboardInterrupt:
         _write_partial(args, manifest, [], args.seed, cal_mean, budget_cap)
-        return _fail("interrupted during tripwire phase; partial "
-                     "artifacts written")
+        return _fail("interrupted during tripwire phase; partial artifacts written")
     mean8 = sum(r["wall_s"] for r in head) / len(head)
     extrapolated = mean8 * n
     if extrapolated > _BATTERY_TRIPWIRE_S and args.jobs == 1:
@@ -1418,13 +1665,13 @@ def main(argv=None):
             f"tripwire: first-{first} measured mean {mean8:.4f}s/ep "
             f"extrapolates to {extrapolated:.1f}s sequential-equivalent "
             f"(>{_BATTERY_TRIPWIRE_S:.0f}s) with --jobs 1; remedy: "
-            f"parallelize first (raise --jobs), never shrink scope")
+            f"parallelize first (raise --jobs), never shrink scope"
+        )
     branch = "parallel-already" if args.jobs > 1 else "sequential-ok"
     try:
         tail = _run_tasks_ordered(tasks[first:], args.jobs)
     except KeyboardInterrupt:
-        _write_partial(args, manifest, head, args.seed, cal_mean,
-                       budget_cap)
+        _write_partial(args, manifest, head, args.seed, cal_mean, budget_cap)
         return _fail("interrupted mid-battery; partial artifacts written")
     rows = head + tail
     rows.sort(key=lambda r: r["index"])
@@ -1434,15 +1681,12 @@ def main(argv=None):
     seq_equiv = wall_total * args.jobs
     budget = cal_mean * n
     projected = fresh_mean * n
-    total, tripped = check_wall_tripwire([wall_total], budget=budget_cap)
+    _total, tripped = check_wall_tripwire([wall_total], budget=budget_cap)
     verdict = "PASS" if not tripped else "FAIL"
-    anomalies = [r["fault_id"] for r in rows
-                 if r["wall_s"] > _BATTERY_WATCHDOG_S]
-    joined = hashlib.sha256(
-        "\n".join(r["digest"] for r in rows).encode()).hexdigest()
+    anomalies = [r["fault_id"] for r in rows if r["wall_s"] > _BATTERY_WATCHDOG_S]
+    joined = hashlib.sha256("\n".join(r["digest"] for r in rows).encode()).hexdigest()
     cov_rows = full_cov_rows
-    cov_gaps = validate_coverage(cov_rows,
-                                 [{"id": r["id"]} for r in _ORACLE_REP])
+    cov_gaps = validate_coverage(cov_rows, [{"id": r["id"]} for r in _ORACLE_REP])
     cells = {}
     for p in _PARTITIONS:
         prows = [r for r in cov_rows if r["partition"] == p]
@@ -1456,62 +1700,75 @@ def main(argv=None):
     fanout_measured = max([r["fanout"] for r in rows] + [0])
     if args.wall_report:
         import pathlib
+
         evdir = pathlib.Path(args.evidence_dir)
         evdir.mkdir(parents=True, exist_ok=True)
-        _write_json(evdir / "wall_report.json", {
-            "per_episode_s": walls,
-            "calibration_mean_s": cal_mean,
-            "calibration_path": args.calibration,
-            "fresh_mean_s": fresh_mean,
-            "wall_total_s": wall_total,
-            "jobs": args.jobs,
-            "sequential_equivalent_s": seq_equiv,
-            "budget_s": budget,
-            "budget_cap_s": budget_cap,
-            "projected_total_s": projected,
-            "tripwire": {
-                "first_n": first,
-                "first_n_mean_s": mean8,
-                "extrapolated_s": extrapolated,
-                "threshold_s": _BATTERY_TRIPWIRE_S,
-                "branch": branch,
+        _write_json(
+            evdir / "wall_report.json",
+            {
+                "per_episode_s": walls,
+                "calibration_mean_s": cal_mean,
+                "calibration_path": args.calibration,
+                "fresh_mean_s": fresh_mean,
+                "wall_total_s": wall_total,
+                "jobs": args.jobs,
+                "sequential_equivalent_s": seq_equiv,
+                "budget_s": budget,
+                "budget_cap_s": budget_cap,
+                "projected_total_s": projected,
+                "tripwire": {
+                    "first_n": first,
+                    "first_n_mean_s": mean8,
+                    "extrapolated_s": extrapolated,
+                    "threshold_s": _BATTERY_TRIPWIRE_S,
+                    "branch": branch,
+                },
+                "n_episodes": n,
+                "manifest": label,
+                "master_seed": args.seed,
+                "seed_rule": "episode_seed = master_seed*1000+row_index",
+                "joined_digest": joined,
+                "anomalies_over_120s": anomalies,
+                "verdict": verdict,
             },
-            "n_episodes": n,
-            "manifest": label,
-            "master_seed": args.seed,
-            "seed_rule": "episode_seed = master_seed*1000+row_index",
-            "joined_digest": joined,
-            "anomalies_over_120s": anomalies,
-            "verdict": verdict,
-        })
-        _write_json(evdir / "coverage_matrix.json", {
-            "partitions": list(_PARTITIONS),
-            "channels": list(_CHANNELS),
-            "classes": list(_FAULT_CLASSES),
-            "cells": cells,
-            "empty_cells": empty_cells,
-        })
-        _write_json(evdir / "fanout.json", {
-            "fanout_measured": fanout_measured,
-            "metric": "max over battery episodes of distinct non-origin "
-                      "machines with fault-linked events (fault_id tag) "
-                      "plus DEGRADE/REJECT part records",
-            "topology": dict(_BATTERY_TOPOLOGY),
-            "partitions": list(_PARTITIONS),
-            "note": "walk execution belongs to M1",
-        })
-    cap_label = (f"{budget_cap:.0f}" if budget_cap >= 10
-                 else f"{budget_cap:.2f}")
-    print(f"battery {label}: n={n} jobs={args.jobs} "
-          f"wall_total_s={wall_total:.2f} (<{cap_label}) "
-          f"seq_equiv_s={seq_equiv:.1f} budget_s={budget:.2f} "
-          f"projected_s={projected:.2f} fanout={fanout_measured} "
-          f"empty_cells={len(empty_cells)} verdict={verdict} "
-          f"digest={joined[:12]}")
+        )
+        _write_json(
+            evdir / "coverage_matrix.json",
+            {
+                "partitions": list(_PARTITIONS),
+                "channels": list(_CHANNELS),
+                "classes": list(_FAULT_CLASSES),
+                "cells": cells,
+                "empty_cells": empty_cells,
+            },
+        )
+        _write_json(
+            evdir / "fanout.json",
+            {
+                "fanout_measured": fanout_measured,
+                "metric": "max over battery episodes of distinct non-origin "
+                "machines with fault-linked events (fault_id tag) "
+                "plus DEGRADE/REJECT part records",
+                "topology": dict(_BATTERY_TOPOLOGY),
+                "partitions": list(_PARTITIONS),
+                "note": "walk execution belongs to M1",
+            },
+        )
+    cap_label = f"{budget_cap:.0f}" if budget_cap >= 10 else f"{budget_cap:.2f}"
+    print(
+        f"battery {label}: n={n} jobs={args.jobs} "
+        f"wall_total_s={wall_total:.2f} (<{cap_label}) "
+        f"seq_equiv_s={seq_equiv:.1f} budget_s={budget:.2f} "
+        f"projected_s={projected:.2f} fanout={fanout_measured} "
+        f"empty_cells={len(empty_cells)} verdict={verdict} "
+        f"digest={joined[:12]}"
+    )
     if tripped:
-        return _fail(f"over budget: wall_total {wall_total:.1f}s > "
-                     f"{cap_label}s; remedy: parallelize first "
-                     f"(raise --jobs), never shrink scope")
+        return _fail(
+            f"over budget: wall_total {wall_total:.1f}s > "
+            f"{cap_label}s; remedy: parallelize first "
+            f"(raise --jobs), never shrink scope"
+        )
     return 0
 
 
@@ -1520,20 +1777,24 @@ def _write_partial(args, manifest, rows, master, cal_mean, budget_cap):
     if not args.wall_report:
         return
     import pathlib
+
     evdir = pathlib.Path(args.evidence_dir)
     evdir.mkdir(parents=True, exist_ok=True)
     walls = [r["wall_s"] for r in rows]
-    _write_json(evdir / "wall_report.json", {
-        "partial": True,
-        "per_episode_s": walls,
-        "calibration_mean_s": cal_mean,
-        "wall_total_s": sum(walls),
-        "jobs": args.jobs,
-        "n_episodes": len(manifest),
-        "n_finished": len(rows),
-        "budget_cap_s": budget_cap,
-        "verdict": "PARTIAL",
-    })
+    _write_json(
+        evdir / "wall_report.json",
+        {
+            "partial": True,
+            "per_episode_s": walls,
+            "calibration_mean_s": cal_mean,
+            "wall_total_s": sum(walls),
+            "jobs": args.jobs,
+            "n_episodes": len(manifest),
+            "n_finished": len(rows),
+            "budget_cap_s": budget_cap,
+            "verdict": "PARTIAL",
+        },
+    )
 
 
 if __name__ == "__main__":
