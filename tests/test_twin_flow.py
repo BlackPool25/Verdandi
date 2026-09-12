@@ -22,6 +22,8 @@ Traceability: docs/TEST_CASES.md TC-006b steps 1-4; docs/SIM_SPEC.md
 RWK0 rework cap), §5 quality/reject 15-40%, §8 channels 3/5/6/7.
 """
 
+from itertools import pairwise
+
 from src import twin
 from src.config import BUFFERS
 
@@ -211,7 +213,7 @@ def test_fault_delay_a5_blocks_upstream():
     a0_blocked = [t for t in range(_T) if states[0][t] == "BLOCKED"]
     assert len(a0_blocked) == 8  # measured pileup breaks through x8
     assert a0_blocked[0] == 254 and a0_blocked[-1] == 296  # measured cascade band
-    assert all(b - a == 6 for a, b in zip(a0_blocked, a0_blocked[1:]))
+    assert all(b - a == 6 for a, b in pairwise(a0_blocked))
     assert all(150 <= t < _T for t in a0_blocked)  # post-fault cascade, in-episode
 
 
