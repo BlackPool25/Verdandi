@@ -199,6 +199,21 @@ def test_coverage_malformed_row_rejected():
         twin.validate_coverage(bad, ORACLE_REP_FAULTS)
 
 
+def test_manifest_coverage_declared_not_measured_decision():
+    """Wave-4 T-C1 decision (Copilot :1446; owner flag): coverage rows
+    DECLARE all 7 channels per row (full-plant replay intent), never the
+    measured per-episode subset — the T3 gate asserts the union over rows,
+    so measured channels would punch holes in that union."""
+    doc = twin.manifest_coverage_rows.__doc__ or ""
+    assert "declared" in doc.lower() and "measured" in doc.lower()
+    manifest = twin.build_faults()
+    rows = twin.manifest_coverage_rows(manifest)
+    assert len(rows) == len(manifest) == 32 * 7
+    for r in rows:
+        assert r["channels"] == list(CHANNELS)  # declared, not measured
+    assert twin.validate_coverage(rows, ORACLE_REP_FAULTS) == []
+
+
 # TC-008: 5 representative faults (one per base class incl. F-06) x 5 seeds.
 _DETERMINISM_FAULTS = [
     {

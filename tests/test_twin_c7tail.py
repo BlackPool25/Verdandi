@@ -31,7 +31,12 @@ def test_c7tail_off_roster_visible_via_flow_stats():
     assert 0 <= store_final["_C7TAIL"] <= MACHINES["C7"]["buffer_cap"]
 
 
-def test_c67_row_within_config_cap():
+def test_c7tail_cap_pinned_15_off_roster():
+    assert MACHINES["C7"]["buffer_cap"] == 15
+    assert MACHINES["C7"]["mttr"] == 8  # repair scalar, not the cap (Copilot :1052 misread)
+    assert "_C7TAIL" not in BUFFERS  # dedicated store, never the C67 gap
+    assert BUFFERS["C67"] == 15  # distinct gap store; sharing it would deadlock C6 vs C7
+    assert len(BUFFERS) == 31
     rec = twin.run_episode(_SEED, _DELAY_A5)
     buf_order = list(BUFFERS)
     c67 = rec["buffers"][buf_order.index("C67")]
