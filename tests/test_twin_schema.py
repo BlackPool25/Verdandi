@@ -36,10 +36,12 @@ def test_record_keys():
     rec = twin.run_episode(777, _PROBE_FAULT)
     # Full documented contract: T6 added the additive Scope channels 6/7
     # keys (throughput/events reads per TC-006b) on top of the T1 nine.
+    # T-B8 adds the Table 3.1 roster snapshot (SIM_SPEC §4.4, Copilot :1161).
     assert set(rec) == {
         "seed",
         "T",
         "cal_win",
+        "machines",
         "obs",
         "states",
         "buffers",
@@ -51,6 +53,24 @@ def test_record_keys():
         "parts",
         "faults",
     }
+
+
+def test_record_machines_table31_per_machine():
+    rec = twin.run_episode(777, _PROBE_FAULT)
+    machines = rec["machines"]
+    assert len(machines) == 32
+    for name, cfg in machines.items():
+        assert set(cfg) == {
+            "class",
+            "base",
+            "sigma",
+            "cycle",
+            "mttf",
+            "mttr",
+            "buffer_cap",
+            "transit",
+        }, name
+        assert cfg == dict(twin.MACHINES[name]), name
 
 
 def test_record_scalars():
