@@ -24,7 +24,7 @@ K5 ROCm>1wk→CPU-baseline. Twin NEVER issues safety-restart clearance.
 - `docs/TEST_PLAN.md` — IEEE 829 plan (TST-001–010). `docs/TEST_CASES.md` — concrete cases TC-001–011.
 - `docs/CHARTER.md` + `docs/REGISTERS.md` — PMBOK charter, stakeholders, risks.
 - `docs/CARRY_THROUGH.md` — ADR-0001–0012 verbatim + RFC + PR/FAQ. `docs/SPRINT_PACK.md` + `docs/BACKLOG_DETAIL.md` — stories + task backlog.
-- `docs/MCP_EXPORT.md` — dry-run export envelopes. `docs/CI.md` — pipeline gates. `docs/LINEAR_PLAYBOOK.md` — collaboration habits.
+- `docs/MCP_EXPORT.md` — dry-run export envelopes. `docs/CI.md` — pipeline gates. `docs/FRONTEND.md` — /sim twin viewer (topology, panels, controls, feed, charts, gates). `docs/LINEAR_PLAYBOOK.md` — collaboration habits.
 - `docs/PR_FAQ.md`, `docs/RFC.md`, `docs/ARCHITECTURE.md`, `docs/SPEC.md`, `docs/TECHNICAL.md`, `docs/PROBLEM.md`, `docs/RESEARCH.md`, `docs/SPIKES.md`, `docs/CONTRADICTIONS.md`, `docs/DIAGRAMS.md`, `docs/SCORECARD.md`, `docs/BUILD_BACKLOG.md` — Crucible dossier (frozen evidence).
 - `.opencode/blackboard/anomaly-twin-trace/` — Crucible memory (ADR ledger, evidence, contradictions map).
 - `spike/` — QUARANTINE (never merge, never import from `src/`; CI enforces): 5 harnesses + reports + JSONL traces.
