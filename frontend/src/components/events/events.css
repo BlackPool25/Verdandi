@@ -1,0 +1,100 @@
+/* T9 event feed + anomaly overlay styles. Status hues only; surfaces stay
+   near-black so the overlay reads on the pixel topology. Every anomaly
+   signal pairs color with shape/text (the ! glyph): color never alone. */
+
+/* GT-window origin outline: hard pixel blink via steps(). */
+@keyframes gt-blink {
+  0%,
+  49% {
+    outline-color: #f7e26b;
+  }
+  50%,
+  100% {
+    outline-color: transparent;
+  }
+}
+
+.gt-outline {
+  outline: 3px solid #f7e26b;
+  outline-offset: 2px;
+  animation: gt-blink 1s steps(2, start) infinite;
+}
+
+/* Depth-1 BLOCKED/STARVED neighbor: steady amber outline, no blink. */
+.neighbor-highlight {
+  outline: 2px dashed #f7e26b;
+  outline-offset: 2px;
+}
+
+/* DOWN disambiguation: injected = solid fault outline, natural = dashed. */
+.down-injected {
+  outline: 3px solid #ef3e4a;
+  outline-offset: 2px;
+}
+
+.down-natural {
+  outline: 2px dashed #2ce8f5;
+  outline-offset: 2px;
+}
+
+/* The ! glyph badge: text signal backing every color signal. */
+.anomaly-glyph {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: bold;
+  color: #0b0b0b;
+  background: #f7e26b;
+  margin-left: 4px;
+  padding: 0 2px;
+}
+
+.anomaly-glyph.glyph-down-injected {
+  background: #ef3e4a;
+  color: #fff;
+}
+
+.anomaly-glyph.glyph-down-natural {
+  background: #2ce8f5;
+}
+
+/* Feed rows mirror the node styles so list + topology agree. */
+.evt-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body, monospace);
+  font-size: 16px;
+}
+
+.evt-row {
+  padding: 2px 6px;
+  border-left: 4px solid transparent;
+  color: #eee;
+  background: #111;
+}
+
+.evt-row.row-down-injected {
+  border-left-color: #ef3e4a;
+  border-left-style: solid;
+}
+
+.evt-row.row-down-natural {
+  border-left-color: #2ce8f5;
+  border-left-style: dashed;
+}
+
+.evt-row .row-kind {
+  font-weight: bold;
+  margin-left: 6px;
+}
+
+/* Reduced motion: static GT outline, zero blink. */
+@media (prefers-reduced-motion: reduce) {
+  .gt-outline {
+    animation: none;
+    outline-color: #f7e26b;
+  }
+}

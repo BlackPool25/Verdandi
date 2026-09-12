@@ -1,0 +1,57 @@
+/* T6 font wiring — Fontsource self-host, display:swap, latin subset. */
+@import "@fontsource/press-start-2p/latin-400.css";
+@import "@fontsource/vt323/latin-400.css";
+
+:root {
+  --font-heading: "Press Start 2P", "VT323", monospace;
+  --font-body: "VT323", "Courier New", monospace;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+.font-heading,
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+}
+
+/* Headings at 8px multiples (Press Start 2P renders on an 8px grid). */
+.px-h-display {
+  font-size: 32px;
+  line-height: 32px;
+}
+.px-h1 {
+  font-size: 24px;
+  line-height: 32px;
+}
+.px-h2 {
+  font-size: 16px;
+  line-height: 24px;
+}
+.px-h3 {
+  font-size: 8px;
+  line-height: 16px;
+}
+
+/* Sprites render at integer multiples of the 16px base only. */
+.pixel-sprite {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+}
+.pixel-sprite-2x {
+  width: 32px;
+  height: 32px;
+}
+.pixel-sprite-4x {
+  width: 64px;
+  height: 64px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-blink {
+    animation: none;
+  }
+}
