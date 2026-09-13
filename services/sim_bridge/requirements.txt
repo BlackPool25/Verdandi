@@ -1,0 +1,4 @@
+# Pinned bridge stack (T1 lock; pip-audit clean as of 2026-09-12).
+fastapi==0.141.1
+uvicorn==0.52.4
+sse-starlette==3.4.11

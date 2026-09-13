@@ -17,3 +17,12 @@ audit.json
 .serena/
 # Held locally until token gains workflow scope (upload ci.yml via web UI):
 .github/
+# Frontend build artifacts (never commit; T12 gate):
+node_modules/
+frontend/dist/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.omo/
+.opencode/
+frontend/qa-*

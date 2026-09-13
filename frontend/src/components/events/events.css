@@ -1,0 +1,174 @@
+/* T9 event feed + anomaly overlay styles. Status hues only; surfaces stay
+   cream so the overlay reads on the pixel topology. Every anomaly
+   signal pairs color with shape/text (the ! glyph): color never alone. */
+
+/* GT-window origin outline: hard pixel blink via steps(). Dark gold so it
+   reads on cream (glyph fill keeps the bright #f7e26b). */
+@keyframes gt-blink {
+  0%,
+  49% {
+    outline-color: #8a6d00;
+  }
+  50%,
+  100% {
+    outline-color: transparent;
+  }
+}
+
+.gt-outline {
+  outline: 3px solid #8a6d00;
+  outline-offset: 2px;
+  animation: gt-blink 1s steps(2, start) infinite;
+}
+
+/* Depth-1 BLOCKED/STARVED neighbor: steady dark-gold outline, no blink. */
+.neighbor-highlight {
+  outline: 2px dashed #8a6d00;
+  outline-offset: 2px;
+}
+
+/* DOWN disambiguation: injected = solid fault outline, natural = dashed. */
+.down-injected {
+  outline: 3px solid #ef3e4a;
+  outline-offset: 2px;
+}
+
+.down-natural {
+  outline: 2px dashed #0e7490;
+  outline-offset: 2px;
+}
+
+/* T3 status ring: 2px box-shadow so dagre 120x60 math never shifts
+   (shadow/outline sit outside the box model). Gray base, green RUN,
+   yellow STARVED/BLOCKED, red DOWN. Box-shadow coexists with the
+   T9 outline overlays above (outline + shadow stack, never override). */
+.machine-ring-idle {
+  box-shadow: 0 0 0 2px #6b7280;
+}
+
+.machine-ring-run {
+  box-shadow: 0 0 0 2px #22c55e;
+}
+
+.machine-ring-warn {
+  box-shadow: 0 0 0 2px #eab308;
+}
+
+.machine-ring-down {
+  box-shadow: 0 0 0 2px #ef4444;
+}
+
+/* Tput badge: dark-on-cream text signal backing the 0|1 value. */
+.node-tput {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  font-weight: bold;
+  color: #1a1a1a;
+  background: #f5edd8;
+  border: 1px solid #1a1a1a;
+  margin-left: 4px;
+  padding: 0 2px;
+}
+.anomaly-glyph {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: bold;
+  color: #0b0b0b;
+  background: #f7e26b;
+  margin-left: 4px;
+  padding: 0 2px;
+}
+
+.anomaly-glyph.glyph-down-injected {
+  background: #ef3e4a;
+  color: #fff;
+}
+
+.anomaly-glyph.glyph-down-natural {
+  background: #2ce8f5;
+}
+
+.scada-event-feed-panel .panel-title {
+  font-family: var(--font-display, monospace);
+  font-size: 11px;
+  margin: 0 0 6px 0;
+  color: var(--vd-text-primary, #1c2127);
+  border-bottom: 1px solid var(--vd-border-muted, #b8b3a5);
+  padding-bottom: 4px;
+}
+
+.event-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+}
+
+[data-testid="feed-overflow"] {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--vd-text-accent, #1b4965);
+  background: var(--vd-surface-raised, #faf7f0);
+  padding: 1px 4px;
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+}
+
+/* Feed rows mirror the node styles so list + topology agree. */
+.evt-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  border: 1px solid var(--vd-border-dark, #2b303a);
+  background: var(--vd-surface-sunken, #dad5c7);
+}
+
+.evt-row {
+  padding: 3px 8px;
+  border-left: 4px solid transparent;
+  color: var(--vd-text-primary, #1c2127);
+  background: var(--vd-surface-panel, #f2eee5);
+  border-bottom: 1px solid #d4cebe;
+}
+
+.evt-row:last-child {
+  border-bottom: none;
+}
+
+.evt-row.row-down-injected {
+  border-left-color: #ef3e4a;
+  border-left-style: solid;
+  background: #fdf0f2;
+}
+
+.evt-row.row-down-natural {
+  border-left-color: #0e7490;
+  border-left-style: dashed;
+  background: #f0f7f8;
+}
+
+.evt-row .row-kind {
+  font-weight: bold;
+  margin-left: 6px;
+}
+
+/* Reduced motion: static GT outline, zero blink. */
+@media (prefers-reduced-motion: reduce) {
+  .gt-outline {
+    animation: none;
+    outline-color: #8a6d00;
+  }
+  .machine-ring-idle,
+  .machine-ring-run,
+  .machine-ring-warn,
+  .machine-ring-down {
+    transition: none;
+  }
+}
