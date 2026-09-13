@@ -1,3 +1,4 @@
+import { BUFFER_CAPS } from "../components/panels/machineMeta";
 import type { TopoEdgeDatum } from "./types";
 
 // Pinned 36-edge inventory. Each entry maps to its twin class:
@@ -88,3 +89,19 @@ const REST: readonly PinnedEdge[] = [
 export const PINNED_EDGES: readonly PinnedEdge[] = [...lineGapEdges(), ...REST];
 
 export const EXPECTED_EDGE_COUNT = 36;
+
+const AGV_BUFFER_IDS: readonly string[] = ["GA9", "GB9", "SBUF"];
+
+export function bufferIdForEdge(edge: PinnedEdge): string | null {
+  const label = edge.data.label;
+  if (label in BUFFER_CAPS) return label;
+  for (const id of AGV_BUFFER_IDS) {
+    if (label.includes(id)) return id;
+  }
+  return null;
+}
+
+export function widthForUtil(util: number): number {
+  const u = Number.isFinite(util) ? Math.min(1, Math.max(0, util)) : 0;
+  return 1 + u * 3;
+}

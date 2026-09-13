@@ -2,7 +2,8 @@ import { memo } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { Handle, Position } from "@xyflow/react";
 import "../components/events/events.css";
-import type { MachineNodeDatum } from "./types";
+import spriteUrl from "../sprites/sprites.svg";
+import { spriteFor, type MachineNodeDatum } from "./types";
 
 export type MachineNodeType = Node<MachineNodeDatum, "machine">;
 
@@ -42,6 +43,23 @@ export const MachineNode = memo(function MachineNode({
         !
       </span>
     ) : null;
+  // T2 sprite: resolved from datum (cls/spriteId wired once in nodes.ts
+  // via T1 spriteFor); absent = unresolved, falls back per-tick-safe.
+  // Explicit 32x32 (2x of the 16x16 symbol grid) keeps dagre/fitView math
+  // on the 120x60 card exact. Host svg stays visible (never display:none).
+  const spriteId = data.spriteId ?? spriteFor(data.cls ?? "");
+  // T3 status ring: gray base, green RUN, yellow STARVED/BLOCKED, red DOWN.
+  // Flat string derived from datum only (memo-safe); rendered via
+  // box-shadow classes in events.css so 120x60 dagre math never shifts.
+  const ringClass =
+    data.state === "RUN"
+      ? "machine-ring-run"
+      : data.state === "STARVED" || data.state === "BLOCKED"
+        ? "machine-ring-warn"
+        : data.state === "DOWN"
+          ? "machine-ring-down"
+          : "machine-ring-idle";
+  const tput = data.tput ?? 0;
   return (
     <div
       data-testid={`node-${data.label}`}
@@ -49,22 +67,41 @@ export const MachineNode = memo(function MachineNode({
       data-gt={anomaly?.gt === true ? "true" : "false"}
       data-down={anomaly?.down ?? ""}
       data-neighbor={anomaly?.neighbor === true ? "true" : "false"}
-      className={overlayClass === "" ? undefined : overlayClass}
+      className={["px-machine-node", ringClass, overlayClass].filter((c) => c !== "").join(" ")}
       style={{
         width: 120,
         height: 60,
-        border: "1px solid #888",
-        background: "#111",
-        color: "#eee",
-        fontSize: 12,
       }}
     >
       <Handle type="target" position={Position.Left} />
-      <div>
-        {data.label}
-        {glyph}
+      <div className="px-machine-header">
+        <div className="px-machine-label">
+          {data.label}
+          {glyph}
+        </div>
+        <span className="px-machine-cls">{data.cls ?? data.kind ?? "mach"}</span>
       </div>
-      <div data-testid={`node-state-${data.label}`}>{data.state ?? "—"}</div>
+      <div className="px-machine-body">
+        <svg
+          width={32}
+          height={32}
+          aria-hidden="true"
+          className="px-machine-sprite"
+        >
+          <use href={`${spriteUrl}#${spriteId}`} />
+        </svg>
+        <div className="px-machine-metrics">
+          <div data-testid={`node-state-${data.label}`} className="px-machine-state">
+            {data.state ?? "—"}
+          </div>
+          <div className="px-machine-tput-row">
+            <span>OUT</span>
+            <span data-testid={`node-tput-${data.label}`} className="node-tput">
+              {tput}
+            </span>
+          </div>
+        </div>
+      </div>
       <Handle type="source" position={Position.Right} />
     </div>
   );

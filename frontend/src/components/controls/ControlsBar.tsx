@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EpisodeError, bridgeBase, openTickStream, postEpisode } from "./api";
 import { FaultForm } from "./FaultForm";
 import { intervalMs, stepBy } from "./playback";
@@ -148,84 +148,111 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
     }
   }
 
-  const current: TickRow | null =
-    ext !== null ? parseRow(ext.source.rowJson(cursor)) : (rowsRef.current[cursor] ?? null);
+  // T6 render throttle: tick-json parse+stringify memoized on the raw row
+  // (ext mode) or cursor/rowCount (local mode). Unrelated re-renders (seed
+  // typing, fault form, play/pause) no longer pay a full-tick stringify.
+  const isExt = ext !== null;
+  const rawTick = isExt && ext !== null ? ext.source.rowJson(cursor) : undefined;
+  const current: TickRow | null = useMemo(() => {
+    if (isExt) return parseRow(rawTick);
+    return rowsRef.current[cursor] ?? null;
+    // rowsRef is read under the cursor/rowCountLocal deps by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExt, rawTick, cursor, rowCountLocal]);
+  const tickJson = useMemo(
+    () => (current === null ? "null" : JSON.stringify(current)),
+    [current],
+  );
 
   return (
-    <div>
+    <div className="controls-toolbar">
       <section aria-label="sim controls">
-        <label>
-          seed
-          <input data-testid="seed-input" inputMode="numeric" value={seedText} onChange={(e) => setSeedText(e.target.value)} />
-        </label>
-        <button type="button" data-testid="new-episode" disabled={submitting} onClick={() => void startEpisode()}>
-          {submitting ? "Starting…" : "Start new episode"}
-        </button>
-        <button type="button" data-testid="play-pause" disabled={!canControl} onClick={() => setPlaying((p) => !p)}>
-          {playing ? "Pause" : "Play"}
-        </button>
-        <label>
-          speed (1x={STEPS_PER_SEC_AT_1X} steps/s)
-          <select data-testid="speed-select" value={String(speed)} onChange={(e) => setSpeed(Number(e.target.value))}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={String(s)}>
-                {s}x
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          data-testid="step-back"
-          disabled={!canControl}
-          onClick={() => {
-            setPlaying(false);
-            setCursor((c) => stepBy(c, -1));
-          }}
-        >
-          Step −1
-        </button>
-        <button
-          type="button"
-          data-testid="step-fwd"
-          disabled={!canControl}
-          onClick={() => {
-            setPlaying(false);
-            setCursor((c) => (c + 1 < rowsRef.current.length || ext !== null ? stepBy(c, 1) : c));
-          }}
-        >
-          Step +1
-        </button>
-        <label>
-          <input
-            data-testid="natural-toggle"
-            type="checkbox"
-            checked={natural}
-            onChange={(e) => setNatural(e.target.checked)}
-          />
-          enable_natural_breakdown
-        </label>
-        <p data-testid="cursor">
-          Step {cursor} / {T_TOTAL}
-        </p>
-        <p>
-          episode <span data-testid="episode-id">{episode === null ? (sharedEpisodeId ?? "none") : episode.episode_id}</span>
-        </p>
-        <p>
-          digest <span data-testid="episode-digest">{episode === null ? "none" : episode.replay_digest}</span>
-        </p>
-        <p>
-          rows <span data-testid="row-count">{rowCount}</span>
-        </p>
-        <p data-testid="validation-hints">{VALIDATION_HINTS}</p>
-        <p data-testid="form-error">{formError}</p>
-        {episode !== null && episode.noop_warning && (
-          <p data-testid="noop-warning">noop_warning: quality fault outside ASM2 has no effect (accepted, silent no-op)</p>
-        )}
-        <pre data-testid="episode-faults" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{episode === null ? "[]" : JSON.stringify(episode.faults)}</pre>
-        <pre data-testid="tick-json" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{current === null ? "null" : JSON.stringify(current)}</pre>
+        <div className="controls-toolbar__row">
+          <button type="button" data-testid="play-pause" disabled={!canControl} onClick={() => setPlaying((p) => !p)}>
+            {playing ? "Pause" : "Play"}
+          </button>
+          <p data-testid="cursor">
+            Step {cursor} / {T_TOTAL}
+          </p>
+        </div>
+        <details data-testid="details-episode" open>
+          <summary>Episode setup</summary>
+          <label>
+            seed
+            <input data-testid="seed-input" inputMode="numeric" value={seedText} onChange={(e) => setSeedText(e.target.value)} />
+          </label>
+          <button type="button" data-testid="new-episode" disabled={submitting} onClick={() => void startEpisode()}>
+            {submitting ? "Starting…" : "Start new episode"}
+          </button>
+          <label>
+            <input
+              data-testid="natural-toggle"
+              type="checkbox"
+              checked={natural}
+              onChange={(e) => setNatural(e.target.checked)}
+            />
+            enable_natural_breakdown
+          </label>
+          <p>
+            episode <span data-testid="episode-id">{episode === null ? (sharedEpisodeId ?? "none") : episode.episode_id}</span>
+          </p>
+          <p>
+            digest <span data-testid="episode-digest">{episode === null ? "none" : episode.replay_digest}</span>
+          </p>
+          <p data-testid="validation-hints">{VALIDATION_HINTS}</p>
+          <p data-testid="form-error">{formError}</p>
+          {episode !== null && episode.noop_warning && (
+            <p data-testid="noop-warning">noop_warning: quality fault outside ASM2 has no effect (accepted, silent no-op)</p>
+          )}
+        </details>
+        <details data-testid="details-playback" open>
+          <summary>Playback</summary>
+          <label>
+            speed (1x={STEPS_PER_SEC_AT_1X} steps/s)
+            <select data-testid="speed-select" value={String(speed)} onChange={(e) => setSpeed(Number(e.target.value))}>
+              {SPEEDS.map((s) => (
+                <option key={s} value={String(s)}>
+                  {s}x
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            data-testid="step-back"
+            disabled={!canControl}
+            onClick={() => {
+              setPlaying(false);
+              setCursor((c) => stepBy(c, -1));
+            }}
+          >
+            Step −1
+          </button>
+          <button
+            type="button"
+            data-testid="step-fwd"
+            disabled={!canControl}
+            onClick={() => {
+              setPlaying(false);
+              setCursor((c) => (c + 1 < rowsRef.current.length || ext !== null ? stepBy(c, 1) : c));
+            }}
+          >
+            Step +1
+          </button>
+          <p>
+            rows <span data-testid="row-count">{rowCount}</span>
+          </p>
+        </details>
+        <details data-testid="details-faults" open>
+          <summary>Faults</summary>
+          <FaultForm faults={faults} onAdd={(f) => setFaults((prev) => [...prev, f])} onRemove={(id) => setFaults((prev) => prev.filter((f) => f.id !== id))} />
+          <pre data-testid="episode-faults" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{episode === null ? "[]" : JSON.stringify(episode.faults)}</pre>
+        </details>
+        <details data-testid="details-tick">
+          <summary>Tick JSON</summary>
+          <pre data-testid="tick-json" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{tickJson}</pre>
+        </details>
       </section>
-      <FaultForm faults={faults} onAdd={(f) => setFaults((prev) => [...prev, f])} onRemove={(id) => setFaults((prev) => prev.filter((f) => f.id !== id))} />
     </div>
   );
 }

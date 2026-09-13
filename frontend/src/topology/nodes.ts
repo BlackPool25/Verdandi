@@ -1,4 +1,5 @@
-import type { MachineNodeDatum } from "./types";
+import { MACHINE_META } from "../components/panels/machineMeta";
+import { spriteFor, type MachineNodeDatum, type SpriteClass } from "./types";
 
 // 34 nodes: 32 machines (A0-A9, B0-B9, C0-C7, ASM0/1/2, RWK0) + SBUF + _C7TAIL.
 // Roster mirrors src/config.py machine order; SBUF/_C7TAIL mirror the twin's
@@ -19,9 +20,18 @@ export interface PinnedNode {
 }
 
 export const PINNED_NODES: readonly PinnedNode[] = [
-  ...MACHINES.map((id) => ({ id, data: { label: id, kind: "machine" as const } })),
+  ...MACHINES.map((id) => ({ id, data: datumFor(id) })),
   { id: "SBUF", data: { label: "SBUF", kind: "sbuf" as const } },
   { id: "_C7TAIL", data: { label: "_C7TAIL", kind: "c7tail" as const } },
 ];
+
+// T2: each machine id carries its MACHINE_META cls verbatim + the
+// spriteId resolved once via T1 spriteFor(). SBUF/_C7TAIL are stores,
+// not machines: no cls (MachineNode falls back per-tick-safe).
+function datumFor(id: string): MachineNodeDatum {
+  const cls = MACHINE_META[id]?.cls as SpriteClass | undefined;
+  if (cls === undefined) return { label: id, kind: "machine" as const };
+  return { label: id, kind: "machine" as const, cls, spriteId: spriteFor(cls) };
+}
 
 export const EXPECTED_NODE_COUNT = 34;

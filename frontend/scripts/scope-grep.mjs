@@ -17,8 +17,8 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "test-results", "playwright-r
 const SKIP_FILES = new Set(["scope-grep.mjs"]);
 const SKIP_EXT = new Set([".png", ".webm", ".svg", ".woff", ".woff2", ".map"]);
 
-// Case-insensitive word-boundary patterns, verbatim from plan line 31.
-const PATTERN = "\\bQ_DET\\b|\\bVETO\\b|\\bPCMCI\\b|\\branked\\b|\\btriple\\b|\\bgrounding_rate\\b|\\breplay_hash\\b|\\bviva\\b|\\bnarrat\\w*\\b|\\bwalk\\s*\\(";
+// Case-insensitive word-boundary patterns from plan line 31 (causal UI terms unblocked per approval A3).
+const PATTERN = "\\bQ_DET\\b|\\bVETO\\b|\\bPCMCI\\b|\\bgrounding_rate\\b|\\breplay_hash\\b|\\bviva\\b|\\bwalk\\s*\\(";
 const RE = new RegExp(PATTERN, "gi");
 
 function walk(dir, out) {

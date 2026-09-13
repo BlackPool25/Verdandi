@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { capFeed, filterEvents, labelFor } from "./feed";
 import { classifyEvent, downKindOf, EVENT_FAMILIES, type TwinEvent } from "./types";
 import "./events.css";
@@ -34,8 +34,9 @@ export function EventFeed(props: EventFeedProps): React.JSX.Element {
     props.testId ?? (props.machineId === undefined ? "event-feed" : "machine-event-feed");
 
   return (
-    <section data-testid={testId} aria-label={props.machineId ?? "global event feed"}>
-      <div>
+    <section data-testid={testId} aria-label={props.machineId ?? "global event feed"} className="sim-box px-panel scada-event-feed-panel">
+      <h2 className="px-h2 panel-title">{props.machineId ? `Events: ${props.machineId}` : "Ch.07 Event Telemetry"}</h2>
+      <div className="event-filter-bar">
         <label>
           Family{" "}
           <select
@@ -55,7 +56,11 @@ export function EventFeed(props: EventFeedProps): React.JSX.Element {
           <span data-testid="feed-overflow">…+{rows.overflow} more</span>
         )}
       </div>
-      <ul className="evt-feed">
+      <ul
+        className="evt-feed"
+        data-testid="event-feed-list"
+        style={{ maxHeight: 160, overflowY: "auto", minHeight: 0 }}
+      >
         {rows.visible.length === 0 && (
           <li data-testid="feed-empty">No events at this step yet.</li>
         )}
@@ -67,7 +72,7 @@ export function EventFeed(props: EventFeedProps): React.JSX.Element {
   );
 }
 
-function FeedRow({ ev }: { readonly ev: TwinEvent }): React.JSX.Element {
+const FeedRow = memo(function FeedRow({ ev }: { readonly ev: TwinEvent }): React.JSX.Element {
   const kind = downKindOf(ev);
   const rowClass =
     kind === "injected" ? "evt-row row-down-injected" : kind === "natural" ? "evt-row row-down-natural" : "evt-row";
@@ -88,4 +93,4 @@ function FeedRow({ ev }: { readonly ev: TwinEvent }): React.JSX.Element {
       )}
     </li>
   );
-}
+});

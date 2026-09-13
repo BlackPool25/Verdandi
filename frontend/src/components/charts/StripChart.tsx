@@ -35,12 +35,31 @@ export function StripChart({
     let raf = 0;
     const frame = (): void => {
       raf = requestAnimationFrame(frame);
+      // Paint-only-when-dirty: idle frames do no canvas/store work.
       if (!dirtyRef.current) return;
-      dirtyRef.current = false;
+      // Skip when tab hidden: keep dirty so the next visible frame repaints.
+      if (typeof document !== "undefined" && document.hidden) return;
       const canvas = canvasRef.current;
       if (canvas === null) return;
+      // Skip when hidden/collapsed: keep dirty so it repaints on show.
+      if (!canvas.isConnected) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      dirtyRef.current = false;
       const ctx = canvas.getContext("2d");
       if (ctx === null) return;
+      // DPR-scale backing store; paint in CSS pixels.
+      const dpr =
+        typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)
+          ? window.devicePixelRatio || 1
+          : 1;
+      const backingW = Math.max(1, Math.round(width * dpr));
+      const backingH = Math.max(1, Math.round(height * dpr));
+      if (canvas.width !== backingW || canvas.height !== backingH) {
+        canvas.width = backingW;
+        canvas.height = backingH;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const data = store.series(machineId);
       const pairs = decimateMinMax(data, Math.max(1, Math.floor(width)));
       paintMinMax(ctx, { pairs, min, max, w: width, h: height });
@@ -54,7 +73,12 @@ export function StripChart({
 
   return (
     <figure data-testid={`strip-${machineId}`} aria-label={`${machineId} strip chart`}>
-      <canvas ref={canvasRef} width={width} height={height} />
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        style={{ width, height, display: "block", maxWidth: "100%" }}
+      />
       <figcaption>
         {badges.cursor < 0 ? (
           <span data-testid={`strip-empty-${machineId}`}>no data yet</span>

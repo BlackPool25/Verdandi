@@ -2,18 +2,10 @@
 // for tails/feed/form — tails ride AGV, feed/form never divert.
 import { AGV_STEPS, SBUF_CAP, SBUF_HIGH } from "./machineMeta";
 
-const BOX: React.CSSProperties = {
-  border: "1px solid #888",
-  background: "#111",
-  color: "#eee",
-  padding: 8,
-  fontSize: 16,
-};
-
 export function Legends(): React.JSX.Element {
   return (
-    <section aria-label="sbuf agv legend" data-testid="sbuf-agv-legend" style={BOX}>
-      <h2 className="px-h2">SBUF / AGV</h2>
+    <section aria-label="sbuf agv legend" data-testid="sbuf-agv-legend" className="sim-box px-panel scada-legend-panel">
+      <h2 className="px-h2 panel-title">SBUF / AGV Fleet Legend</h2>
       <p data-testid="legend-sbuf">
         SBUF cap {SBUF_CAP}; high-util badge at ≥{SBUF_HIGH} (80%).
       </p>

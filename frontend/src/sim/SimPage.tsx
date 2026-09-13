@@ -4,18 +4,18 @@ import { postEpisode } from "../components/controls/api";
 import { EventFeed } from "../components/events/EventFeed";
 import { toFaultSpec } from "../components/events/anomaly";
 import type { FaultSpec } from "../components/events/types";
-import { StripChart } from "../components/charts/StripChart";
 import { createTwinStore } from "../store/twinStore";
 import type { Tick } from "../store/tick";
 import {
   BufferBars,
   Legends,
-  MachineGrid,
   MachinePanel,
 } from "../components/panels";
 import { STREAM_MACHINE_ORDER, useTickSource } from "./tickSource";
+import { LineHeader } from "./LineHeader";
 import { BUFFER_IDS } from "../store/tick";
 import { TopologyView } from "../topology/TopologyView";
+import "./simShell.css";
 
 // /sim route: ReactFlow topology + ControlsBar + T8 panels on ONE shared
 // tickSource. Single episode + single EventSource: episode creation (auto
@@ -46,29 +46,15 @@ function initialEpisode(): string | null {
   }
 }
 
-const PANEL_BOX: React.CSSProperties = {
-  border: "1px solid #888",
-  background: "#111",
-  color: "#eee",
-  padding: 8,
-  fontSize: 16,
-};
-
-const SKEL_BAR: React.CSSProperties = {
-  background: "#333",
-  height: 16,
-  marginTop: 8,
-};
-
 // Pixel-style loading skeleton: static block bars on 8px multiples, hard
 // edges, no animation (stays static under prefers-reduced-motion).
 function SimSkeleton(): React.JSX.Element {
   return (
-    <section data-testid="sim-skeleton" aria-label="loading episode" style={PANEL_BOX}>
+    <section data-testid="sim-skeleton" aria-label="loading episode" className="sim-box sim-shell__full">
       <h2 className="px-h2">Loading episode…</h2>
-      <div style={{ ...SKEL_BAR, width: 256 }} />
-      <div style={{ ...SKEL_BAR, width: 192 }} />
-      <div style={{ ...SKEL_BAR, width: 224 }} />
+      <div className="sim-skel-bar" style={{ width: 256 }} />
+      <div className="sim-skel-bar" style={{ width: 192 }} />
+      <div className="sim-skel-bar" style={{ width: 224 }} />
     </section>
   );
 }
@@ -133,11 +119,8 @@ export function SimPage(): React.JSX.Element {
     chartStore.ingest(row);
   }, [source.panelTick, chartStore]);
 
-  const chartId =
-    selectedId !== null && (STREAM_MACHINE_ORDER as readonly string[]).includes(selectedId)
-      ? selectedId
-      : "B5";
-
+  // Faceplate rail owns selection + the selected-machine sparkline via the
+  // shared chartStore (single StripChart mount — no duplicate strip-* ids).
   // Fault specs for the topology overlay, parsed from the buffered row at
   // the shared cursor (materialized tick shape via toFaultSpec).
   const faults: readonly FaultSpec[] = useMemo(() => {
@@ -167,32 +150,67 @@ export function SimPage(): React.JSX.Element {
   const showSkeleton = episodeId === null && !seedError;
 
   return (
-    <main>
-      <h1>Verdandi Twin — /sim</h1>
-      <ControlsBar external={{ source, onEpisode: setEpisodeId }} />
-      {showSeedError && (
-        <section data-testid="sim-seed-error" role="alert" style={PANEL_BOX}>
-          <h2 className="px-h2">No episode</h2>
-          <p data-testid="sim-seed-error-text">
-            Could not start an episode — the bridge is unreachable.
-          </p>
-          <button type="button" data-testid="sim-retry" onClick={seedNow}>
-            Retry
-          </button>
-        </section>
-      )}
-      {showSkeleton && <SimSkeleton />}
-      {!showSkeleton && (
-        <>
-          <TopologyView tick={source.tick} connected={source.connected} faults={faults} onRetry={source.reconnect} />
-          <MachineGrid selectedId={selectedId} onSelect={setSelectedId} />
-          <MachinePanel tick={source.panelTick} selectedId={selectedId} />
-          <BufferBars tick={source.panelTick} />
-          <StripChart store={chartStore} machineId={chartId} />
-          <EventFeed events={source.events} />
-        </>
-      )}
-      <Legends />
-    </main>
+    <div className="sim-shell" data-testid="sim-shell">
+      <header className="sim-shell__header sim-box">
+        <h1 className="px-h2">Verdandi Twin — /sim</h1>
+        {/* L1 strip: tick KPIs + c7tail_final ride panelTick; episode
+            sbuf/flow finals are not plumbed through TickSource (playback is
+            read-only), so the header passes null and those fields show "—". */}
+        <LineHeader
+          tick={source.panelTick}
+          episodeHeader={null}
+          episodeId={source.episodeId}
+          speed={source.speed}
+          playing={source.playing}
+          selectedId={selectedId}
+          store={chartStore}
+        />
+      </header>
+      <div className="sim-shell__body">
+        {showSeedError && (
+          <section data-testid="sim-seed-error" role="alert" className="sim-box sim-shell__full">
+            <h2 className="px-h2">No episode</h2>
+            <p data-testid="sim-seed-error-text">
+              Could not start an episode — the bridge is unreachable.
+            </p>
+            <button type="button" data-testid="sim-retry" onClick={seedNow}>
+              Retry
+            </button>
+          </section>
+        )}
+        {showSkeleton && <SimSkeleton />}
+        {!showSkeleton && (
+          <>
+            <section className="sim-shell__canvas sim-box" data-testid="sim-canvas" aria-label="topology canvas">
+              <TopologyView
+                tick={source.tick}
+                connected={source.connected}
+                faults={faults}
+                onRetry={source.reconnect}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                panelTick={source.panelTick}
+              />
+            </section>
+            <aside className="sim-shell__rail" data-testid="sim-rail" aria-label="detail rail">
+              <MachinePanel
+                tick={source.panelTick}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                store={chartStore}
+                faults={faults}
+                onStepTo={source.stepTo}
+              />
+            </aside>
+          </>
+        )}
+      </div>
+      <footer className="sim-shell__dock sim-box" data-testid="sim-dock" aria-label="control dock">
+        <ControlsBar external={{ source, onEpisode: setEpisodeId }} />
+        <BufferBars tick={source.panelTick} />
+        <EventFeed events={source.events} />
+        <Legends />
+      </footer>
+    </div>
   );
 }

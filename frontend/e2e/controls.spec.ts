@@ -78,8 +78,15 @@ test.afterAll(async () => {
   web?.kill();
 });
 
+async function expandAll(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const d of document.querySelectorAll("details")) d.open = true;
+  });
+}
+
 async function startEpisode(page: Page, seed: string): Promise<string> {
   await page.goto("/controls.html");
+  await expandAll(page);
   await page.getByTestId("seed-input").fill(seed);
   await page.getByTestId("new-episode").click();
   await expect(page.getByTestId("episode-id")).not.toHaveText("none", { timeout: 60_000 });
@@ -135,6 +142,7 @@ test("fault@B5 POSTs a new episode", async ({ page }) => {
 
 test("quality@B9 warns noop, STUCK maps to breakdown", async ({ page }) => {
   await page.goto("/controls.html");
+  await expandAll(page);
   await page.getByTestId("seed-input").fill("777");
   await page.getByTestId("fault-class").selectOption("quality");
   await page.getByTestId("fault-origin").selectOption("B9");
@@ -153,6 +161,7 @@ test("quality@B9 warns noop, STUCK maps to breakdown", async ({ page }) => {
 
 test("full control tour (evidence)", async ({ page }) => {
   await page.goto("/controls.html");
+  await expandAll(page);
   await page.getByTestId("seed-input").fill("777");
   await page.getByTestId("natural-toggle").uncheck();
   await page.getByTestId("natural-toggle").check();
