@@ -41,6 +41,8 @@ def test_record_keys():
         "seed",
         "T",
         "cal_win",
+        "schema_version",
+        "code_version",
         "machines",
         "obs",
         "states",

@@ -327,3 +327,71 @@ def test_quarantine_no_banned_strings():
 @pytest.mark.k4
 def test_clearance_no_restart_strings():
     assert _grep_src(_RESTART_PATTERN) == []
+
+
+# Topology-A schema v2 version binding (MINIPRO-33 Todo 5, TDD red first).
+# V1_NON_COMPARABLE baselines (32-machine roster, never asserted equal —
+# recorded here only to assert INEQUALITY against the v2 domain):
+#   flow digest 962b9c54d022, demo digest d2b4fb23.
+_V1_FLOW_DIGEST_PREFIX = "962b9c54d022"
+_V1_DEMO_DIGEST_PREFIX = "d2b4fb23"
+
+_F21_B2_VERSION_PROBE = {
+    "id": "F-21",
+    "class": "drift",
+    "origin": "B2",
+    "t0": 150,
+    "dur": 12,
+    "mag_sigma": 5.2,
+}
+
+
+def test_record_carries_schema_v2_and_code_version():
+    from src.config import CODE_VERSION, TWIN_SCHEMA
+
+    rec = twin.run_episode(777, copy.deepcopy(_F21_B2_VERSION_PROBE))
+    assert rec["schema_version"] == 2 == TWIN_SCHEMA
+    assert rec["code_version"] == "twin-2.1.0-topology-A" == CODE_VERSION
+
+
+def test_topology_a_5x_determinism_v2_not_v1():
+    digests = [
+        twin.replay_digest(twin.run_episode(777, copy.deepcopy(_F21_B2_VERSION_PROBE)))
+        for _ in range(5)
+    ]
+    assert len(set(digests)) == 1
+    for d in digests:
+        assert not d.startswith(_V1_FLOW_DIGEST_PREFIX)
+        assert not d.startswith(_V1_DEMO_DIGEST_PREFIX)
+
+
+def test_replay_digest_binds_code_version():
+    rec = twin.run_episode(777, copy.deepcopy(_F21_B2_VERSION_PROBE))
+    before = twin.replay_digest(rec)
+    tampered = copy.deepcopy(rec)
+    tampered["code_version"] = "tampered"
+    assert twin.replay_digest(tampered) != before
+
+
+def test_replay_digest_strict_rejects_v1():
+    rec = twin.run_episode(777, copy.deepcopy(_F21_B2_VERSION_PROBE))
+    v1_schema = copy.deepcopy(rec)
+    v1_schema["schema_version"] = 1
+    with pytest.raises(ValueError, match="non-comparable"):
+        twin.replay_digest(v1_schema)
+    v1_unversioned = {
+        k: v for k, v in rec.items() if k not in ("schema_version", "code_version")
+    }
+    with pytest.raises(ValueError, match="non-comparable"):
+        twin.replay_digest(v1_unversioned)
+
+
+def test_retired_noise_children_unread():
+    from src.config import MACHINE_INDEX
+
+    assert max(MACHINE_INDEX.values()) == 25
+    assert set(MACHINE_INDEX) == set(twin.MACHINES)
+    noise, _, _, _, _ = twin._spawn_streams(777)
+    assert len(noise) == 26
+    src = pathlib.Path(twin.__file__).read_text()
+    assert "children 26-31 retired" in src

@@ -28,8 +28,14 @@ rng_place at episode start in fault-list order (place/drop at
 injection-time); loss-thinning flips come from rng_drop per step inside
 loss windows; ASM2 reject flips come from rng_place per completion inside
 quality windows; agv holds are drawn on rng_agv at transfer-request time.
-Stream slots per SIM_SPEC 6.2: 0-31 noise, 32 place, 33 drop, 34 agv,
-35 fail.
+Stream slots per SIM_SPEC 6.2 (topology-A schema v2): 0-25 noise
+(index == MACHINE_INDEX literal order), children 26-31 retired (no
+process reads them — asserted in _spawn_streams), 32 place / 33 drop /
+34 agv / 35 fail unchanged.
+Survivor moves (old->new): A7 7->3, A8 8->4, A9 9->5, B0 10->6,
+B1 11->7, B2 12->8, B8 18->11, B9 19->12, C0 20->13, C1 21->14,
+C2 22->15, C6 26->16, C7 27->17, ASM0 28->21, ASM1 29->22,
+ASM2 30->24, RWK0 31->25.
 """
 
 import argparse
@@ -51,6 +57,7 @@ from src.config import (
     AGV_STEPS,
     BUFFERS,
     CAL_WIN,
+    CODE_VERSION,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
     INSPECT_DELAY_STEPS,
@@ -65,6 +72,7 @@ from src.config import (
     STATE_OFFSETS,
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
+    TWIN_SCHEMA,
     T,
 )
 
@@ -301,11 +309,18 @@ def _validate(seed, fault):
 
 
 def _spawn_streams(seed):
-    """Seeded streams per SIM_SPEC 6.2: noise(0-31) + place/drop/agv/fail."""
+    """Seeded streams per SIM_SPEC 6.2 topology-A: noise(0-25) + place/drop/agv/fail.
+
+    Noise index == MACHINE_INDEX literal order (A0:0..RWK0:25);
+    children 26-31 retired (assert unread below); 32 place, 33 drop,
+    34 agv, 35 fail unchanged.
+    """
     seq = np.random.SeedSequence((seed,))
     children = seq.spawn(36)  # == N_STREAMS; literal kept for the T1 grep
     assert N_STREAMS == 36 and len(children) == N_STREAMS
     order = sorted(MACHINE_INDEX, key=MACHINE_INDEX.get)
+    used = {MACHINE_INDEX[m] for m in order} | {32, 33, 34, 35}
+    assert not (set(range(26, 32)) & used), "children 26-31 retired, must stay unread"
     noise = [np.random.default_rng(children[MACHINE_INDEX[m]]) for m in order]
     place = np.random.default_rng(children[32])
     drop = np.random.default_rng(children[33])
@@ -1451,6 +1466,11 @@ def run_episode(
         "seed": seed,
         "T": T,
         "cal_win": CAL_WIN,
+        # Topology-A schema v2 version binding (MINIPRO-33): the canonical
+        # replay payload INCLUDES these keys by construction, so version
+        # tampering mismatches the digest. v1 records are non-comparable.
+        "schema_version": TWIN_SCHEMA,
+        "code_version": CODE_VERSION,
         # Table 3.1 roster snapshot (SIM_SPEC §4.4): per-machine operating
         # points so a serialized episode carries its own roster metadata.
         "machines": {name: dict(cfg) for name, cfg in MACHINES.items()},
@@ -1633,9 +1653,21 @@ def check_wall_tripwire(walls, budget=600.0):
 def replay_digest(record):
     """Canonical replay digest: sha256 over sorted-key JSON with repr floats.
 
-    Wall/clock fields are excluded. Named digest (not hash) so the T1
+    Canonical payload = {schema_version, code_version, partition,
+    subgraph obs} (the record's partition-scoped subgraph obs plus its
+    version binding), sorted keys, wall/clock fields excluded via
+    _WALLCLOCK_KEYS. schema_version/code_version are INCLUDED by
+    construction: a tampered code_version under schema v2 mismatches the
+    digest, while any other schema_version (v1 32-machine records,
+    unversioned records) is strict-rejected as non-comparable.
+    Named digest (not hash) so the T1
     no-bare-default_rng/no-hash-seeding source grep stays green.
     """
+    if record.get("schema_version") != TWIN_SCHEMA:
+        raise ValueError(
+            f"schema v1 non-comparable, rebaseline: got schema_version="
+            f"{record.get('schema_version')!r}, want {TWIN_SCHEMA}"
+        )
     scrubbed = {k: v for k, v in record.items() if k not in _WALLCLOCK_KEYS}
     return hashlib.sha256(
         json.dumps(scrubbed, sort_keys=True, default=repr).encode()
