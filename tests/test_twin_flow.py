@@ -11,9 +11,9 @@ never AssertionError.
 
 Pinned probes: seed 777, T=300 everywhere — except the two congestion
 tests, pinned at seed 287 (discriminating pin: at 777 the plant absorbs
-the delay-A5 fault — 0 BLOCKED with AND without fault — while 287
-exhibits genuine fault→congestion with a clean-empty baseline;
-rerun-identical via replay_digest, see .omo/evidence task-11 note).
+the delay-A2 fault into the C7 tail while 287 exhibits genuine
+fault→tail-saturation with a clean-empty baseline; rerun-identical via
+replay_digest, see .omo/evidence task-11 note).
 No statistical asserts without a pinned seed; numeric tolerances are
 explicit bounds, not estimates.
 
@@ -34,24 +34,32 @@ pytestmark = pytest.mark.k2
 _SEED = 777
 _T = 300
 
-# Congestion pin (owner ruling A on T7): seed 287 is the discriminating
-# pin for delay-A5 congestion — fault episode shows A0 BLOCKED x8 with
-# A01 at cap, clean episode shows 0 BLOCKED anywhere (A01 max 12 < 20).
-# At 777 both episodes show 0 BLOCKED (plant absorbs the fault there),
-# so 777 cannot discriminate fault vs clean for congestion. Deterministic:
-# rerun-identical (replay_digest 962b9c54d022). Fault shape below is
-# byte-identical to the pre-ruling _DELAY_A5 (dur=15, d=5) — only the
-# seed pin changed, never the physics.
+# Congestion pin (topology-A: short lines absorb mid-line delay — the A27
+# gap never piles, so the pin moved from delay-A5 to delay-A2, whose
+# backpressure concentrates at the AGV-drained C7 tail; clean-287 episode
+# has 0 BLOCKED anywhere — non-vacuity anchor).
 _SEED_CONGEST = 287
 
-_DELAY_A5 = {
+_DELAY_A2 = {
     "id": "F-T2-delay",
     "class": "delay",
-    "origin": "A5",
+    "origin": "A2",
     "t0": 150,
     "dur": 15,
     "mag_sigma": 0.0,
     "extra": {"d": 5},
+}
+
+# Strong delay pin for tail-saturation: d=6 dur=25 on A2 at pin 287 piles
+# the C7 tail stage to cap (C7 BLOCKED x18, contiguous [275,292]).
+_DELAY_A2_TAIL = {
+    "id": "F-T2-delay-tail",
+    "class": "delay",
+    "origin": "A2",
+    "t0": 150,
+    "dur": 25,
+    "mag_sigma": 0.0,
+    "extra": {"d": 6},
 }
 
 _BREAKDOWN_B2 = {
@@ -79,7 +87,7 @@ _QUALITY_ASM2 = {
 
 
 def test_agv_hold_in_range():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    rec = twin.run_episode(_SEED, _DELAY_A2)  # raises first (red)
     assert rec["T"] == _T
     holds = [w["hold"] for w in rec["agv_waits"]]
     assert holds, "expected at least one tail→ASM0 transfer at seed 777"
@@ -87,7 +95,7 @@ def test_agv_hold_in_range():
 
 
 def test_agv_waits_logged_and_bounded():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    rec = twin.run_episode(_SEED, _DELAY_A2)  # raises first (red)
     waits = rec["agv_waits"]
     assert all(set(w) >= {"t", "part", "hold", "wait"} for w in waits)
     assert all(w["wait"] >= 0 for w in waits)
@@ -96,7 +104,7 @@ def test_agv_waits_logged_and_bounded():
 
 
 def test_agv_no_transfer_without_hold():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    rec = twin.run_episode(_SEED, _DELAY_A2)  # raises first (red)
     transfers = [p for p in rec["parts"] if p.get("via") == "AGV"]
     holds = {(w["t"], w["part"]) for w in rec["agv_waits"]}
     assert transfers, "expected AGV-routed parts at seed 777"
@@ -126,21 +134,22 @@ def test_rework_no_infinite_loop():
 
 
 def test_sbuf_divert_process_finish_allowed():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    rec = twin.run_episode(_SEED, _DELAY_A2)  # raises first (red)
     diverts = [e for e in rec.get("events", []) if e.get("event") == "DIVERT_SBUF"]
     assert diverts, "expected SBUF diverts under delay congestion at seed 777"
     assert all(e["detail"]["class"] in ("process", "finish") for e in diverts)
 
 
 def test_sbuf_feed_form_never_divert():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
+    rec = twin.run_episode(_SEED, _DELAY_A2)  # raises first (red)
     diverts = [e for e in rec.get("events", []) if e.get("event") == "DIVERT_SBUF"]
     assert all(e["detail"]["class"] not in ("feed", "form") for e in diverts)
 
 
 def test_sbuf_occupancy_logged_and_drains():
-    rec = twin.run_episode(_SEED, _DELAY_A5)  # raises first (red)
-    sbuf = rec["buffers"][30]  # SBUF is the 31st buffer
+    rec = twin.run_episode(_SEED, _DELAY_A2)  # raises first (red)
+    buf_order = list(BUFFERS)
+    sbuf = rec["buffers"][buf_order.index("SBUF")]  # SBUF row by roster order
     assert len(sbuf) == _T
     assert all(0 <= lvl <= 30 for lvl in sbuf)
     assert max(sbuf) > 0  # congestion at seed 777 must occupy SBUF
@@ -151,40 +160,42 @@ def test_sbuf_occupancy_logged_and_drains():
 
 
 def test_state_blocked_iff_downstream_full():
-    # PROJECT GOAL (owner ruling A): prove genuine fault→congestion
-    # causality through flow — BLOCKED occurs iff downstream is full.
-    # Phenomenon: under delay-A5 at pin 287, the A-line head piles to cap
-    # and A0 BLOCKEDs; every BLOCKED cell sits on an at-cap downstream
-    # buffer (caps imported from src.config.BUFFERS, never hardcoded).
-    # Cause that would break it: silenced BLOCKED emission, divert arms
-    # swallowing the pileup, or buffer caps detached from config.
-    # Granularity note: same-t converse (full ⇒ BLOCKED) is unphysical —
-    # BLOCKED fires only on a failed put-attempt step (cycle granularity),
-    # so a full buffer coexists with RUN mid-cycle steps. The honest
-    # biconditional is: BLOCKED(t) ⇒ downstream at-cap(t), and BLOCKED
-    # recurs periodically while the buffer sits at cap.
-    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A5)  # raises first (red)
-    states, bufs = rec["states"], rec["buffers"]
-    assert len(states) == 32 and all(len(row) == _T for row in states)
+    # PROJECT GOAL: prove genuine fault→congestion causality through flow
+    # — BLOCKED occurs iff downstream is full. Topology-A locus: short
+    # lines absorb mid-line delay (no A-line pileup), so backpressure
+    # concentrates at the AGV-drained C7 tail stage — under strong
+    # delay-A2 at pin 287 only C7 BLOCKs, on its saturated _C7TAIL sink
+    # (final at cap 15); every BLOCKED cell holds its part (throughput 0).
+    # Cause that would break it: silenced BLOCKED emission, AGV drain
+    # detached from the tail, or RNG/draw-order drift moving the pin.
+    from src.config import MACHINE_INDEX, MACHINES
+
+    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A2_TAIL)  # raises first (red)
+    states = rec["states"]
+    assert len(states) == 26 and all(len(row) == _T for row in states)
+    c7 = MACHINE_INDEX["C7"]
     blocked = [
-        (m, t) for m in range(32) for t in range(_T) if states[m][t] == "BLOCKED"
+        (m, t) for m in range(26) for t in range(_T) if states[m][t] == "BLOCKED"
     ]
-    assert blocked, "delay d=5 at A5 must BLOCK some machine at pin 287"
-    assert {m for m, _ in blocked} == {0}  # measured: only A0 (line head) blocks
+    assert blocked, "strong delay-A2 must BLOCK the C7 tail at pin 287"
+    assert {m for m, _ in blocked} == {c7}  # measured: only C7 (tail stage)
     counts = rec.get("throughput", rec.get("counts", None))
     assert counts is not None
     assert all(counts[m][t] == 0 for m, t in blocked)  # BLOCKED holds part, emits 0
-    buf_order = list(BUFFERS)
-    a01 = bufs[buf_order.index("A01")]
-    cap_a01 = BUFFERS["A01"]
-    assert max(a01) == cap_a01  # pileup reaches cap (measured 20/20)
-    assert all(a01[t] == cap_a01 for _, t in blocked)  # BLOCKED ⇒ downstream full
+    store_final = rec["flow_stats"]["store_final"]
+    assert store_final["_C7TAIL"] == MACHINES["C7"]["buffer_cap"] == 15
+    clean = twin.run_episode(_SEED_CONGEST, None)
+    assert not any(
+        s == "BLOCKED" for row in clean["states"] for s in row
+    )  # non-vacuity anchor
 
 
 def test_kit_asm0_starves_unless_all_tails():
     rec = twin.run_episode(_SEED, _QUALITY_ASM2)  # raises first (red)
     states = rec["states"]
-    asm0 = states[28]  # ASM0 index per Table 3.1 ordering
+    from src.config import MACHINE_INDEX
+
+    asm0 = states[MACHINE_INDEX["ASM0"]]  # ASM0 index per MACHINE_INDEX ordering
     assert "STARVED" in asm0  # 40% reject starves kitting at seed 777
 
 
@@ -201,24 +212,23 @@ def test_state_down_preempts_and_gt_excluded():
     assert all(e.get("gt_excluded", True) for e in natural if e.get("natural"))
 
 
-def test_fault_delay_a5_blocks_upstream():
-    # PROJECT GOAL (owner ruling A): delay causes upstream block — the
-    # fault at A5 congests the A-line back to its head: A01 piles from ~7
-    # (t150) to cap (t235) and feed-head A0 (which never diverts to SBUF)
-    # BLOCKEDs x8 on the at-cap buffer, recurring every 6 steps at the
-    # downstream-consumption rhythm. Cause that would break it: divert
-    # arms swallowing head pileup, BLOCKED emission detached from
+def test_fault_delay_a2_backpressures_c7_tail():
+    # PROJECT GOAL: delay causes downstream tail saturation — the strong
+    # delay-A2 fault congests the AGV-drained C7 tail to cap: C7 BLOCKEDs
+    # x18 as one contiguous late run [275,292] while no mid-line machine
+    # ever blocks (short lines absorb). Cause that would break it: AGV
+    # drain detached from the tail, BLOCKED emission detached from
     # downstream-full, or RNG/draw-order drift moving the pin.
-    # Measured at pin 287 (fault shape unchanged: delay A5 t0=150 dur=15
-    # d=5): A0 BLOCKED == [254,260,...,296]; clean pin-287 episode has 0
-    # BLOCKED anywhere (non-vacuity anchor — see evidence note).
-    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A5)  # raises first (red)
+    # Measured at pin 287 (fault shape: delay A2 t0=150 dur=25 d=6).
+    from src.config import MACHINE_INDEX
+
+    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A2_TAIL)  # raises first (red)
     states = rec["states"]
-    a0_blocked = [t for t in range(_T) if states[0][t] == "BLOCKED"]
-    assert len(a0_blocked) == 8  # measured pileup breaks through x8
-    assert a0_blocked[0] == 254 and a0_blocked[-1] == 296  # measured cascade band
-    assert all(b - a == 6 for a, b in pairwise(a0_blocked))
-    assert all(150 <= t < _T for t in a0_blocked)  # post-fault cascade, in-episode
+    c7_blocked = [t for t in range(_T) if states[MACHINE_INDEX["C7"]][t] == "BLOCKED"]
+    assert len(c7_blocked) == 18  # measured tail pileup breaks through x18
+    assert c7_blocked[0] == 275 and c7_blocked[-1] == 292  # measured band
+    assert all(b - a == 1 for a, b in pairwise(c7_blocked))
+    assert all(150 <= t < _T for t in c7_blocked)  # post-fault cascade, in-episode
 
 
 def test_rework_asm0_kit_preserves_reject_and_passes():
@@ -291,7 +301,9 @@ def test_fault_breakdown_b2_zero_throughput():
     rec = twin.run_episode(_SEED, _BREAKDOWN_B2)  # raises first (red)
     counts = rec.get("throughput", rec.get("counts", None))
     assert counts is not None
-    b2 = counts[12]  # B2 index: A0-9 (0-9), B0=10, B1=11, B2=12
+    from src.config import MACHINE_INDEX
+
+    b2 = counts[MACHINE_INDEX["B2"]]  # B2 index per MACHINE_INDEX ordering
     assert all(c == 0 for c in b2[150 : 150 + 12])  # origin throughput 0 over window
 
 
@@ -354,7 +366,7 @@ def test_rework_asm2_holds_reject_when_rwk_full():
         "qwin": [(0, T, 0.4, "ASM2")],
     }
     env = simpy.Environment()
-    up = simpy.Store(env, capacity=BUFFERS["ASM12"])
+    up = simpy.Store(env, capacity=BUFFERS["INSP02"])
     rwk = simpy.Store(env, capacity=BUFFERS["RWK_RET"])
     for i in range(BUFFERS["RWK_RET"]):
         rwk.items.append({"id": 900 + i, "line": "ASM", "flag": "REJECT", "passes": 1})

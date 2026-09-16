@@ -1,4 +1,4 @@
-"""_C7TAIL off-roster store visible via flow_stats; 31-row shape contract held."""
+"""_C7TAIL off-roster store visible via flow_stats; 26-row shape contract held."""
 
 import pytest
 
@@ -33,9 +33,13 @@ def test_c7tail_off_roster_visible_via_flow_stats():
 
 def test_c7tail_cap_pinned_15_off_roster():
     assert MACHINES["C7"]["buffer_cap"] == 15
-    assert MACHINES["C7"]["mttr"] == 8  # repair scalar, not the cap (Copilot :1052 misread)
+    assert (
+        MACHINES["C7"]["mttr"] == 8
+    )  # repair scalar, not the cap (Copilot :1052 misread)
     assert "_C7TAIL" not in BUFFERS  # dedicated store, never the C67 gap
-    assert BUFFERS["C67"] == 15  # distinct gap store; sharing it would deadlock C6 vs C7
+    assert (
+        BUFFERS["C67"] == 15
+    )  # distinct gap store; sharing it would deadlock C6 vs C7
     assert len(BUFFERS) == 26
     rec = twin.run_episode(_SEED, _DELAY_A5)
     buf_order = list(BUFFERS)

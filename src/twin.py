@@ -155,11 +155,30 @@ _ORACLE_REP = (
 )
 
 _LINES = (
-    tuple(f"A{i}" for i in range(10))
-    + tuple(f"B{i}" for i in range(10))
-    + tuple(f"C{i}" for i in range(8))
+    "A0",
+    "A1",
+    "A2",
+    "A7",
+    "A8",
+    "A9",
+    "B0",
+    "B1",
+    "B2",
+    "B7P",
+    "B7S",
+    "B8",
+    "B9",
+    "C0",
+    "C1",
+    "C2",
+    "C6",
+    "C7",
+    "PKG0",
+    "PKG1",
+    "PKG2",
+    "INSP0",
 )
-_TAILS = ("A9", "B9", "C7")
+_TAILS = ("A9", "B9", "C7", "PKG1", "PKG2")
 _TAIL_BUF = {"A9": "GA9", "B9": "GB9", "C7": "_C7TAIL"}
 _TAIL_LINE = {"A9": "A", "B9": "B", "C7": "C"}
 # SBUF high-util flag threshold: >=80% of cap (SIM_SPEC §2.2 logging).
@@ -167,23 +186,42 @@ _SBUF_HIGH = 0.8 * SBUF_CAP
 
 
 def _line_edges():
-    """Map line machine -> (upstream gap name or None, downstream key)."""
-    edges = {}
-    for prefix, n in (("A", 10), ("B", 10), ("C", 8)):
-        for i in range(n):
-            name = f"{prefix}{i}"
-            up = None if i == 0 else f"{prefix}{i - 1}{i}"
-            if i < n - 1:
-                down = f"{prefix}{i}{i + 1}"
-            elif prefix == "C":
-                # No C-tail buffer in the roster: C7 stages in a dedicated
-                # cap-15 store (tail cap governs per config); AGV drains it.
-                # Sharing the C67 gap store would deadlock C6 vs C7.
-                down = "_C7TAIL"
-            else:
-                down = _TAIL_BUF[name]
-            edges[name] = (up, down)
-    return edges
+    """Map line machine -> (upstream gap name or None, downstream key).
+
+    Topology-A short+branchy edges (normative MINIPRO-33 roster):
+    A2->A7 via A27, C2->C6 via C26; B2->{B7P,B7S} fork via B2B7P/B2B7S
+    with {B7P,B7S}->B8 join via B7PB8/B7SB8; C7 forks _C7TAIL (AGV kit
+    path, retained as-is) + C7PKG (packaging fork feed to PKG0); PKG0
+    splits PKG01/PKG02 to the PKG1/PKG2 packaging sinks (down None);
+    ASM1->INSP0 via INSP01, INSP0->ASM2 via INSP02 (ASM12 retired).
+
+    Fork downs / join ups are tuples; run_episode resolves the primary
+    ([0]) for the serial _line_process until fork semantics land.
+    """
+    return {
+        "A0": (None, "A01"),
+        "A1": ("A01", "A12"),
+        "A2": ("A12", "A27"),
+        "A7": ("A27", "A78"),
+        "A8": ("A78", "A89"),
+        "A9": ("A89", "GA9"),
+        "B0": (None, "B01"),
+        "B1": ("B01", "B12"),
+        "B2": ("B12", ("B2B7P", "B2B7S")),
+        "B7P": ("B2B7P", "B7PB8"),
+        "B7S": ("B2B7S", "B7SB8"),
+        "B8": (("B7PB8", "B7SB8"), "B89"),
+        "B9": ("B89", "GB9"),
+        "C0": (None, "C01"),
+        "C1": ("C01", "C12"),
+        "C2": ("C12", "C26"),
+        "C6": ("C26", "C67"),
+        "C7": ("C67", ("_C7TAIL", "C7PKG")),
+        "PKG0": ("C7PKG", ("PKG01", "PKG02")),
+        "PKG1": ("PKG01", None),
+        "PKG2": ("PKG02", None),
+        "INSP0": ("INSP01", "INSP02"),
+    }
 
 
 def _validate(seed, fault):
@@ -567,6 +605,24 @@ def _line_process(env, spec, shared):
         elif rem > 1:
             rem -= 1
             st, tput = "RUN", 0
+        elif down is None:
+            # Packaging sink (PKG1/PKG2 tails): parts SINK here as
+            # packaged goods — flow_stats packaged+=1, never rejoin kit,
+            # never SBUF-divert (tails are excluded via _TAILS).
+            shared["flow"]["packaged"] += 1
+            shared["parts"].append(
+                {
+                    "id": part["id"],
+                    "t": t,
+                    "machine": name,
+                    "via": "PKG",
+                    "disposition": "packaged",
+                    "passes": part.get("passes", 0),
+                    "flag": part.get("flag", "OK"),
+                }
+            )
+            held, rem, part = False, 0, None
+            st, tput = "RUN", 1
         elif len(down.items) < down.capacity:
             yield down.put(part)
             held, rem, part = False, 0, None
@@ -652,7 +708,9 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
     unbounded resource queue.
     """
     sbuf = stores["SBUF"]
-    tails = [(stores[_TAIL_BUF[n]], n) for n in _TAILS]
+    # PKG tails are sinks with no tail buffers (nothing to AGV-drain);
+    # only _TAIL_BUF-backed tails ride the AGV path.
+    tails = [(stores[_TAIL_BUF[n]], n) for n in _TAILS if n in _TAIL_BUF]
 
     def _gate_open():
         return agv.count + len(agv.queue) < AGV_CAP + 2
@@ -1034,7 +1092,7 @@ def _fault_clock(env, shared):
 
 
 def _monitor(env, stores, order, rows):
-    """Record the 31 roster buffer levels after machines act each step."""
+    """Record the 26 roster buffer levels after machines act each step."""
     for t in range(T):
         for j, key in enumerate(order):
             rows[j][t] = len(stores[key].items) if key in stores else 0
@@ -1089,6 +1147,7 @@ def run_episode(
             "asm_created": 0,
             "sunk": 0,
             "scrapped": 0,
+            "packaged": 0,
             "xfer_open": 0,
             "rejected": 0,
             "reworked": 0,
@@ -1109,6 +1168,12 @@ def run_episode(
     edges = _line_edges()
     for name in _LINES:
         up_key, down_key = edges[name]
+        # Fork downs / join ups are tuples; the serial process takes the
+        # primary ([0]) until fork semantics land.
+        if isinstance(up_key, tuple):
+            up_key = up_key[0]
+        if isinstance(down_key, tuple):
+            down_key = down_key[0]
         env.process(
             _line_process(
                 env,
@@ -1116,15 +1181,17 @@ def run_episode(
                     "name": name,
                     "idx": MACHINE_INDEX[name],
                     "up": stores[up_key] if up_key else None,
-                    "down": stores[down_key],
+                    "down": stores[down_key] if down_key else None,
                     "sbuf": stores["SBUF"],
                 },
                 shared,
             )
         )
     env.process(_asm0_process(env, stores["ASM01"], kit, shared))
-    env.process(_asm_mid_process(env, "ASM1", stores["ASM01"], stores["ASM12"], shared))
-    env.process(_asm_mid_process(env, "ASM2", stores["ASM12"], None, shared))
+    env.process(
+        _asm_mid_process(env, "ASM1", stores["ASM01"], stores["INSP01"], shared)
+    )
+    env.process(_asm_mid_process(env, "ASM2", stores["INSP02"], None, shared))
     env.process(_rwk0_process(env, shared))
     env.process(_fault_clock(env, shared))
     env.process(_agv_dispatcher(env, agv, rng_agv, stores, kit, shared))
@@ -1156,6 +1223,7 @@ def run_episode(
         "asm_created": shared["flow"]["asm_created"],
         "sunk": shared["flow"]["sunk"],
         "scrapped": shared["flow"]["scrapped"],
+        "packaged": shared["flow"]["packaged"],
         "rejected": shared["flow"]["rejected"],
         "reworked": shared["flow"]["reworked"],
         "xfer_open": shared["flow"]["xfer_open"],
@@ -1677,7 +1745,9 @@ def main(argv=None):
     try:
         cal_mean = _load_calibration(args.calibration)
     except ValueError as exc:
-        return _fail(f"{exc}; bootstrap: run --calibrate {args.calibration} to create it")
+        return _fail(
+            f"{exc}; bootstrap: run --calibrate {args.calibration} to create it"
+        )
     budget_cap = (
         args.budget_override if args.budget_override is not None else _BATTERY_BUDGET_S
     )
