@@ -70,6 +70,13 @@ EVENT_FAMILIES = (
     "AGV_WAIT",
     "REJECT_ROUTE",
     "DIVERT_SBUF",
+    # Topology-A trio (Todo 3 normative taxonomy, twin _emit; 7R: the 6R
+    # TAKT5 retime raised per-episode PACK_FORK/LATE_VERDICT volume so
+    # sampled ticks (0/150/299) now carry them — the 7-family allowlist
+    # rejected live twin ticks; each trio event is its own family).
+    "FAILOVER",
+    "PACK_FORK",
+    "LATE_VERDICT",
 )
 
 _EVENT_TO_FAMILY = {
@@ -84,6 +91,9 @@ _EVENT_TO_FAMILY = {
     "AGV_WAIT": "AGV_WAIT",
     "REJECT_ROUTE": "REJECT_ROUTE",
     "DIVERT_SBUF": "DIVERT_SBUF",
+    "FAILOVER": "FAILOVER",
+    "PACK_FORK": "PACK_FORK",
+    "LATE_VERDICT": "LATE_VERDICT",
 }
 
 DOWN_UP_TRIPLE = ("natural", "gt_excluded", "fault_id")

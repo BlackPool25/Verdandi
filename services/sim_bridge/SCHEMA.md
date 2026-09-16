@@ -52,7 +52,11 @@ Base shape `{event, t, machine, detail}` for ALL variants. The trio
 window), `None` means natural (`natural:true, gt_excluded:true`).
 Seven families: FAULT (`FAULT_START`/`END`), BLOCK (`BLOCK_ON`/`OFF`),
 STARVE (`STARVE_ON`/`OFF`), DOWN_UP (`DOWN`/`UP`), `AGV_WAIT`,
-`REJECT_ROUTE`, `DIVERT_SBUF`.
+`REJECT_ROUTE`, `DIVERT_SBUF` — plus the topology-A trio, each its own
+family: `FAILOVER` (B-pair reroute, top-level `from`/`to`/`reason`),
+`PACK_FORK` (PKG0 split, detail `part`/`to`), `LATE_VERDICT` (INSP0
+release, detail `part`/`verdict`). Ten families total (7R: the 6R TAKT5
+retime raised trio volume onto sampled ticks, exposing the 7-family gap).
 
 ## Episode header (once per episode, NOT per tick)
 

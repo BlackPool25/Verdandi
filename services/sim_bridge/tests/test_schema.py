@@ -2,7 +2,7 @@
 
 Locks the frozen tick contract: no `temperature` key anywhere, quality
 only as sparse parts[]-last join, c7tail episode-final only, throughput
-domain {0,1}, 7 event families with {event,t,machine,detail} base shape
+domain {0,1}, 10 event families with {event,t,machine,detail} base shape
 and natural/gt_excluded/fault_id top-level ONLY on DOWN/UP.
 
 Validates 3 seeds (7, 777, 1234) end-to-end from src.twin.run_episode
@@ -79,7 +79,7 @@ def test_throughput_domain_01():
 
 
 def test_event_allowlist_7_families():
-    assert len(S.EVENT_FAMILIES) == 7
+    assert len(S.EVENT_FAMILIES) == 10
     for seed in SEEDS:
         rec = run_episode(seed, None)
         for k in (0, 150, 299):
