@@ -1,0 +1,796 @@
+{
+  "seed": 777,
+  "fault": "F-21-drift-B2",
+  "schema_version": 2,
+  "code_version": "twin-2.1.0-topology-A",
+  "digest": "6b8d27874d1503ed8b34172956de6ae8c19e0fdcd09e71482fc5474706f260c1",
+  "header": {
+    "seed": 777,
+    "T": 300,
+    "sbuf_stats": {
+      "diverted": 1,
+      "drained": 1,
+      "max_occupancy": 1,
+      "high_util": false,
+      "high_util_steps": [],
+      "final": 0,
+      "cap": 30
+    },
+    "flow_stats": {
+      "line_created": 178,
+      "asm_created": 18,
+      "sunk": 18,
+      "scrapped": 0,
+      "packaged": 33,
+      "rejected": 0,
+      "reworked": 0,
+      "xfer_open": 4,
+      "held_line": 12,
+      "held_asm0_batch": 0,
+      "held_asm12": 0,
+      "held_rwk0": 0,
+      "kit_A": 18,
+      "kit_B": 19,
+      "kit_C": 0,
+      "c7tail": 15,
+      "store_final": {
+        "A01": 10,
+        "A12": 7,
+        "A27": 4,
+        "A78": 0,
+        "A89": 0,
+        "B01": 10,
+        "B12": 7,
+        "B2B7P": 0,
+        "B2B7S": 0,
+        "B7PB8": 0,
+        "B7SB8": 0,
+        "B89": 0,
+        "C01": 7,
+        "C12": 7,
+        "C26": 0,
+        "C67": 5,
+        "ASM01": 0,
+        "INSP01": 0,
+        "INSP02": 0,
+        "GA9": 0,
+        "GB9": 0,
+        "C7PKG": 0,
+        "PKG01": 0,
+        "PKG02": 0,
+        "RWK_RET": 0,
+        "SBUF": 0,
+        "_C7TAIL": 15
+      }
+    },
+    "c7tail_final": 15
+  },
+  "ticks": [
+    {
+      "step": 0,
+      "states": [
+        "RUN",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "RUN",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "RUN",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED"
+      ],
+      "obs": [
+        49.901687357998526,
+        57.57734077542197,
+        66.39535609223006,
+        66.38068276819574,
+        53.15879434434255,
+        46.77497052191895,
+        49.86145241393381,
+        58.45210944872127,
+        65.7007506979184,
+        67.19605654955899,
+        67.67544317470328,
+        52.11334808503545,
+        45.637066008350736,
+        49.404125927871725,
+        57.85837457465237,
+        66.04102153467056,
+        67.04010536981824,
+        45.49112755063854,
+        62.086147186338245,
+        53.097802420845035,
+        53.18214385994735,
+        63.10020440045252,
+        64.02444802767307,
+        39.885475581909596,
+        39.41320621890078,
+        57.81651318396694
+      ],
+      "throughput": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "buffers": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "sbuf_level": 0,
+      "events_at_k": [
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "A1",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "A2",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "A7",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "A8",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "A9",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "B1",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "B2",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "B7P",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "B7S",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "B8",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "B9",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "C1",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "C2",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "C6",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "C7",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "PKG0",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "PKG1",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "PKG2",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "INSP0",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "ASM0",
+          "detail": {
+            "kit_missing": [
+              "A",
+              "B",
+              "C"
+            ]
+          }
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "ASM1",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 0,
+          "machine": "ASM2",
+          "detail": {}
+        }
+      ],
+      "faults": [
+        {
+          "id": "F-21",
+          "class": "drift",
+          "origin": "B2",
+          "t0": 150,
+          "dur": 12,
+          "mag_sigma": 5.2,
+          "extra": {},
+          "t1": 162,
+          "mag": 5.2,
+          "d": 0,
+          "drop_rate": 0.0,
+          "mttr_mult": 1.0,
+          "reject_rate": 0.0
+        }
+      ],
+      "quality": {
+        "A0": "no completed part yet",
+        "A1": "no completed part yet",
+        "A2": "no completed part yet",
+        "A7": "no completed part yet",
+        "A8": "no completed part yet",
+        "A9": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 118
+        },
+        "ASM0": "no completed part yet",
+        "ASM1": "no completed part yet",
+        "ASM2": "no completed part yet",
+        "B0": "no completed part yet",
+        "B1": "no completed part yet",
+        "B2": "no completed part yet",
+        "B7P": "no completed part yet",
+        "B7S": "no completed part yet",
+        "B8": "no completed part yet",
+        "B9": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 123
+        },
+        "C0": "no completed part yet",
+        "C1": "no completed part yet",
+        "C2": "no completed part yet",
+        "C6": "no completed part yet",
+        "C7": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 58
+        },
+        "INSP0": "no completed part yet",
+        "PKG0": "no completed part yet",
+        "PKG1": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 108
+        },
+        "PKG2": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 104
+        },
+        "RWK0": "no completed part yet"
+      }
+    },
+    {
+      "step": 150,
+      "states": [
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "STARVED",
+        "RUN",
+        "STARVED",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "RUN",
+        "STARVED",
+        "STARVED",
+        "STARVED"
+      ],
+      "obs": [
+        49.82593578562396,
+        60.49100382656616,
+        68.7180639683172,
+        69.8538036339192,
+        54.498687144104494,
+        46.52345911926127,
+        50.49651155228041,
+        60.12679577829492,
+        71.39854511417096,
+        69.13173945267343,
+        67.85021618685887,
+        55.49577898086252,
+        45.0316354617811,
+        49.901184718563684,
+        59.69909125359904,
+        69.46808700339021,
+        69.63020411664584,
+        47.06629893475669,
+        64.28306226889059,
+        52.212588930821255,
+        52.10594036185605,
+        63.6249236945359,
+        67.99409748848846,
+        40.79712487072453,
+        42.4897109756182,
+        59.95499793109707
+      ],
+      "throughput": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "buffers": [
+        5,
+        4,
+        1,
+        0,
+        3,
+        5,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0,
+        5,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "sbuf_level": 0,
+      "events_at_k": [
+        {
+          "event": "FAULT_START",
+          "t": 150,
+          "machine": "B2",
+          "detail": {
+            "fault_id": "F-21",
+            "class": "drift"
+          }
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 150,
+          "machine": "PKG1",
+          "detail": {}
+        },
+        {
+          "event": "STARVE_ON",
+          "t": 150,
+          "machine": "B9",
+          "detail": {}
+        },
+        {
+          "event": "UP",
+          "t": 150,
+          "machine": "A9",
+          "natural": true,
+          "gt_excluded": true,
+          "fault_id": null,
+          "detail": {
+            "natural": true,
+            "gt_excluded": true
+          }
+        }
+      ],
+      "faults": [
+        {
+          "id": "F-21",
+          "class": "drift",
+          "origin": "B2",
+          "t0": 150,
+          "dur": 12,
+          "mag_sigma": 5.2,
+          "extra": {},
+          "t1": 162,
+          "mag": 5.2,
+          "d": 0,
+          "drop_rate": 0.0,
+          "mttr_mult": 1.0,
+          "reject_rate": 0.0
+        }
+      ],
+      "quality": {
+        "A0": "no completed part yet",
+        "A1": "no completed part yet",
+        "A2": "no completed part yet",
+        "A7": "no completed part yet",
+        "A8": "no completed part yet",
+        "A9": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 118
+        },
+        "ASM0": "no completed part yet",
+        "ASM1": "no completed part yet",
+        "ASM2": "no completed part yet",
+        "B0": "no completed part yet",
+        "B1": "no completed part yet",
+        "B2": "no completed part yet",
+        "B7P": "no completed part yet",
+        "B7S": "no completed part yet",
+        "B8": "no completed part yet",
+        "B9": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 123
+        },
+        "C0": "no completed part yet",
+        "C1": "no completed part yet",
+        "C2": "no completed part yet",
+        "C6": "no completed part yet",
+        "C7": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 58
+        },
+        "INSP0": "no completed part yet",
+        "PKG0": "no completed part yet",
+        "PKG1": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 108
+        },
+        "PKG2": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 104
+        },
+        "RWK0": "no completed part yet"
+      }
+    },
+    {
+      "step": 299,
+      "states": [
+        "RUN",
+        "RUN",
+        "RUN",
+        "DOWN",
+        "STARVED",
+        "STARVED",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "STARVED",
+        "RUN",
+        "STARVED",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "RUN",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED",
+        "STARVED"
+      ],
+      "obs": [
+        49.48616554493026,
+        59.272948718676474,
+        70.03310114587167,
+        62.74737432755923,
+        52.305540880580246,
+        44.902738174699344,
+        49.45042846326769,
+        58.49954814303044,
+        70.03780668018015,
+        68.48324727522042,
+        66.1494580002502,
+        55.01968127671452,
+        45.7047620785003,
+        49.64934566192005,
+        59.7359056726649,
+        68.94934945473597,
+        68.37521505681802,
+        47.654277323255734,
+        63.32509139489913,
+        53.71907172061784,
+        51.733310379851865,
+        62.22524142311212,
+        63.51539910741456,
+        40.39587253145852,
+        39.28739543576271,
+        59.38976902313348
+      ],
+      "throughput": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "buffers": [
+        9,
+        7,
+        4,
+        0,
+        0,
+        9,
+        7,
+        0,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        0,
+        6,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "sbuf_level": 0,
+      "events_at_k": [
+        {
+          "event": "STARVE_OFF",
+          "t": 299,
+          "machine": "PKG0",
+          "detail": {}
+        }
+      ],
+      "faults": [
+        {
+          "id": "F-21",
+          "class": "drift",
+          "origin": "B2",
+          "t0": 150,
+          "dur": 12,
+          "mag_sigma": 5.2,
+          "extra": {},
+          "t1": 162,
+          "mag": 5.2,
+          "d": 0,
+          "drop_rate": 0.0,
+          "mttr_mult": 1.0,
+          "reject_rate": 0.0
+        }
+      ],
+      "quality": {
+        "A0": "no completed part yet",
+        "A1": "no completed part yet",
+        "A2": "no completed part yet",
+        "A7": "no completed part yet",
+        "A8": "no completed part yet",
+        "A9": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 118
+        },
+        "ASM0": "no completed part yet",
+        "ASM1": "no completed part yet",
+        "ASM2": "no completed part yet",
+        "B0": "no completed part yet",
+        "B1": "no completed part yet",
+        "B2": "no completed part yet",
+        "B7P": "no completed part yet",
+        "B7S": "no completed part yet",
+        "B8": "no completed part yet",
+        "B9": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 123
+        },
+        "C0": "no completed part yet",
+        "C1": "no completed part yet",
+        "C2": "no completed part yet",
+        "C6": "no completed part yet",
+        "C7": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 58
+        },
+        "INSP0": "no completed part yet",
+        "PKG0": "no completed part yet",
+        "PKG1": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 108
+        },
+        "PKG2": {
+          "source": "parts-last",
+          "flag": "OK",
+          "part_id": 104
+        },
+        "RWK0": "no completed part yet"
+      }
+    }
+  ]
+}

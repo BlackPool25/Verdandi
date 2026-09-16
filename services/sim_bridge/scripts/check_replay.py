@@ -22,11 +22,13 @@ from services.sim_bridge.schema import TICK_KEYS, validate_tick
 FAULT = {
     "id": "F-21",
     "class": "drift",
-    "origin": "B5",
+    "origin": "B2",
     "t0": 150,
     "dur": 12,
     "mag_sigma": 5.2,
 }
+
+GOLDEN_PATH = pathlib.Path(__file__).resolve().parents[1] / "golden" / "replay-777-topology-A.json"
 
 
 def parse_sse(text: str):
@@ -66,8 +68,8 @@ def main() -> None:
     assert [t["step"] for t in ticks] == list(range(300))
     for t in ticks:
         assert set(t) == set(TICK_KEYS), f"tick keys drift: {sorted(set(t) ^ set(TICK_KEYS))}"
-        assert len(t["states"]) == 32 and len(t["obs"]) == 32
-        assert len(t["throughput"]) == 32 and len(t["buffers"]) == 31
+        assert len(t["states"]) == 26 and len(t["obs"]) == 26
+        assert len(t["throughput"]) == 26 and len(t["buffers"]) == 26
     for k in (0, 150, 299):
         validate_tick(ticks[k])
     print("schema=validate_tick(0,150,299) OK")
@@ -80,7 +82,17 @@ def main() -> None:
     assert ticks150[0] == ticks[150], "resume row 150 must equal full-run row 150"
 
     nbytes = len(full.text.encode())
-    print(f"ticks=300 steps=0..299 shapes=32/32/32/31 resume150=identical bytes={nbytes}")
+    print(f"ticks=300 steps=0..299 shapes=26/26/26/26 resume150=identical bytes={nbytes}")
+    if GOLDEN_PATH.exists():
+        golden = json.loads(GOLDEN_PATH.read_text())
+        assert golden["digest"] == a["replay_digest"], (
+            f"golden mismatch: file={golden['digest']} live={a['replay_digest']}"
+        )
+        assert golden["seed"] == 777 and golden["fault"] == "F-21-drift-B2"
+        assert golden["code_version"] == "twin-2.1.0-topology-A"
+        print(f"golden={GOLDEN_PATH.name} digest={golden['digest']} OK")
+    else:
+        print(f"golden missing: {GOLDEN_PATH} (write via Todo 7 golden step)")
     print("PASS")
 
 

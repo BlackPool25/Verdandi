@@ -35,7 +35,7 @@ def test_happy_seed_only_returns_episode_id():
 
 
 def test_t0_119_rejected_with_twin_text():
-    fault = {"class": "breakdown", "origin": "B5", "t0": 119, "dur": 10}
+    fault = {"class": "breakdown", "origin": "B2", "t0": 119, "dur": 10}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert 400 <= r.status_code < 500
     assert twin_text(7, [fault]) in r.json()["detail"]
@@ -49,14 +49,14 @@ def test_unknown_origin_rejected_with_twin_text():
 
 
 def test_unknown_class_rejected_with_twin_text():
-    fault = {"class": "meltdown", "origin": "B5", "t0": 150, "dur": 10}
+    fault = {"class": "meltdown", "origin": "B2", "t0": 150, "dur": 10}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert 400 <= r.status_code < 500
     assert twin_text(7, [fault]) in r.json()["detail"]
 
 
 def test_window_overflow_rejected_with_twin_text():
-    fault = {"class": "drift", "origin": "B5", "t0": 295, "dur": 10}
+    fault = {"class": "drift", "origin": "B2", "t0": 295, "dur": 10}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert 400 <= r.status_code < 500
     assert twin_text(7, [fault]) in r.json()["detail"]
@@ -64,8 +64,8 @@ def test_window_overflow_rejected_with_twin_text():
 
 def test_same_machine_gap_lt5_rejected_with_twin_text():
     faults = [
-        {"class": "drift", "origin": "B5", "t0": 150, "dur": 10},
-        {"class": "bias", "origin": "B5", "t0": 162, "dur": 10},
+        {"class": "drift", "origin": "B2", "t0": 150, "dur": 10},
+        {"class": "bias", "origin": "B2", "t0": 162, "dur": 10},
     ]
     r = client.post("/episode", json={"seed": 7, "faults": faults})
     assert 400 <= r.status_code < 500
@@ -79,14 +79,14 @@ def test_negative_seed_rejected_with_twin_text():
 
 
 def test_extra_non_dict_rejected_with_twin_text():
-    fault = {"class": "drift", "origin": "B5", "t0": 150, "dur": 10, "extra": [1]}
+    fault = {"class": "drift", "origin": "B2", "t0": 150, "dur": 10, "extra": [1]}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert 400 <= r.status_code < 500
     assert twin_text(7, [fault]) in r.json()["detail"]
 
 
 def test_stuck_normalized_to_breakdown():
-    fault = {"class": "STUCK", "origin": "B5", "t0": 150, "dur": 10}
+    fault = {"class": "STUCK", "origin": "B2", "t0": 150, "dur": 10}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert r.status_code == 200, r.text
     assert r.json()["faults"][0]["class"] == "breakdown"
@@ -115,20 +115,20 @@ def test_enable_natural_breakdown_round_trip():
 def test_single_dict_fault_accepted():
     r = client.post(
         "/episode",
-        json={"seed": 7, "faults": {"class": "drift", "origin": "B5", "t0": 150, "dur": 10}},
+        json={"seed": 7, "faults": {"class": "drift", "origin": "B2", "t0": 150, "dur": 10}},
     )
     assert r.status_code == 200, r.text
 
 
 def test_bridge_strict_dur_below_range():
-    fault = {"class": "drift", "origin": "B5", "t0": 150, "dur": 3}
+    fault = {"class": "drift", "origin": "B2", "t0": 150, "dur": 3}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert r.status_code == 422, r.text
     assert "bridge-strict (superset of twin)" in r.json()["detail"]
 
 
 def test_bridge_strict_mag_out_of_range():
-    fault = {"class": "drift", "origin": "B5", "t0": 150, "dur": 10, "mag_sigma": 99.0}
+    fault = {"class": "drift", "origin": "B2", "t0": 150, "dur": 10, "mag_sigma": 99.0}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert r.status_code == 422, r.text
     assert "bridge-strict (superset of twin)" in r.json()["detail"]
@@ -137,7 +137,7 @@ def test_bridge_strict_mag_out_of_range():
 def test_bridge_strict_delay_d_out_of_range():
     fault = {
         "class": "delay",
-        "origin": "A5",
+        "origin": "A7",
         "t0": 150,
         "dur": 10,
         "extra": {"d": 99},
@@ -150,7 +150,7 @@ def test_bridge_strict_delay_d_out_of_range():
 def test_bridge_strict_drop_rate_out_of_range():
     fault = {
         "class": "loss",
-        "origin": "A6",
+        "origin": "B7P",
         "t0": 150,
         "dur": 10,
         "extra": {"drop_rate": 0.99},
@@ -163,7 +163,7 @@ def test_bridge_strict_drop_rate_out_of_range():
 def test_bridge_strict_mttr_mult_out_of_range():
     fault = {
         "class": "breakdown",
-        "origin": "B5",
+        "origin": "B2",
         "t0": 150,
         "dur": 10,
         "extra": {"mttr_mult": 99.0},
