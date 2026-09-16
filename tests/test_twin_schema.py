@@ -25,7 +25,7 @@ _TWIN_SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "twin.py"
 _PROBE_FAULT = {
     "id": "F-21",
     "class": "drift",
-    "origin": "B5",
+    "origin": "B2",
     "t0": 150,
     "dur": 12,
     "mag_sigma": 5.2,
@@ -58,7 +58,7 @@ def test_record_keys():
 def test_record_machines_table31_per_machine():
     rec = twin.run_episode(777, _PROBE_FAULT)
     machines = rec["machines"]
-    assert len(machines) == 32
+    assert len(machines) == 26
     for name, cfg in machines.items():
         assert set(cfg) == {
             "class",
@@ -79,15 +79,15 @@ def test_record_scalars():
     assert rec["cal_win"] == 120
 
 
-def test_obs_shape_32x300():
+def test_obs_shape_26x300():
     rec = twin.run_episode(777, _PROBE_FAULT)
-    assert len(rec["obs"]) == 32
+    assert len(rec["obs"]) == 26
     assert all(len(row) == 300 for row in rec["obs"])
 
 
-def test_buffer_shape_31x300():
+def test_buffer_shape_26x300():
     rec = twin.run_episode(777, _PROBE_FAULT)
-    assert len(rec["buffers"]) == 31
+    assert len(rec["buffers"]) == 26
     assert all(len(row) == 300 for row in rec["buffers"])
 
 
@@ -155,13 +155,13 @@ def test_cal_win_t0_spread_uniform():
 
 def test_calibration_window_shape():
     clean = twin.run_calibration(777)  # raises first (red)
-    assert clean.shape == (120, 32)
+    assert clean.shape == (120, 26)
 
 
 def test_omitted_mag_materializes_in_fault_range():
     from src.config import FAULT_RANGES
 
-    fault = {"id": "F-T", "class": "drift", "origin": "B5", "t0": 150, "dur": 12}
+    fault = {"id": "F-T", "class": "drift", "origin": "B2", "t0": 150, "dur": 12}
     flist = twin._validate(777, fault)
     assert flist[0].get("mag_sigma") is None
     _, place, _, _, _ = twin._spawn_streams(777)
@@ -174,7 +174,7 @@ def test_explicit_mag_preserved():
     fault = {
         "id": "F-T",
         "class": "drift",
-        "origin": "B5",
+        "origin": "B2",
         "t0": 150,
         "dur": 12,
         "mag_sigma": 5.2,
