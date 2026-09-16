@@ -215,18 +215,28 @@ def test_state_down_preempts_and_gt_excluded():
 def test_fault_delay_a2_backpressures_c7_tail():
     # PROJECT GOAL: delay causes downstream tail saturation — the strong
     # delay-A2 fault congests the AGV-drained C7 tail to cap: C7 BLOCKEDs
-    # x18 as one contiguous late run [275,292] while no mid-line machine
+    # x14 as one contiguous late run [285,298] while no mid-line machine
     # ever blocks (short lines absorb). Cause that would break it: AGV
     # drain detached from the tail, BLOCKED emission detached from
     # downstream-full, or RNG/draw-order drift moving the pin.
-    # Measured at pin 287 (fault shape: delay A2 t0=150 dur=25 d=6).
+    # Measured at pin 287 (fault shape: delay A2 t0=150 dur=40 d=6,
+    # natural breakdown off to isolate the fault-driven cascade;
+    # re-pinned in Todo 3: INSP0's normative 3-step hold replaced the
+    # Todo-2 serial placeholder and the shared fail-stream lottery
+    # redistributed natural DOWNs, moving the old x18 [275,292] pin —
+    # streams/slots/coefficients untouched, trajectories re-based).
+    # Deterministic: 2x rerun identical via replay_digest (see evidence).
     from src.config import MACHINE_INDEX
 
-    rec = twin.run_episode(_SEED_CONGEST, _DELAY_A2_TAIL)  # raises first (red)
+    _FAULT = dict(_DELAY_A2_TAIL)
+    _FAULT["dur"] = 40
+    rec = twin.run_episode(
+        _SEED_CONGEST, _FAULT, enable_natural_breakdown=False
+    )  # raises first (red)
     states = rec["states"]
     c7_blocked = [t for t in range(_T) if states[MACHINE_INDEX["C7"]][t] == "BLOCKED"]
-    assert len(c7_blocked) == 18  # measured tail pileup breaks through x18
-    assert c7_blocked[0] == 275 and c7_blocked[-1] == 292  # measured band
+    assert len(c7_blocked) == 14  # measured tail pileup breaks through x14
+    assert c7_blocked[0] == 285 and c7_blocked[-1] == 298  # measured band
     assert all(b - a == 1 for a, b in pairwise(c7_blocked))
     assert all(150 <= t < _T for t in c7_blocked)  # post-fault cascade, in-episode
 

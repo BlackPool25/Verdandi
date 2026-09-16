@@ -53,6 +53,7 @@ from src.config import (
     CAL_WIN,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
+    INSPECT_DELAY_STEPS,
     MACHINE_INDEX,
     MACHINES,
     N_BUFFERS,
@@ -195,8 +196,8 @@ def _line_edges():
     splits PKG01/PKG02 to the PKG1/PKG2 packaging sinks (down None);
     ASM1->INSP0 via INSP01, INSP0->ASM2 via INSP02 (ASM12 retired).
 
-    Fork downs / join ups are tuples; run_episode resolves the primary
-    ([0]) for the serial _line_process until fork semantics land.
+    Fork downs / join ups are tuples; run_episode spawns the fork-aware
+    _line_process (tuple up/down) plus the dedicated INSP0 process.
     """
     return {
         "A0": (None, "A01"),
@@ -438,7 +439,14 @@ def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
 
 
 def _emit(shared, event, t, machine, detail):
-    """Append one channel-7 event dict (SIM_SPEC §8: t/machine/event/detail)."""
+    """Append one channel-7 event dict (SIM_SPEC §8: t/machine/event/detail).
+
+    Channel-7 vocabulary: FAULT_START/END, BLOCK_ON/OFF, STARVE_ON/OFF,
+    DOWN/UP, DIVERT_SBUF, AGV_WAIT, REJECT_ROUTE plus the topology-A trio
+    FAILOVER (B2 reroute to B7S, top-level from/to/reason), PACK_FORK
+    (PKG0 split to PKG1/PKG2, detail part/to), LATE_VERDICT (INSP0 release,
+    detail part/verdict).
+    """
     shared["events"].append(
         {"event": event, "t": t, "machine": machine, "detail": detail}
     )
@@ -521,6 +529,14 @@ def _line_process(env, spec, shared):
     natural DOWN), GT-exclusion (natural DOWNs never span fault windows),
     delay (cycle += d), loss (stale-hold thinning on rng_drop), origin-only
     signal deviation, and DEGRADE marking on the held part object.
+    Topology-A fork/join (up/down may be a tuple of stores): join ups pull
+    the first non-empty buffer in tuple order (B8: B7PB8, then B7SB8);
+    fork downs route per machine — B2 failover (B7S iff B7P DOWN or B7PB8
+    full at release, FAILOVER event, spill to the other fork buffer, both
+    full -> BLOCKED with no SBUF divert), C7 broadcast (stage to _C7TAIL
+    as-is plus a copy to C7PKG when it has space, tail full -> BLOCKED),
+    PKG0 round-robin (shared pkg_rr, first part -> PKG1, target full ->
+    other tail, both full -> BLOCKED with no SBUF divert).
     """
     name, idx = spec["name"], spec["idx"]
     cfg = MACHINES[name]
@@ -595,6 +611,15 @@ def _line_process(env, spec, shared):
                 part = {"id": pid, "line": name[0], "diverted": False, "flag": "OK"}
                 shared["flow"]["line_created"] += 1
                 held, rem, st, tput = True, cycle + _delay_d(fx, t), "RUN", 0
+            elif isinstance(up, tuple):
+                src = next((s for s in up if len(s.items) > 0), None)
+                if src is None:
+                    st, tput = "STARVED", 0
+                else:
+                    req = src.get()
+                    yield req
+                    part = req.value
+                    held, rem, st, tput = True, cycle + _delay_d(fx, t), "RUN", 0
             elif len(up.items) > 0:
                 req = up.get()
                 yield req
@@ -623,6 +648,80 @@ def _line_process(env, spec, shared):
             )
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
+        elif isinstance(down, tuple):
+            if name == "B2":
+                b7p_fx = shared["fx"].get("B7P", [])
+                b7p_down = _inj_down(b7p_fx, t) is not None or (
+                    t > 0 and shared["states"][MACHINE_INDEX["B7P"]][t - 1] == "DOWN"
+                )
+                pair, sib = down  # (B2B7P, B2B7S)
+                join = spec["stores"]["B7PB8"]
+                overflow = len(join.items) >= join.capacity
+                tgt = sib if (b7p_down or overflow) else pair
+                dest = (
+                    tgt
+                    if len(tgt.items) < tgt.capacity
+                    else (pair if tgt is sib else sib)
+                )
+                if dest is not None and len(dest.items) < dest.capacity:
+                    if dest is sib:
+                        reason = "DOWN" if b7p_down else "OVERFLOW"
+                        shared["events"].append(
+                            {
+                                "event": "FAILOVER",
+                                "t": t,
+                                "machine": name,
+                                "from": "B7P",
+                                "to": "B7S",
+                                "reason": reason,
+                                "detail": {
+                                    "from": "B7P",
+                                    "to": "B7S",
+                                    "reason": reason,
+                                },
+                            }
+                        )
+                    yield dest.put(part)
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
+                else:
+                    st, tput = "BLOCKED", 0
+            elif name == "C7":
+                tail, feed = down  # (_C7TAIL, C7PKG)
+                if len(tail.items) < tail.capacity:
+                    yield tail.put(part)
+                    if len(feed.items) < feed.capacity:
+                        yield feed.put(dict(part))
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
+                else:
+                    st, tput = "BLOCKED", 0
+            elif name == "PKG0":
+                first, second = (
+                    down if shared["pkg_rr"] % 2 == 0 else (down[1], down[0])
+                )
+                dest = (
+                    first
+                    if len(first.items) < first.capacity
+                    else (second if len(second.items) < second.capacity else None)
+                )
+                if dest is None:
+                    st, tput = "BLOCKED", 0
+                else:
+                    yield dest.put(part)
+                    shared["pkg_rr"] += 1
+                    to = "PKG1" if dest is down[0] else "PKG2"
+                    _emit(shared, "PACK_FORK", t, name, {"part": part["id"], "to": to})
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
+            else:
+                dest = next((s for s in down if len(s.items) < s.capacity), None)
+                if dest is None:
+                    st, tput = "BLOCKED", 0
+                else:
+                    yield dest.put(part)
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
         elif len(down.items) < down.capacity:
             yield down.put(part)
             held, rem, part = False, 0, None
@@ -651,6 +750,102 @@ def _line_process(env, spec, shared):
         if held and part is not None and _degrade_at(fx, t):
             # Channel-4 flag rides the part object downstream (never a
             # signal-channel copy — downstream machines see it on arrival).
+            part["flag"] = "DEGRADE"
+        _transition(shared, idx, name, prev, st, t, fault_id=fid)
+        prev = st
+        shared["held"][idx] = part if held else None
+        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        lspec = _loss_at(fx, t)
+        if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
+            val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
+        obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        yield env.timeout(1)
+
+
+def _insp0_process(env, up, down, shared):
+    """INSP0 inspection-delay node: ASM1 -> INSP0 -> ASM2 (normative Todo 3).
+
+    Holds each part exactly INSPECT_DELAY_STEPS (plus active delay-fault
+    extra via _delay_d), then releases with a late verdict: OK -> DEGRADE
+    on the part object (REJECT roll under an active INSP0 quality window
+    via _quality_rate, flowing to ASM2's existing REJECT routing).
+    Emits LATE_VERDICT {part, verdict} in the release step AFTER the put
+    and BEFORE the obs write (draw-order appendix). Signal/dev/loss/
+    breakdown behavior reuses the line-process helpers bit-identically
+    (fail draws, GT-exclusion, _degrade_at marking, loss stale-hold).
+    A full INSP02 holds release BLOCKED; an empty INSP01 STARVEs (which
+    holds ASM1 BLOCKED upstream via the full INSP01 — no loss).
+    """
+    name, idx = "INSP0", MACHINE_INDEX["INSP0"]
+    cfg = MACHINES[name]
+    mttf, mttr, sigma = cfg["mttf"], cfg["mttr"], cfg["sigma"]
+    rng = shared["noise"][idx]
+    obs_row = shared["obs"][idx]
+    state_row = shared["states"][idx]
+    tput_row = shared["tput"][idx]
+    fx = shared["fx"].get(name, [])
+    held, rem, part = False, 0, None
+    down_left, dfault, ar, prev = 0, None, 0.0, "RUN"
+    for t in range(T):
+        inj = _inj_down(fx, t)
+        if inj is not None and down_left > 0:
+            down_left = 0
+            _transition(shared, idx, name, "DOWN", "RUN", t)
+            prev = "RUN"
+        if _gw_at(shared, t):
+            down_left = 0  # GT-exclusion (see _line_process)
+        fid = inj["id"] if inj is not None else dfault
+        if inj is not None:
+            st, tput = "DOWN", 0
+            dfault = inj["id"]
+        elif down_left > 0:
+            st, tput = "DOWN", 0
+            down_left -= 1
+        elif (
+            shared["enable_bd"]
+            and not _gw_at(shared, t)
+            and shared["fail"].random() < 1.0 / mttf
+        ):
+            down_left = int(shared["fail"].geometric(1.0 / mttr)) - 1
+            st, tput = "DOWN", 0
+        elif not held:
+            if len(up.items) > 0:
+                req = up.get()
+                yield req
+                part = req.value
+                held, rem, st, tput = (
+                    True,
+                    INSPECT_DELAY_STEPS + _delay_d(fx, t),
+                    "RUN",
+                    0,
+                )
+            else:
+                st, tput = "STARVED", 0
+        elif rem > 1:
+            rem -= 1
+            st, tput = "RUN", 0
+        elif len(down.items) < down.capacity:
+            yield down.put(part)
+            rate = _quality_rate(shared, t, name)
+            if part.get("flag") != "REJECT":
+                if rate > 0.0 and shared["place"].random() < rate:
+                    part["flag"] = "REJECT"
+                elif part.get("flag") == "OK":
+                    part["flag"] = "DEGRADE"
+            _emit(
+                shared,
+                "LATE_VERDICT",
+                t,
+                name,
+                {"part": part["id"], "verdict": part["flag"]},
+            )
+            held, rem, part = False, 0, None
+            st, tput = "RUN", 1
+        else:
+            st, tput = "BLOCKED", 0
+        if inj is None:
+            dfault = None
+        if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
@@ -1142,6 +1337,7 @@ def run_episode(
         "parts": [],
         "pid": [0],
         "held": [None] * N_MACHINES,
+        "pkg_rr": 0,  # PKG0 round-robin counter: reset 0 at episode start
         "flow": {
             "line_created": 0,
             "asm_created": 0,
@@ -1167,22 +1363,34 @@ def run_episode(
     shared["rwk_ret"] = stores["RWK_RET"]
     edges = _line_edges()
     for name in _LINES:
+        if name == "INSP0":
+            # Dedicated inspection-delay process (hold + late verdict).
+            env.process(_insp0_process(env, stores["INSP01"], stores["INSP02"], shared))
+            continue
         up_key, down_key = edges[name]
-        # Fork downs / join ups are tuples; the serial process takes the
-        # primary ([0]) until fork semantics land.
-        if isinstance(up_key, tuple):
-            up_key = up_key[0]
-        if isinstance(down_key, tuple):
-            down_key = down_key[0]
+        # Fork downs / join ups resolve to store tuples; the fork-aware
+        # _line_process routes per machine (B2 failover, C7 broadcast,
+        # PKG0 round-robin) and joins pull first-non-empty.
+        up = (
+            tuple(stores[k] for k in up_key)
+            if isinstance(up_key, tuple)
+            else (stores[up_key] if up_key else None)
+        )
+        down = (
+            tuple(stores[k] for k in down_key)
+            if isinstance(down_key, tuple)
+            else (stores[down_key] if down_key else None)
+        )
         env.process(
             _line_process(
                 env,
                 {
                     "name": name,
                     "idx": MACHINE_INDEX[name],
-                    "up": stores[up_key] if up_key else None,
-                    "down": stores[down_key] if down_key else None,
+                    "up": up,
+                    "down": down,
                     "sbuf": stores["SBUF"],
+                    "stores": stores,
                 },
                 shared,
             )
