@@ -22,8 +22,6 @@ Traceability: docs/TEST_CASES.md TC-006b steps 1-4; docs/SIM_SPEC.md
 RWK0 rework cap), §5 quality/reject 15-40%, §8 channels 3/5/6/7.
 """
 
-from itertools import pairwise
-
 import pytest
 
 from src import twin
@@ -99,7 +97,13 @@ def test_agv_waits_logged_and_bounded():
     waits = rec["agv_waits"]
     assert all(set(w) >= {"t", "part", "hold", "wait"} for w in waits)
     assert all(w["wait"] >= 0 for w in waits)
-    assert all(w["t"] < _T for w in waits)
+    # Owner-approved option C re-pin (was: all w["t"] < _T): the
+    # land-grace drain phase lands in-flight xfers in [T, T+GRACE], so
+    # landings carry t up to _T + AGV_DRAIN_GRACE. xfer_open == 0 (the
+    # drainage proof) is asserted by tests/test_twin_duty.py.
+    from src.config import AGV_DRAIN_GRACE
+
+    assert all(w["t"] <= _T + AGV_DRAIN_GRACE for w in waits)
     assert len(waits) <= 3 * _T  # bounded: ≤ one kit per step per tail
 
 
@@ -152,8 +156,13 @@ def test_sbuf_occupancy_logged_and_drains():
     sbuf = rec["buffers"][buf_order.index("SBUF")]  # SBUF row by roster order
     assert len(sbuf) == _T
     assert all(0 <= lvl <= 30 for lvl in sbuf)
-    assert max(sbuf) > 0  # congestion at seed 777 must occupy SBUF
-    assert sbuf[-1] < max(sbuf)  # drains once an AGV frees
+    # Owner-approved option C re-pin (was: max(sbuf) > 0 and
+    # sbuf[-1] < max(sbuf)): AGV 2->3 drains SBUF within-step, so the
+    # per-step monitor never samples occupancy (row all zeros) even
+    # though DIVERT_SBUF events still fire (see
+    # test_sbuf_divert_process_finish_allowed). Pin the drain instead:
+    # SBUF ends empty.
+    assert sbuf[-1] == 0  # SBUF drains by T (AGV cap 3 keeps up)
 
 
 # --- (d) states + concrete probes --------------------------------------------
@@ -161,13 +170,16 @@ def test_sbuf_occupancy_logged_and_drains():
 
 def test_state_blocked_iff_downstream_full():
     # PROJECT GOAL: prove genuine fault→congestion causality through flow
-    # — BLOCKED occurs iff downstream is full. Topology-A locus: short
-    # lines absorb mid-line delay (no A-line pileup), so backpressure
-    # concentrates at the AGV-drained C7 tail stage — under strong
-    # delay-A2 at pin 287 only C7 BLOCKs, on its saturated _C7TAIL sink
-    # (final at cap 15); every BLOCKED cell holds its part (throughput 0).
-    # Cause that would break it: silenced BLOCKED emission, AGV drain
-    # detached from the tail, or RNG/draw-order drift moving the pin.
+    # — BLOCKED occurs iff downstream is full.
+    # Owner-approved option C re-pin (was: strong delay-A2 at pin 287
+    # BLOCKs only C7 x14 [285,298] with _C7TAIL final at cap 15): TAKT5
+    # takt-matching + AGV 2->3 eliminated tail saturation by design —
+    # buffers run empty so no fault within range can fill a cap-15
+    # buffer (needs ~75 steps at takt 5 vs max dur 40). The pin is now
+    # absorption: the strongest fault leaves zero BLOCKED anywhere AND
+    # no buffer at cap (both sides of the iff hold). Plant BLOCKED share
+    # 0.000 on all 5 clean duty seeds corroborates. If a future retime
+    # reintroduces saturation, this pin (and the pile-up bound) trips.
     from src.config import MACHINE_INDEX, MACHINES
 
     rec = twin.run_episode(_SEED_CONGEST, _DELAY_A2_TAIL)  # raises first (red)
@@ -177,13 +189,10 @@ def test_state_blocked_iff_downstream_full():
     blocked = [
         (m, t) for m in range(26) for t in range(_T) if states[m][t] == "BLOCKED"
     ]
-    assert blocked, "strong delay-A2 must BLOCK the C7 tail at pin 287"
-    assert {m for m, _ in blocked} == {c7}  # measured: only C7 (tail stage)
-    counts = rec.get("throughput", rec.get("counts", None))
-    assert counts is not None
-    assert all(counts[m][t] == 0 for m, t in blocked)  # BLOCKED holds part, emits 0
+    assert blocked == []  # TAKT5 absorbs the strongest delay fault: no BLOCKED
+    assert c7 not in {m for m, _ in blocked}  # C7 tail stage stays clear
     store_final = rec["flow_stats"]["store_final"]
-    assert store_final["_C7TAIL"] == MACHINES["C7"]["buffer_cap"] == 15
+    assert store_final["_C7TAIL"] < MACHINES["C7"]["buffer_cap"] == 15
     clean = twin.run_episode(_SEED_CONGEST, None)
     assert not any(
         s == "BLOCKED" for row in clean["states"] for s in row
@@ -225,6 +234,13 @@ def test_fault_delay_a2_backpressures_c7_tail():
     # Todo-2 serial placeholder and the shared fail-stream lottery
     # redistributed natural DOWNs, moving the old x18 [275,292] pin —
     # streams/slots/coefficients untouched, trajectories re-based).
+    # Owner-approved option C re-pin (was: C7 BLOCKED x14 contiguous
+    # [285,298]; Todo-3 pin x18 [275,292] before that): TAKT5 (C7 3->5 +
+    # AGV 2->3) drains the tail faster than the fault piles it — _C7TAIL
+    # final 1 vs cap 15, zero BLOCKED even at dur=40/BD-off. The
+    # backpressure phenomenon is absorbed by design, not by detector
+    # tuning; the pin now guards the absorption (any regression
+    # re-saturates the tail and trips len != 0).
     # Deterministic: 2x rerun identical via replay_digest (see evidence).
     from src.config import MACHINE_INDEX
 
@@ -235,10 +251,8 @@ def test_fault_delay_a2_backpressures_c7_tail():
     )  # raises first (red)
     states = rec["states"]
     c7_blocked = [t for t in range(_T) if states[MACHINE_INDEX["C7"]][t] == "BLOCKED"]
-    assert len(c7_blocked) == 14  # measured tail pileup breaks through x14
-    assert c7_blocked[0] == 285 and c7_blocked[-1] == 298  # measured band
-    assert all(b - a == 1 for a, b in pairwise(c7_blocked))
-    assert all(150 <= t < _T for t in c7_blocked)  # post-fault cascade, in-episode
+    assert c7_blocked == []  # TAKT5 absorbs: no tail pileup breakthrough
+    assert rec["flow_stats"]["store_final"]["_C7TAIL"] < 15  # tail drains
 
 
 def test_rework_asm0_kit_preserves_reject_and_passes():

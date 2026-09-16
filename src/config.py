@@ -26,9 +26,27 @@ CODE_VERSION = "twin-2.1.0-topology-A"
 INSPECT_DELAY_STEPS = 3
 
 # Shared resources (SIM_SPEC §2.2).
-AGV_CAP = 2
+# Owner-approved option C (bounded MINIPRO-24 retime, 2026-09-17): AGV_CAP
+# 2->3. Rationale: AGV drain throttles the C-line kit feed (C7 BLOCKED 45
+# steps/episode at cap 2, kit_C=0 vs kit_A=19/kit_B=18 backlog); in-memory
+# probe measured +5-6pp RUN with balanced-kit signature. Cap 3 keeps the
+# 2-queue gate shape (AGV_CAP+2) and the hold distribution unchanged.
+AGV_CAP = 3
 AGV_STEPS = (4, 8)  # ints: uniform transit per trip, sampled on rng_agv stream
 SBUF_CAP = 30
+# Owner-approved option C: land-grace bound for AGV drain accounting. An
+# xfer spawned at t_req lands at t_req+queue_wait+hold; the drain phase
+# runs the (already obs-silent) AGV processes until T+AGV_DRAIN_GRACE so
+# in-flight xfers land instead of leaking xfer_open. Bound = max hold (8):
+# covers any zero-wait tail spawn; the spawn guard covers the rest.
+AGV_DRAIN_GRACE = 8
+# Owner-approved option C: standby-scope decision for duty_cycle().
+# B7S (spare: ~1 failover/episode, idle by construction) and RWK0 (rework
+# loop: zero flow on clean episodes, idle by design) are EXCLUDED from the
+# plant duty mean. Rationale: counting redundancy/rework-by-design as
+# starved punishes spare capacity, not flow health. Scope change recorded
+# for SIM_SPEC Todo 10 (plant mean is now over 24 machines, not 26).
+STANDBY_EXCLUDED = frozenset({"B7S", "RWK0"})
 # Owner ruling 2026-09-12: process/finish divert, feed/form never; inspect
 # tails excluded — A9/B9/C7 ride the AGV path, never SBUF-direct
 # (guard `cfg["class"] in SBUF_DIVERT_CLASSES and name not in _TAILS`).
@@ -92,36 +110,52 @@ def _row(cls, base, sigma, cycle, mttf, mttr, buffer_cap, transit):
 # (interiors A3-A6/B3-B6/C3-C5 dropped, single B7 removed) + B7P/B7S
 # redundant pair + PKG0/PKG1/PKG2 packaging fork + INSP0 delay node
 # + ASM0,ASM1,ASM2,RWK0 cell.
+#
+# Owner-approved option C TAKT5 retime (2026-09-17): single-takt line
+# balancing at takt=5 (the form/kit cadence A1/B1/C1/ASM0/PKG0 already
+# ran). Every consumer at-or-slower than its producer kills structural
+# upstream-empty STARVED. Changed cycles old->new with reason:
+# feed 4->5 (A0,B0,C0: match takt, stop overproduction/BLOCKED risk);
+# process 6->5 (A2,A7,B2,B7P,C2,C6: feed the finish tier 1:1);
+# finish 4->5 (A8,B8: match slowed producers, was ~1/3 idle);
+# inspect-tail 3->5 (A9,B9,C7: match feeders; C7 AGV-drained);
+# assembly-join 6->5 (ASM1), test 3->5 (ASM2: match kit cadence);
+# finish-sink 4->10 (PKG1,PKG2: PKG0@5 round-robins, each tail fed 1/10).
+# Frozen: A1/B1/C1 (already 5), PKG0/ASM0 (already 5), INSP0 (2:
+# delay-paced via INSPECT_DELAY_STEPS, cycle knob is dead), B7S (6:
+# spare, excluded from duty mean; pair asymmetry only in failover
+# windows), RWK0 (8: rework loop, excluded from duty mean).
+# Classes, mttf/mttr, buffer caps, transits, signal coefficients all frozen.
 _MACHINE_ROWS = [
-    ("A0", _row("feed", 50.0, 1.0, 4, 2000, 15, 20, 2)),
+    ("A0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("A1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
-    ("A2", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A7", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A8", _row("finish", 55.0, 1.1, 4, 1200, 10, 15, 3)),
-    ("A9", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
-    ("B0", _row("feed", 50.0, 1.0, 4, 2000, 15, 20, 2)),
+    ("A2", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("A7", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("A8", _row("finish", 55.0, 1.1, 5, 1200, 10, 15, 3)),
+    ("A9", _row("inspect-tail", 48.0, 1.4, 5, 1500, 8, 15, None)),
+    ("B0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("B1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
-    ("B2", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B7P", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
+    ("B2", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("B7P", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
     ("B7S", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B8", _row("finish", 55.0, 1.1, 4, 1200, 10, 15, 3)),
-    ("B9", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
-    ("C0", _row("feed", 50.0, 1.0, 4, 2000, 15, 20, 2)),
+    ("B8", _row("finish", 55.0, 1.1, 5, 1200, 10, 15, 3)),
+    ("B9", _row("inspect-tail", 48.0, 1.4, 5, 1500, 8, 15, None)),
+    ("C0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("C1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
-    ("C2", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("C6", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
+    ("C2", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("C6", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
     # C7 "finish" label is line shorthand only (Table 3.1 note); params are inspect.
     # buffer_cap=15 (tail cap governs dedicated _C7TAIL store); mttr=8 is repair, not cap.
-    ("C7", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
+    ("C7", _row("inspect-tail", 48.0, 1.4, 5, 1500, 8, 15, None)),
     ("PKG0", _row("assembly-kit", 65.0, 1.3, 5, 1000, 12, 25, 2)),
-    ("PKG1", _row("finish", 55.0, 1.1, 4, 1200, 10, 15, None)),
-    ("PKG2", _row("finish", 55.0, 1.1, 4, 1200, 10, 15, None)),
+    ("PKG1", _row("finish", 55.0, 1.1, 10, 1200, 10, 15, None)),
+    ("PKG2", _row("finish", 55.0, 1.1, 10, 1200, 10, 15, None)),
     # ASM0 cycle 5 explicit per Table 3.1 (assembly/kit).
     ("ASM0", _row("assembly-kit", 65.0, 1.3, 5, 1000, 12, 25, 2)),
-    ("ASM1", _row("assembly-join", 66.0, 1.3, 6, 1000, 12, 25, 2)),
+    ("ASM1", _row("assembly-join", 66.0, 1.3, 5, 1000, 12, 25, 2)),
     ("INSP0", _row("test", 45.0, 2.0, 2, 1200, 10, 25, 2)),
     # ASM2 σ=2.0 kept noisy per spec — do not quiet it; VETO_ASM2 compensates (§7).
-    ("ASM2", _row("test", 45.0, 2.0, 3, 1200, 10, None, None)),
+    ("ASM2", _row("test", 45.0, 2.0, 5, 1200, 10, None, None)),
     ("RWK0", _row("rework", 62.0, 1.6, 8, 900, 18, 10, 5)),
 ]
 

@@ -54,6 +54,7 @@ import simpy
 
 from src.config import (
     AGV_CAP,
+    AGV_DRAIN_GRACE,
     AGV_STEPS,
     BUFFERS,
     CAL_WIN,
@@ -69,6 +70,7 @@ from src.config import (
     REWORK_MAX_PASSES,
     SBUF_CAP,
     SBUF_DIVERT_CLASSES,
+    STANDBY_EXCLUDED,
     STATE_OFFSETS,
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
@@ -882,9 +884,12 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     yield env.timeout(hold)
     t_del = int(env.now)
     agv.release(req)
-    if t_del >= T:
-        # Episode ended mid-transfer: part stays counted as in-flight
-        # (conserved via flow xfer_open bucket), never double-logged.
+    if t_del > T + AGV_DRAIN_GRACE:
+        # Beyond the land-grace drain phase: part stays counted as
+        # in-flight (conserved via flow xfer_open bucket), never
+        # double-logged. Unreachable under the spawn guard (which admits
+        # only xfers that land by T+AGV_DRAIN_GRACE); kept as the
+        # conservation backstop.
         return
     kit[part["line"]].append(part)
     shared["flow"]["xfer_open"] -= 1
@@ -925,6 +930,20 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
     def _gate_open():
         return agv.count + len(agv.queue) < AGV_CAP + 2
 
+    def _spawn_ok():
+        # Owner-approved option C cap-aware spawn guard. A spawn at `now`
+        # lands at now+queue_wait+hold with queue_wait data-dependent, so
+        # no static cutoff guarantees drainage; admit a spawn only when
+        # its worst-case landing still falls inside the drain phase:
+        # now + est_wait + max_hold <= T + AGV_DRAIN_GRACE, where est_wait
+        # serializes the pipeline ahead ((count+queue) x max_hold / cap).
+        # Deferred parts wait in tail buffers (never lost); the guard
+        # converts unlandable xfer_open into bounded tail occupancy.
+        now = int(env.now)
+        ahead = agv.count + len(agv.queue)
+        est_wait = ahead * AGV_STEPS[1] // AGV_CAP
+        return now + est_wait + AGV_STEPS[1] <= T + AGV_DRAIN_GRACE
+
     def _spawn(part, src):
         shared["flow"]["xfer_open"] += 1
         env.process(_agv_xfer(env, agv, rng_agv, part, src, kit, shared, int(env.now)))
@@ -932,12 +951,12 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
     while True:
         if int(env.now) >= T:
             return
-        if len(sbuf.items) > 0 and _gate_open():
+        if len(sbuf.items) > 0 and _gate_open() and _spawn_ok():
             req = sbuf.get()
             yield req
             _spawn(req.value, "SBUF")
         for store, name in tails:
-            if len(store.items) > 0 and _gate_open():
+            if len(store.items) > 0 and _gate_open() and _spawn_ok():
                 req = store.get()
                 yield req
                 _spawn(req.value, name)
@@ -1422,6 +1441,14 @@ def run_episode(
     buf_rows = [[0] * T for _ in range(N_BUFFERS)]
     env.process(_monitor(env, stores, buf_order, buf_rows))
     env.run(until=T)
+    # Owner-approved option C land-grace drain phase: every machine,
+    # monitor, fault-clock, and dispatcher loop is `for t in range(T)` /
+    # `now >= T -> return` bounded, so at T all obs rows are fully written
+    # and only in-flight _agv_xfer timeouts/requests remain pending. Run
+    # until T+AGV_DRAIN_GRACE so they land (kit append, xfer_open -= 1)
+    # instead of leaking; obs shapes stay T-long, no rng draws occur in
+    # the grace window, and fault marks (validated t0+dur <= T) are done.
+    env.run(until=T + AGV_DRAIN_GRACE)
     # Post-run store census (exact WIP audit — the channel-6 series tail can
     # miss last-step puts/gets that land after the monitor's final record).
     store_final = {k: len(stores[k].items) for k in buf_order}
@@ -1484,6 +1511,52 @@ def run_episode(
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
         "faults": specs,
+    }
+
+
+def duty_cycle(record: dict) -> dict:
+    # Owner-approved option C standby scope: B7S (spare, idle by
+    # construction) + RWK0 (rework loop, zero flow on clean episodes) are
+    # excluded from the plant mean via STANDBY_EXCLUDED. Scope change (26
+    # -> 24 machines) recorded for SIM_SPEC Todo 10.
+    states = record["states"]
+    T_ = record["T"]
+    kept = [i for n, i in MACHINE_INDEX.items() if n not in STANDBY_EXCLUDED]
+    tot = len(kept) * T_
+    edges = _line_edges()
+    down_of: dict[str, str] = {}
+    for m, (up, _down) in edges.items():
+        for b in [up] if isinstance(up, str) else list(up or []):
+            down_of.setdefault(b, m)
+    down_of["INSP02"] = "ASM2"
+    buf_order = list(BUFFERS)
+    violations = []
+    for b, ds in down_of.items():
+        if b not in BUFFERS:
+            continue
+        row = record["buffers"][buf_order.index(b)]
+        srow = states[MACHINE_INDEX[ds]]
+        cap = BUFFERS[b]
+        t = 0
+        while t < T_:
+            if row[t] >= cap:
+                s = t
+                while t < T_ and row[t] >= cap:
+                    t += 1
+                if t - s >= 30 and any(srow[k] == "STARVED" for k in range(s, t)):
+                    violations.append(
+                        {"buffer": b, "downstream": ds, "start": s, "length": t - s}
+                    )
+            else:
+                t += 1
+    return {
+        "run_share": sum(1 for i in kept for s in states[i] if s == "RUN") / tot,
+        "starved_share": sum(1 for i in kept for s in states[i] if s == "STARVED")
+        / tot,
+        "blocked_share": sum(1 for i in kept for s in states[i] if s == "BLOCKED")
+        / tot,
+        "xfer_open": record["flow_stats"]["xfer_open"],
+        "pileup_violations": violations,
     }
 
 

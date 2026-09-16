@@ -81,10 +81,17 @@ def test_new_table31_rows():
     }
     for name in ("PKG1", "PKG2"):
         assert MACHINES[name] == {
-            "class": "finish", "base": 55.0, "sigma": 1.1, "cycle": 4,
+            "class": "finish", "base": 55.0, "sigma": 1.1, "cycle": 10,
             "mttf": 1200, "mttr": 10, "buffer_cap": 15, "transit": None,
         }, name
-    for name in ("B7P", "B7S"):
+    # Owner-approved option C TAKT5: B7P 6->5 (pair primary aligns to
+    # takt); B7S stays 6 (spare, excluded from duty mean — pair asymmetry
+    # only inside failover windows).
+    assert MACHINES["B7P"] == {
+        "class": "process", "base": 70.0, "sigma": 1.5, "cycle": 5,
+        "mttf": 800, "mttr": 20, "buffer_cap": 25, "transit": 3,
+    }
+    for name in ("B7S",):
         assert MACHINES[name] == {
             "class": "process", "base": 70.0, "sigma": 1.5, "cycle": 6,
             "mttf": 800, "mttr": 20, "buffer_cap": 25, "transit": 3,
