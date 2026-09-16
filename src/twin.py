@@ -95,7 +95,7 @@ _CHANNELS = (
 )
 
 # Independent oracle: representative-machine subset per SIM_SPEC sect 5,
-# including the running example F-21 (drift, B5, t0=150, dur=12, 5.2).
+# including the running example F-21 (drift, B2, t0=150, dur=12, 5.2).
 _ORACLE_REP = (
     {
         "id": "F-06",
@@ -108,7 +108,7 @@ _ORACLE_REP = (
     {
         "id": "F-21",
         "class": "drift",
-        "origin": "B5",
+        "origin": "B2",
         "t0": 150,
         "dur": 12,
         "mag_sigma": 5.2,
@@ -116,7 +116,7 @@ _ORACLE_REP = (
     {
         "id": "F-22",
         "class": "bias",
-        "origin": "B6",
+        "origin": "A7",
         "t0": 160,
         "dur": 12,
         "mag_sigma": 5.0,
@@ -124,7 +124,7 @@ _ORACLE_REP = (
     {
         "id": "F-23",
         "class": "delay",
-        "origin": "B4",
+        "origin": "C2",
         "t0": 170,
         "dur": 12,
         "extra": {"d": 4},
@@ -132,7 +132,7 @@ _ORACLE_REP = (
     {
         "id": "F-24",
         "class": "loss",
-        "origin": "B7",
+        "origin": "B7P",
         "t0": 180,
         "dur": 12,
         "extra": {"drop_rate": 0.2},
@@ -1503,8 +1503,8 @@ def _try_place(rng, taken, durs, tries=50):
 def build_faults(seed: int = 12345) -> list[dict]:
     """Build the deterministic fault manifest for a master seed.
 
-    Full machine x class cross-product (32 machines x 7 classes = 224
-    rows); the oracle representative subset (incl. F-21 drift B5 t0=150
+    Full machine x class cross-product (26 machines x 7 classes = 182
+    rows); the oracle representative subset (incl. F-21 drift B2 t0=150
     dur=12 mag=5.2) is pinned with rep=True. t0 ~ uniform on [CAL_WIN,
     300-dur] from rng_place = children[32]; same-machine windows keep a
     ≥5-step gap (uniform draw + bounded retry; dur-8 fallback, which
@@ -1646,7 +1646,7 @@ _CAL_SEEDS = (7, 11, 13)
 _F21_SHAPE = {
     "id": "F-21",
     "class": "drift",
-    "origin": "B5",
+    "origin": "B2",
     "t0": 150,
     "dur": 12,
     "mag_sigma": 5.2,
@@ -1716,8 +1716,12 @@ def _partition_of_machine(name):
         raise ValueError("manifest row missing origin machine")
     if name.startswith("ASM"):
         return "cell"
+    if name.startswith("INSP"):
+        return "cell"
     if name.startswith("RWK"):
         return "rework"
+    if name.startswith("PKG"):
+        return "line-C"
     if name.startswith("A"):
         return "line-A"
     if name.startswith("B"):

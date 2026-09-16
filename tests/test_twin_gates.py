@@ -49,7 +49,7 @@ CHANNELS = [
 CLASSES = ["spike", "drift", "bias", "delay", "loss", "breakdown", "quality"]
 
 # INDEPENDENT oracle: representative-machine subset per SIM_SPEC sect 5,
-# including the running example F-21 (drift, B5, t0=150, dur=12, mag=5.2σ;
+# including the running example F-21 (drift, B2, t0=150, dur=12, mag=5.2σ;
 # SIM_SPEC:251). Kept as a literal constant so T8 cannot fit the validator
 # to the manifest under test.
 ORACLE_REP_FAULTS = [
@@ -64,7 +64,7 @@ ORACLE_REP_FAULTS = [
     {
         "id": "F-21",
         "class": "drift",
-        "origin": "B5",
+        "origin": "B2",
         "t0": 150,
         "dur": 12,
         "mag_sigma": 5.2,
@@ -72,7 +72,7 @@ ORACLE_REP_FAULTS = [
     {
         "id": "F-22",
         "class": "bias",
-        "origin": "B6",
+        "origin": "A7",
         "t0": 160,
         "dur": 12,
         "mag_sigma": 5.0,
@@ -80,7 +80,7 @@ ORACLE_REP_FAULTS = [
     {
         "id": "F-23",
         "class": "delay",
-        "origin": "B4",
+        "origin": "C2",
         "t0": 170,
         "dur": 12,
         "extra": {"d": 4},
@@ -88,7 +88,7 @@ ORACLE_REP_FAULTS = [
     {
         "id": "F-24",
         "class": "loss",
-        "origin": "B7",
+        "origin": "B7P",
         "t0": 180,
         "dur": 12,
         "extra": {"drop_rate": 0.2},
@@ -173,7 +173,7 @@ def test_coverage_rep_subset_oracle():
     assert gaps == []
     assert any(
         f["id"] == "F-21"
-        and f["origin"] == "B5"
+        and f["origin"] == "B2"
         and f["t0"] == 150
         and f["dur"] == 12
         and f["mag_sigma"] == 5.2
@@ -208,7 +208,7 @@ def test_manifest_coverage_declared_not_measured_decision():
     assert "declared" in doc.lower() and "measured" in doc.lower()
     manifest = twin.build_faults()
     rows = twin.manifest_coverage_rows(manifest)
-    assert len(rows) == len(manifest) == 32 * 7
+    assert len(rows) == len(manifest) == 26 * 7
     for r in rows:
         assert r["channels"] == list(CHANNELS)  # declared, not measured
     assert twin.validate_coverage(rows, ORACLE_REP_FAULTS) == []
@@ -227,7 +227,7 @@ _DETERMINISM_FAULTS = [
     {
         "id": "F-21",
         "class": "drift",
-        "origin": "B5",
+        "origin": "B2",
         "t0": 150,
         "dur": 12,
         "mag_sigma": 5.2,
@@ -235,7 +235,7 @@ _DETERMINISM_FAULTS = [
     {
         "id": "F-12",
         "class": "bias",
-        "origin": "A4",
+        "origin": "A7",
         "t0": 160,
         "dur": 12,
         "mag_sigma": 5.0,
@@ -243,7 +243,7 @@ _DETERMINISM_FAULTS = [
     {
         "id": "F-14",
         "class": "delay",
-        "origin": "A5",
+        "origin": "C2",
         "t0": 170,
         "dur": 12,
         "extra": {"d": 4},
@@ -251,7 +251,7 @@ _DETERMINISM_FAULTS = [
     {
         "id": "F-16",
         "class": "loss",
-        "origin": "A6",
+        "origin": "B7P",
         "t0": 180,
         "dur": 12,
         "extra": {"drop_rate": 0.2},

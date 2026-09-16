@@ -139,7 +139,7 @@ def test_cal_win_zero_faults_before_120():
 def test_cal_win_t0_spread_uniform():
     faults = twin.build_faults(777)  # raises first (red)
     t0s = [f["t0"] for f in faults if not f.get("rep")]
-    assert len(t0s) >= 200
+    assert len(t0s) == 26 * 7 - 7  # 182 rows, 7 oracle reps pinned
     at_floor = sum(1 for t in t0s if t == 120)
     assert at_floor < 0.10 * len(t0s), f"cursor-packed: {at_floor}/{len(t0s)} at CAL_WIN"
     edges = [120, 163, 206, 249, 293]
