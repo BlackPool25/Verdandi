@@ -53,7 +53,7 @@ describe("T8 panel equality vs live tick payload", () => {
       // Given: the live tick row at this step + one probe per class
       const tick = panelTickAt(step);
       const probes: Record<string, string> = {
-        feed: "A0", form: "A1", process: "B5", finish: "A8",
+        feed: "A0", form: "A1", process: "B2", finish: "A8",
         "inspect-tail": "A9", "assembly-kit": "ASM0", "assembly-join": "ASM1",
         test: "ASM2", rework: "RWK0",
       };

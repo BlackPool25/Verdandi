@@ -21,51 +21,47 @@ export interface LayoutSize {
 }
 
 const FLOOR_POSITIONS: Readonly<Record<string, { readonly x: number; readonly y: number }>> = {
-  // Line A: 10 machines (Machining Line)
+  // Line A: 6 machines (Machining Line; A3-A6 cut, A2->A7 gap)
   A0: { x: 80, y: 100 },
   A1: { x: 230, y: 100 },
   A2: { x: 380, y: 100 },
-  A3: { x: 530, y: 100 },
-  A4: { x: 680, y: 100 },
-  A5: { x: 830, y: 100 },
-  A6: { x: 980, y: 100 },
-  A7: { x: 1130, y: 100 },
-  A8: { x: 1280, y: 100 },
-  A9: { x: 1430, y: 100 },
+  A7: { x: 530, y: 100 },
+  A8: { x: 680, y: 100 },
+  A9: { x: 830, y: 100 },
 
-  // Line B: 10 machines (Forming & Treatment Line)
+  // Line B: 7 machines (Forming & Treatment Line; B3-B6 cut, B7 -> B7P/B7S pair)
   B0: { x: 80, y: 240 },
   B1: { x: 230, y: 240 },
   B2: { x: 380, y: 240 },
-  B3: { x: 530, y: 240 },
-  B4: { x: 680, y: 240 },
-  B5: { x: 830, y: 240 },
-  B6: { x: 980, y: 240 },
-  B7: { x: 1130, y: 240 },
-  B8: { x: 1280, y: 240 },
-  B9: { x: 1430, y: 240 },
+  B7P: { x: 530, y: 240 },
+  B7S: { x: 530, y: 330 },
+  B8: { x: 680, y: 240 },
+  B9: { x: 830, y: 240 },
 
-  // Line C: 8 machines (Secondary Stamping Line)
-  C0: { x: 80, y: 380 },
-  C1: { x: 230, y: 380 },
-  C2: { x: 380, y: 380 },
-  C3: { x: 530, y: 380 },
-  C4: { x: 680, y: 380 },
-  C5: { x: 830, y: 380 },
-  C6: { x: 980, y: 380 },
-  C7: { x: 1130, y: 380 },
+  // Line C: 5 machines (Secondary Stamping Line; C3-C5 cut, C2->C6 gap)
+  C0: { x: 80, y: 420 },
+  C1: { x: 230, y: 420 },
+  C2: { x: 380, y: 420 },
+  C6: { x: 530, y: 420 },
+  C7: { x: 680, y: 420 },
 
   // Logistics & Store Nodes
-  _C7TAIL: { x: 1280, y: 380 },
+  _C7TAIL: { x: 830, y: 420 },
   SBUF: { x: 1610, y: 140 },
 
-  // Assembly Cell: East of lines
+  // Packaging fork (C7PKG feed -> PKG0 -> PKG1/PKG2 sinks)
+  PKG0: { x: 980, y: 420 },
+  PKG1: { x: 1130, y: 420 },
+  PKG2: { x: 1055, y: 540 },
+
+  // Assembly Cell: East of lines (ASM1->INSP0->ASM2; ASM12 retired)
   ASM0: { x: 1780, y: 240 },
   ASM1: { x: 1940, y: 240 },
-  ASM2: { x: 2100, y: 240 },
+  INSP0: { x: 2100, y: 240 },
+  ASM2: { x: 2260, y: 240 },
 
   // Rework Bay
-  RWK0: { x: 1940, y: 380 },
+  RWK0: { x: 2100, y: 380 },
 };
 
 // Precompute layout on topology change ONLY (never per tick).

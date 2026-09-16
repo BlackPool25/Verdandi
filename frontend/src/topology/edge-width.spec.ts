@@ -30,8 +30,10 @@ describe("bufferIdForEdge", () => {
   it("line-gap and assembly labels map to their buffer id", () => {
     expect(bufferIdForEdge(byId("e-A0-A1"))).toBe("A01");
     expect(bufferIdForEdge(byId("e-C6-C7"))).toBe("C67");
+    expect(bufferIdForEdge(byId("e-B2-B7P"))).toBe("B2B7P");
     expect(bufferIdForEdge(byId("e-ASM0-ASM1"))).toBe("ASM01");
-    expect(bufferIdForEdge(byId("e-ASM1-ASM2"))).toBe("ASM12");
+    expect(bufferIdForEdge(byId("e-ASM1-INSP0"))).toBe("INSP01");
+    expect(bufferIdForEdge(byId("e-INSP0-ASM2"))).toBe("INSP02");
   });
 
   it("tail-stage GA9/GB9 map; _C7TAIL store edge has no buffer", () => {
@@ -52,11 +54,11 @@ describe("bufferIdForEdge", () => {
     expect(bufferIdForEdge(byId("e-RWK0-ASM0"))).toBeNull();
   });
 
-  it("33 of 36 edges track a buffer; only the 3 storeless edges stay at width 1", () => {
+  it("28 of 31 edges track a buffer; only the 3 storeless edges stay at width 1", () => {
     expect(PINNED_EDGES).toHaveLength(EXPECTED_EDGE_COUNT);
     const mapped = PINNED_EDGES.filter((e) => bufferIdForEdge(e) !== null);
     const flat = PINNED_EDGES.filter((e) => bufferIdForEdge(e) === null);
-    expect(mapped).toHaveLength(33);
+    expect(mapped).toHaveLength(28);
     expect(flat.map((e) => e.id).sort()).toEqual(
       ["e-C7-tail", "e-RWK0-ASM0", "e-tail-kit"].sort(),
     );

@@ -16,7 +16,7 @@ export const FACEPLATE_IDS: readonly string[] = [
   "A2",
   "A8",
   "A9",
-  "B5",
+  "B2",
   "C7",
   "ASM1",
   "ASM2",

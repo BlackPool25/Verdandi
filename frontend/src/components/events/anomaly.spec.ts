@@ -115,26 +115,35 @@ describe("bridge fault normalization", () => {
 });
 
 describe("depth-1 same-step neighbor highlight", () => {
-  it("B5 neighbors are exactly B4 and B6 (direct buffer share, depth-1)", () => {
-    expect([...neighborsOf("B5")].sort()).toEqual(["B4", "B6"]);
+  const F21_B2: FaultSpec = { ...F21, origin: "B2" };
+  const RUN_B2: Readonly<Record<string, string>> = {
+    B1: "RUN",
+    B2: "RUN",
+    B7P: "RUN",
+    B7S: "RUN",
+    B8: "RUN",
+  };
+
+  it("B2 neighbors are exactly B1, B7P and B7S (fork/join, depth-1)", () => {
+    expect([...neighborsOf("B2")].sort()).toEqual(["B1", "B7P", "B7S"]);
   });
 
   it("highlights BLOCKED/STARVED direct neighbors on the same step only", () => {
-    const blocked = { ...RUN_STATES, B6: "BLOCKED" };
-    expect(neighborHighlightFor("B6", 155, [F21], blocked)).toBe(true);
-    const starved = { ...RUN_STATES, B4: "STARVED" };
-    expect(neighborHighlightFor("B4", 155, [F21], starved)).toBe(true);
+    const blocked = { ...RUN_B2, B7P: "BLOCKED" };
+    expect(neighborHighlightFor("B7P", 155, [F21_B2], blocked)).toBe(true);
+    const starved = { ...RUN_B2, B1: "STARVED" };
+    expect(neighborHighlightFor("B1", 155, [F21_B2], starved)).toBe(true);
     // RUN neighbor: no highlight even inside the GT window.
-    expect(neighborHighlightFor("B6", 155, [F21], RUN_STATES)).toBe(false);
+    expect(neighborHighlightFor("B7P", 155, [F21_B2], RUN_B2)).toBe(false);
     // Same BLOCKED state outside the GT window: no highlight.
-    expect(neighborHighlightFor("B6", 149, [F21], blocked)).toBe(false);
-    expect(neighborHighlightFor("B6", 162, [F21], blocked)).toBe(false);
+    expect(neighborHighlightFor("B7P", 149, [F21_B2], blocked)).toBe(false);
+    expect(neighborHighlightFor("B7P", 162, [F21_B2], blocked)).toBe(false);
   });
 
-  it("never reaches depth-2 (B7 is not a B5 neighbor)", () => {
-    expect(neighborsOf("B5")).not.toContain("B7");
-    const blockedFar = { ...RUN_STATES, B7: "BLOCKED" };
-    expect(neighborHighlightFor("B7", 155, [F21], blockedFar)).toBe(false);
+  it("never reaches depth-2 (B8 is not a B2 neighbor)", () => {
+    expect(neighborsOf("B2")).not.toContain("B8");
+    const blockedFar = { ...RUN_B2, B8: "BLOCKED" };
+    expect(neighborHighlightFor("B8", 155, [F21_B2], blockedFar)).toBe(false);
   });
 });
 
@@ -274,6 +283,6 @@ describe("scope fidelity: forbidden tokens absent from feed sources", () => {
     for (const token of ["depth-2", "depth: 2", "maxdepth", "depth > 1"]) {
       expect(src, `anomaly.ts must not contain ${token}`).not.toContain(token);
     }
-    expect([...neighborsOf("B5")].sort()).toEqual(["B4", "B6"]);
+    expect([...neighborsOf("B2")].sort()).toEqual(["B1", "B7P", "B7S"]);
   });
 });

@@ -1,17 +1,18 @@
 import { MACHINE_META } from "../components/panels/machineMeta";
+import { EXPECTED_EDGE_COUNT } from "./edges";
 import { spriteFor, type MachineNodeDatum, type SpriteClass } from "./types";
 
-// 34 nodes: 32 machines (A0-A9, B0-B9, C0-C7, ASM0/1/2, RWK0) + SBUF + _C7TAIL.
-// Roster mirrors src/config.py machine order; SBUF/_C7TAIL mirror the twin's
+// 28 nodes: 26 topology-A machines in MACHINE_INDEX order
+// (A0,A1,A2,A7,A8,A9 / B0,B1,B2,B7P,B7S,B8,B9 / C0,C1,C2,C6,C7 /
+// PKG0,PKG1,PKG2 / ASM0,ASM1,INSP0,ASM2,RWK0) + SBUF + _C7TAIL.
+// Roster mirrors src/config.py MACHINE_INDEX; SBUF/_C7TAIL mirror the twin's
 // AGV-drained stores (twin _TAIL_BUF + SBUF shed).
 const MACHINES: readonly string[] = [
-  ...Array.from({ length: 10 }, (_, i) => `A${i}`),
-  ...Array.from({ length: 10 }, (_, i) => `B${i}`),
-  ...Array.from({ length: 8 }, (_, i) => `C${i}`),
-  "ASM0",
-  "ASM1",
-  "ASM2",
-  "RWK0",
+  "A0", "A1", "A2", "A7", "A8", "A9",
+  "B0", "B1", "B2", "B7P", "B7S", "B8", "B9",
+  "C0", "C1", "C2", "C6", "C7",
+  "PKG0", "PKG1", "PKG2",
+  "ASM0", "ASM1", "INSP0", "ASM2", "RWK0",
 ] as const;
 
 export interface PinnedNode {
@@ -34,4 +35,12 @@ function datumFor(id: string): MachineNodeDatum {
   return { label: id, kind: "machine" as const, cls, spriteId: spriteFor(cls) };
 }
 
-export const EXPECTED_NODE_COUNT = 34;
+export const EXPECTED_NODE_COUNT = 28;
+
+export function assertTopologyCounts(nodeCount: number, edgeCount: number): void {
+  if (nodeCount !== EXPECTED_NODE_COUNT || edgeCount !== EXPECTED_EDGE_COUNT) {
+    throw new Error(
+      `topology count mismatch: expected ${EXPECTED_NODE_COUNT}/${EXPECTED_EDGE_COUNT}, got ${nodeCount}/${edgeCount}`,
+    );
+  }
+}

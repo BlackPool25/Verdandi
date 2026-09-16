@@ -11,7 +11,7 @@ import { SBUF_CAP, SBUF_HIGH } from "./machineMeta";
 
 // L4 faceplate rail: the 9 class probes resolve against the live tick row
 // with verbatim config sections; SBUF/_C7TAIL specials stay honest.
-const EXPECTED_IDS = ["A0", "A2", "A8", "A9", "B5", "C7", "ASM1", "ASM2", "RWK0"];
+const EXPECTED_IDS = ["A0", "A2", "A8", "A9", "B2", "C7", "ASM1", "ASM2", "RWK0"];
 
 interface FixtureShape {
   readonly machine_order: readonly string[];
@@ -82,7 +82,7 @@ describe("L4 faceplate rail", () => {
     expect(tailPathFor("A9")).toBe("AGV");
     expect(tailPathFor("C7")).toBe("AGV");
     expect(tailPathFor("A0")).toBe("never-diverts");
-    expect(tailPathFor("B5")).toBe("SBUF-eligible");
+    expect(tailPathFor("B2")).toBe("SBUF-eligible");
     expect(tailPathFor("RWK0")).toBe("SBUF-eligible");
   });
 
