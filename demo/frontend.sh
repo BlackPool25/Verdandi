@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# T11 end-to-end demo: bridge up -> seed 777 F-21 (drift@B5 t0=150 dur=12
-# mag 5.2) -> open /sim -> autoplay 1x -> pause at t=160 -> step ->
+# T11 end-to-end demo: bridge up -> seed 777 F-21 (drift@B2 t0=150 dur=12
+# mag 5.2, topology-A schema v2) -> open /sim -> autoplay 1x -> pause at t=160 -> step ->
 # screenshot. Idempotent: reuses healthy servers, else restarts own.
 # Logs to .omo/evidence/task-11-verdandi-pixel-twin-frontend.log, video to
 # .omo/evidence/task-11-verdandi-pixel-twin-frontend.webm.
@@ -46,14 +46,14 @@ fi
 
 # --- seed 777 F-21, digest must match the check_replay FAULT ----------------
 SEED_RESP="$(curl -s -m 10 -X POST "$BRIDGE/episode" -H 'content-type: application/json' \
-  -d '{"seed":777,"faults":{"id":"F-21","class":"drift","origin":"B5","t0":150,"dur":12,"mag_sigma":5.2}}')" \
+  -d '{"seed":777,"faults":{"id":"F-21","class":"drift","origin":"B2","t0":150,"dur":12,"mag_sigma":5.2}}')" \
   || fail "POST /episode failed. ACTION: confirm the bridge is healthy at $BRIDGE/health, then re-run demo/frontend.sh."
 EP_ID="$(echo "$SEED_RESP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["episode_id"])')" \
   || fail "POST /episode returned non-JSON. ACTION: restart the bridge and re-run demo/frontend.sh."
 DIGEST="$(echo "$SEED_RESP" | python3 -c 'import json,sys; print(json.load(sys.stdin)["replay_digest"])')"
 log "seed-777 F-21 episode=$EP_ID digest=$DIGEST"
-[ "$DIGEST" = "d2b4fb230222193452d2e678844f6cffe3d733571fec0b80aedb0a7b487dde20" ] \
-  || fail "digest mismatch for seed 777 F-21 (want d2b4fb23.., got $DIGEST). ACTION: run 'python3 services/sim_bridge/scripts/check_replay.py --seed 777' and fix the twin/bridge before re-running."
+[ "$DIGEST" = "523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4" ] \
+  || fail "digest mismatch for seed 777 F-21 (want 523b0b9e71f47d.., got $DIGEST). ACTION: run 'python3 services/sim_bridge/scripts/check_replay.py --seed 777' and fix the twin/bridge before re-running."
 log "digest matches check_replay FAULT"
 
 # --- vite ------------------------------------------------------------------

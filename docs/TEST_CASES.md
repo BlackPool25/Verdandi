@@ -134,6 +134,26 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   5. 10x surge probe: shed richness first, detection/provenance intact, walk result still served.
 - Expected: all four asserts hold per episode; surge sheds rich sentences only. Fail → block release, file sev-1 against twin.
 
+## TC-006c — TST-003c duty-T9 gates (topology-A, hard)
+
+- TST: TST-003c (REQ-010).
+- Preconditions: topology-A roster (26 machines), `tests/test_twin_duty.py` + `duty_cycle(record)` helper present.
+- Test data: clean episodes, enable_natural_breakdown=True, seeds [777,1234,999,42,2026], T=300.
+- Steps:
+  1. `pytest tests/test_twin_duty.py -q` (expects RUN share ≥80%, STARVED share ≤15% on the 24-machine plant mean with standby scope {B7S,RWK0} excluded, BLOCKED reported, xfer_open==0 at T via drain accounting with grace 8, pile-up bound: no gap buffer at cap ≥30 consecutive steps while downstream STARVED).
+  2. Record duty-report JSON with (schema_version=2, battery_id).
+- Expected: all five seeds green (measured: RUN 0.850–0.891, STARVED 0.107–0.138, xfer_open 0, pileup []). Any red → STOP, no battery/docs/freeze todos proceed, owner decision required — gates never silently loosened.
+
+## TC-006d — TST-003d manifest-182 (topology-A fault coverage)
+
+- TST: TST-003d (REQ-010).
+- Preconditions: oracle relocation landed (F-21 B2, F-22 A7, F-23 C2, F-24 B7P, F-25 B2, F-26 B9, F-06 A0).
+- Test data: `build_faults(777)` full manifest, battery_id='topology-A-full182'.
+- Steps:
+  1. `python -c "from src.twin import build_faults,validate_manifest; m=build_faults(777); assert len(m)==182 and validate_manifest(m)==[] and sum(1 for r in m if r.get('rep'))==7"`.
+  2. `pytest tests/test_twin_battery_topology_a.py -q` (7 tests: manifest size, determinism, wall budget, evidence JSON landed).
+- Expected: 182 rows (26×7), 7 classes × 26 machines, zero empty cells, 7 rep pins; joined digest `64af2d24a538…` stable across --jobs 1 vs auto; wall <600s.
+
 ## TC-007 — TST-005 grounding ≥95% (sentence provenance audit)
 
 - TST: TST-005 (REQ-002).
@@ -156,6 +176,17 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   2. Hash each replay output (subgraph + ranked cause + explanation); diff across same-seed runs.
   3. Confirm whole-flow context preserved despite subgraph-only execution.
 - Expected: 0-diverge byte-identical across all 25 (observed 5×5 PASS). Any diverge → K4: subgraph-only enforced, full-graph stochastic path removed.
+
+## TC-008b — TST-006b schema-v2 digest binding (topology-A)
+
+- TST: TST-006b (REQ-003).
+- Preconditions: TWIN_SCHEMA=2 + CODE_VERSION='twin-2.1.0-topology-A' in `src/config.py`; golden `services/sim_bridge/golden/replay-777-topology-A.json`.
+- Test data: relocated rep F-21 (drift, B2, t0=150, dur=12, mag 5.2), seeds [777,1234,999,42,2026].
+- Steps:
+  1. Run `run_episode(777, F-21-on-B2)` 5×: all 5 digests equal AND each != '962b9c54d022' AND record['schema_version']==2 AND record['code_version']=='twin-2.1.0-topology-A'.
+  2. Tamper probe: copy a record, flip code_version to 'tampered', re-hash → digest differs (version binding bites).
+  3. `python services/sim_bridge/scripts/check_replay.py --seed 777` prints digest `523b0b9e71f47d…` equal to the golden file; v1 32-machine tick rejected with 'schema v1 non-comparable, rebaseline'.
+- Expected: 5× identical digest, tamper mismatches, golden match, v1 strict-reject. v1 baselines (flow `962b9c54d022`, demo `d2b4fb23…`) recorded as V1_NON_COMPARABLE, never asserted equal.
 
 ## TC-009 — TST-007 perf <600s CPU E2E via partitioning
 

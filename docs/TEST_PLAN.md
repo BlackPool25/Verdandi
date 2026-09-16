@@ -8,6 +8,7 @@ SRS.md (REQ-001–010), SDD.md, ELENCHUS_DISCOVERY.md V1-§§1–5, BUILD_BACKLO
 Prove viva-defensible trace over the entire factory flow: ranked cause + why-explanation per alarm. CONDITIONAL GO (line-scale baselines: AC@1 0.80–0.8125, flip 14.4–30.3%, 17.7s, grounding 1.00, 0-diverge 5×5; F1 gap → M0b).
 ## 4. Test items
 twin.py (32-machine plant Lines A/B/C 10/10/8 + ASM0–2 + RWK0 + AGV/SBUF), detect.py, veto.py, walk.py, pcmci_job.py, narrate.py+verify.py, chaincards.py, replay.py, ui/, trail.py.
+Topology-A (normative, MINIPRO-33): 26-machine plant per SIM_SPEC §§2–7 (Lines A/B 6/7 + C 5 + PKG0–2 fork + B7P/B7S pair + INSP0 + ASM0/ASM1/ASM2 + RWK0, 26 buffers, AGV cap 3), TWIN_SCHEMA=2, CODE_VERSION='twin-2.1.0-topology-A', 182-row manifest, battery IDs topology-A-quick16/topology-A-full182; 32-machine config non-normative (SIM_SPEC Appendix S).
 ## 5. Software risk issues
 RSK-001–008 (see REGISTERS.md); top: K1 causal instability, K2 threshold collapse, K3 hallucination.
 ## 6. Features to be tested
@@ -16,6 +17,9 @@ RSK-001–008 (see REGISTERS.md); top: K1 causal instability, K2 threshold colla
 | REQ-001/010 | TST-001 battery-F1-full-flow | fault-injection battery covering partitions × channels × classes (7 channels × 7 classes per SIM_SPEC §§5/8); PASS F1≥0.85 raw |
 | REQ-001 | TST-002 causal-acc | masked PCMCI 5 seeds; PASS AC@1≥70% |
 | REQ-010 | TST-003 flow-coverage | every machine × every fault class injected ≥1; whole-line replay context intact |
+| REQ-010 | TST-003c duty-T9 | clean episodes, natural-BD on, seeds [777,1234,999,42,2026]: plant-mean RUN≥80%, STARVED≤15% (24-machine mean, standby {B7S,RWK0} excluded), xfer_open==0 at T, pile-up bound → TC-006c |
+| REQ-010 | TST-003d manifest-182 | build_faults = 26×7=182 rows, coverage zero empty cells, 7 rep pins (F-21 B2, F-22 A7, F-23 C2, F-24 B7P, F-25 B2, F-26 B9, F-06 A0) → TC-006d |
+| REQ-003 | TST-006b schema-v2 | record carries schema_version=2 + code_version 'twin-2.1.0-topology-A'; digest binds both; v1 rejected non-comparable → TC-008b |
 | REQ-002 | TST-005 grounding | sentence provenance audit; PASS ≥95% (obs. 1.00) |
 | REQ-003 | TST-006 determinism | 5×5 same-seed replay; PASS 0-diverge |
 | REQ-006 | TST-007 perf | CPU E2E; PASS <600s (line-scale baseline 17.7s) |
@@ -29,7 +33,7 @@ RSK-001–008 (see REGISTERS.md); top: K1 causal instability, K2 threshold colla
 ## 8. Approach
 Fault-injection battery + 5-seed sweeps; frozen taus; report-only sensitivity; per-class DELAY/LOSS gates.
 ## 9. Item pass/fail criteria
-- pass criterion: F1≥0.85 ∧ AC@1≥70% intra AND cross-partition ∧ flip<40% per partition per class ∧ p99≤3 steps ∧ <600s ∧ ≥95% ∧ 0-diverge ∧ full-plant coverage 32/32 machines (partitions × channels × classes, 7×7)
+- pass criterion: F1≥0.85 ∧ AC@1≥70% intra AND cross-partition ∧ flip<40% per partition per class ∧ p99≤3 steps ∧ <600s ∧ ≥95% ∧ 0-diverge ∧ full-plant coverage 32/32 machines (partitions × channels × classes, 7×7); topology-A: 26/26 machines, 182-row manifest, T9 duty gates, schema v2 (TST-003c/d, TST-006b)
 - fail criterion: any conjunct fails OR any sev-1 open → K-pivot fires
 ## 10. Suspension criteria and resumption requirements
 - suspension criterion: seed-diverge OR ROCm blocker >1wk OR grounding <95% halts >50% cases
