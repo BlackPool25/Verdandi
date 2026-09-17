@@ -483,12 +483,17 @@ def wear_force(w: float, ld: float) -> float:
     return COUPLING_X3["f_0"] * ld * (1.0 + COUPLING_X3["zeta"] * w)
 
 
+def bearing_life_rate(vheat: float, ld: float) -> float:
+    # X9-PLUG: pure L10-shaped life-consumption rate, ML-importable.
+    return COUPLING_X2["alpha_b"] * max(vheat / COUPLING_X2["v_ref"], 0.0) ** 3 * ld
+
+
 def _apply_couplings(shared, name, fx, t, st):
-    # C4-PLUG + C3-PLUG + C1-PLUG: per-machine per-step therm/wear/inrush
-    # update; BEFORE sampling. Returns the X4 obs overlay (0.0 when X4 off
-    # or the counter is inactive); callers add it AFTER the +-6σ clamp so
-    # the clamp stays the honest ceiling (D2: magnitude truth lives in the
-    # inrush grid, obs saturates).
+    # C4-PLUG + C3-PLUG + C1-PLUG + X9-PLUG: per-machine per-step
+    # therm/wear/inrush/life update; BEFORE sampling. Returns the obs overlay
+    # (X4 transient + X2 lam bump, 0.0 when both off or inactive); callers
+    # add it AFTER the +-6σ clamp so the clamp stays the honest ceiling
+    # (D2: magnitude truth lives in the inrush grid, obs saturates).
     flags = shared.get("couplings")
     if flags is None:
         return 0.0
@@ -530,6 +535,35 @@ def _apply_couplings(shared, name, fx, t, st):
             )
             ovl = raw * busf
         shared["inr_rows"][name][t] = ovl
+    # X9-PLUG: bearing loop, lag-1 stripped vibration level. Sampling for
+    # step t has not run yet (this hook sits BEFORE _sample_signal at all 5
+    # sites, Todos 2/5/6 pattern), so the level reads obs[t-1] minus the
+    # INJECTED dev at t-1 over sigma (D3: strip ONLY _fault_dev output;
+    # lam add, degradation and genuine feedback stay in). t == 0 has no
+    # previous sample, level 0.0. The level feeds the mu heat term below
+    # and the L10 accumulator here; lam is an RMS-grade scalar sigma-unit
+    # bump folded into ovl (post-clamp add) — no BPFO/BPFI/BSF machinery.
+    # L_mech is 1 iff RUN (Todo-5 pattern); L_th stays 1.0 constant
+    # (Todo 3 owns D(T) — hands off). No hazard coupling, no
+    # breakdown-rate change (b_warn is a config reference only).
+    xheat = 0.0
+    if flags.get("X2"):
+        slot = MACHINES[name]
+        if t > 0:
+            prev = shared["obs"][MACHINE_INDEX[name]][t - 1]
+            level = (prev - _fault_dev(fx, t - 1, slot["sigma"]) - slot["base"]) / slot[
+                "sigma"
+            ]
+        else:
+            level = 0.0
+        xheat = COUPLING_X2["mu_bv"] * max(0.0, level - COUPLING_X2["v_ref"])
+        ovl += COUPLING_X2["lambda_tv"] * max(
+            0.0, shared["therm"][name] - COUPLING_X2["T_warn"][slot["class"]]
+        )
+        shared["life"][name] += bearing_life_rate(level, 1.0 if st == "RUN" else 0.0)
+        shared["life_rows"][name][t] = shared["life"][name]
+    else:
+        shared["life_rows"][name][t] = shared["life"][name]
     cur = shared["therm"][name]
     if not (flags.get("X1A") or flags.get("X1B") or flags.get("X2")):
         shared["therm_rows"][name][t] = cur
@@ -541,7 +575,7 @@ def _apply_couplings(shared, name, fx, t, st):
     mult = COUPLING_X1B["i_delay_mult"] if _delay_d(fx, t) > 0 else 1.0
     eff = rated * load * (1.0 + alpha * (cur - 20.0)) * mult
     gain = COUPLING_X1A["k_cu"][cls] if flags.get("X1A") else 0.0
-    heat = 0.0
+    heat = xheat
     new = _therm_step(
         cur,
         load,
@@ -1600,6 +1634,8 @@ def run_episode(
         "wear_rows": {name: [0.0] * T for name in MACHINES},
         "force_rows": {name: [0.0] * T for name in MACHINES},
         "life": {name: 0.0 for name in MACHINES},
+        # X9-PLUG: per-step life rows feeding the live grid when X2 on.
+        "life_rows": {name: [0.0] * T for name in MACHINES},
         "trip_e": {name: 0.0 for name in MACHINES},
         "trip": {name: False for name in MACHINES},
         "inr": {name: 7 for name in MACHINES},  # inactive: Todo 6 cut is s > 6
@@ -1725,7 +1761,10 @@ def run_episode(
             inrush_grid.append(list(shared["inr_rows"][name]))
         else:
             inrush_grid.append([0.0] * T)
-        life_grid.append([0.0] * T)
+        if active.get("X2"):
+            life_grid.append(list(shared["life_rows"][name]))
+        else:
+            life_grid.append([0.0] * T)
     return {
         "seed": seed,
         "T": T,

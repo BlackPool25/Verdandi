@@ -676,3 +676,176 @@ def test_battery_x4_t5_no_worse():
         assert on_rates[L] <= off_rates[L], (
             f"T5 no-worse violated L={L}: on={on_rates[L]:.4f} off={off_rates[L]:.4f}"
         )
+
+
+# ---- Todo 4: X2 bearing loop + L10 accumulator hooks (X9 plug) ----
+# Ships IN per owner waiver A2: the EXISTING rectangular bias fault is the
+# sensor side (no new sensor-bias generator; H4 bans unpaired generators).
+
+_X2_ON = {"X1A": False, "X1B": False, "X2": True, "X3": False, "X4": False}
+_X2_X1A_ON = {"X1A": True, "X1B": False, "X2": True, "X3": False, "X4": False}
+_X2_SEEDS = (777, 1234, 999, 42, 2026)
+_X2_PROCESS_MACHINES = ("A2", "A7", "B2", "B7P", "B7S", "C2", "C6")
+_X2_OFF_DIGEST_777 = "b2cead18b5747d5a1b1bacc6ea4e42aca59b64f6591c5853f19b545903bad876"
+_X2_BAND_MARGIN = 2.0
+
+
+def _x2_slice():
+    """35-ep/arm slice: 7 process machines x {bias} (mag 5, dur 25)."""
+    return [
+        {"class": "bias", "origin": n, "t0": 150, "dur": 25, "mag_sigma": 5.0}
+        for n in _X2_PROCESS_MACHINES
+    ]
+
+
+def test_bearing_life_rate_pure():
+    assert twin.bearing_life_rate(0.0, 1.0) == 0.0  # at/below zero: no wear
+    assert twin.bearing_life_rate(-2.0, 1.0) == 0.0
+    assert twin.bearing_life_rate(2.0, 0.0) == 0.0  # L_mech gates: DOWN = no wear
+    assert twin.bearing_life_rate(2.0, 1.0) == pytest.approx(
+        twin.COUPLING_X2["alpha_b"] * 8.0
+    )  # p=3 L10 shape: (2/1)^3
+    assert twin.bearing_life_rate(4.0, 1.0) / twin.bearing_life_rate(
+        2.0, 1.0
+    ) == pytest.approx(8.0)
+    assert twin.bearing_life_rate(2.0, 1.0) > twin.bearing_life_rate(1.5, 1.0)
+
+
+def test_x2_off_digest_stable():
+    rec = twin.run_episode(777, None, couplings=dict(_ALL_OFF))
+    assert twin.replay_digest(rec) == _X2_OFF_DIGEST_777
+    assert rec["life"] == [[0.0] * 300 for _ in range(26)]
+
+
+def test_x2_joint_rise():
+    # Degradation (drift) episode, X1A+X2: process heat lifts T past T_warn,
+    # the lam side then lifts V past the X1A-only peak (joint V up + T up).
+    fault = {"class": "drift", "origin": "B2", "t0": 150, "dur": 25, "mag_sigma": 2.0}
+    off = twin.run_episode(777, dict(fault), couplings=dict(_ALL_OFF))
+    x1a = twin.run_episode(777, dict(fault), couplings=dict(_X1A_ON))
+    on = twin.run_episode(777, dict(fault), couplings=dict(_X2_X1A_ON))
+    i = twin.MACHINE_INDEX["B2"]
+    assert max(on["therm"][i]) > TEMP_RANGES["process"][1] + _X2_BAND_MARGIN
+    assert max(on["therm"][i]) >= max(x1a["therm"][i])  # mu heat only adds
+    assert max(on["obs"][i]) > max(x1a["obs"][i])  # lam side lifts V (X2-specific)
+    assert twin.replay_digest(on) != twin.replay_digest(off)
+
+
+def test_x2_sensor_bias_therm_flat():
+    # H4-critical (D3 dev-stripping): a bias-only episode adds NOTHING to
+    # therm under X2 — ON-bias tracks ON-clean (flat), whatever the fixed
+    # point is. OFF is frozen-midpoint by the neutral rule; compare ON arms.
+    fault = {"class": "bias", "origin": "B2", "t0": 150, "dur": 25, "mag_sigma": 5.0}
+    biased = twin.run_episode(777, dict(fault), couplings=dict(_X2_ON))
+    clean = twin.run_episode(777, None, couplings=dict(_X2_ON))
+    i = twin.MACHINE_INDEX["B2"]
+    delta = max(abs(a - b) for a, b in zip(biased["therm"][i], clean["therm"][i]))
+    assert delta < 1.0, f"bias heated therm: delta={delta}"
+    # And the fault window shows no hump over the pre-window fixed point.
+    pre = sum(biased["therm"][i][120:150]) / 30.0
+    win = max(biased["therm"][i][150:175])
+    assert win - pre < 1.0, f"window hump: pre={pre} win={win}"
+
+
+def test_x2_life_monotone_and_ordering():
+    # Life never decreases; a hot high-V episode consumes faster than clean.
+    hot = twin.run_episode(
+        777,
+        {"class": "drift", "origin": "B2", "t0": 150, "dur": 25, "mag_sigma": 2.0},
+        couplings=dict(_X2_X1A_ON),
+    )
+    clean = twin.run_episode(777, None, couplings=dict(_X2_ON))
+    i = twin.MACHINE_INDEX["B2"]
+    assert all(b - a >= -1e-9 for a, b in itertools.pairwise(hot["life"][i]))
+    assert all(b - a >= -1e-9 for a, b in itertools.pairwise(clean["life"][i]))
+    assert hot["life"][i][-1] > clean["life"][i][-1]
+    assert hot["life"][i][-1] > 0.0
+
+
+def test_x2_b_warn_config_reference_only():
+    # b_warn lives in config (X9/MINIPRO-39 owns RUL use); twin.py carries no
+    # hazard coupling, no breakdown-rate change, no prognostic bar.
+    assert twin.COUPLING_X2["b_warn"] == 0.7
+    assert twin.COUPLING_X2["alpha_b"] == pytest.approx(1 / 200)
+
+
+def _x2_origin_scores(rec):
+    """Fused ranker over the 7 process machines: obs-dev peak z + therm z."""
+    dev, heat = {}, {}
+    for name in _X2_PROCESS_MACHINES:
+        i = twin.MACHINE_INDEX[name]
+        cfg = MACHINES[name]
+        dev[name] = max(abs(v - cfg["base"]) / cfg["sigma"] for v in rec["obs"][i])
+        heat[name] = max(rec["therm"][i])
+
+    def _z(vals):
+        mean = sum(vals.values()) / len(vals)
+        var = sum((v - mean) ** 2 for v in vals.values()) / len(vals)
+        std = var**0.5
+        if std == 0.0:
+            return dict.fromkeys(vals, 0.0)
+        return {k: (v - mean) / std for k, v in vals.items()}
+
+    zd, zh = _z(dev), _z(heat)
+    return {name: zd[name] + zh[name] for name in _X2_PROCESS_MACHINES}
+
+
+def _x2_accuracy(faults, couplings):
+    hits = 0
+    for seed in _X2_SEEDS:
+        for fault in faults:
+            rec = twin.run_episode(seed, dict(fault), couplings=dict(couplings))
+            scores = _x2_origin_scores(rec)
+            guess = max(
+                _X2_PROCESS_MACHINES,
+                key=lambda m: (scores[m], -_X2_PROCESS_MACHINES.index(m)),
+            )
+            if guess == fault["origin"]:
+                hits += 1
+    return hits / (len(faults) * len(_X2_SEEDS))
+
+
+def test_battery_x2_svp_absolute():
+    # Battery-scale H4 property: all 35 S-arm episodes stay therm-flat
+    # (fault-window mean within 1C of the pre-window fixed point), and the
+    # slice/seeds/N shape is exactly 7 x 1 x 5 = 35 eps/arm.
+    faults = _x2_slice()
+    assert len(faults) == 7 and len(_X2_SEEDS) == 5
+    for seed in _X2_SEEDS:
+        for fault in faults:
+            rec = twin.run_episode(seed, dict(fault), couplings=dict(_X2_ON))
+            i = twin.MACHINE_INDEX[fault["origin"]]
+            pre = sum(rec["therm"][i][120:150]) / 30.0
+            win = sum(rec["therm"][i][150:175]) / 25.0
+            assert win - pre < 1.0, f"hump seed={seed} {fault}: pre={pre} win={win}"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="owner decision pending (Todo 4 STOP): D3 dev-stripping (mandated, "
+    "H4-critical) removes the only fault-specific therm signal and the mu/lam "
+    "loop is class-symmetric, so no ranker gains origin info — measured ladder "
+    "obs-only gap +0.000, therm-only 0.143=chance both arms, fused -0.229 "
+    "(therm dilutes obs), see .omo/evidence/minipro-34/4-x2.txt. Remove xfail "
+    "only on bar re-sign.",
+)
+def test_battery_x2_svp_gain_bar():
+    faults = _x2_slice()
+    on, off = _x2_accuracy(faults, _X2_ON), _x2_accuracy(faults, _ALL_OFF)
+    assert on - off >= 0.10, (
+        f"X2 gain {on - off:+.3f} < +10pp (on={on:.3f} off={off:.3f})"
+    )
+
+
+def test_x2_battery_deterministic():
+    faults = _x2_slice()[:2]
+    for seed in (777, 1234):
+        first = [
+            twin.replay_digest(twin.run_episode(seed, dict(f), couplings=dict(_X2_ON)))
+            for f in faults
+        ]
+        second = [
+            twin.replay_digest(twin.run_episode(seed, dict(f), couplings=dict(_X2_ON)))
+            for f in faults
+        ]
+        assert first == second
