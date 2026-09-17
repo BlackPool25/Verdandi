@@ -59,6 +59,11 @@ from src.config import (
     BUFFERS,
     CAL_WIN,
     CODE_VERSION,
+    COUPLING_X1A,
+    COUPLING_X1B,
+    COUPLING_X2,
+    COUPLING_X3,
+    COUPLING_X4,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
     INSPECT_DELAY_STEPS,
@@ -85,6 +90,35 @@ _CLAMP_SIGMA = 2.0 * ENVELOPE_SIGMA
 # fault class in src, so it is assembled here, never written literally.
 _PULSE = "sp" + "ike"
 _FAULT_CLASSES = ("drift", "bias", "delay", "loss", "breakdown", "quality", _PULSE)
+
+# MINIPRO-34 couplings gate: None means all config flags, otherwise the
+# given {Xn: bool} entries override `enabled` per coupling (Todo 1 is
+# scaffolding only — resolution + snapshot, no physics yet).
+_COUPLING_KEYS = ("X1A", "X1B", "X2", "X3", "X4")
+_COUPLING_TABLES = {
+    "X1A": COUPLING_X1A,
+    "X1B": COUPLING_X1B,
+    "X2": COUPLING_X2,
+    "X3": COUPLING_X3,
+    "X4": COUPLING_X4,
+}
+_ALL_COUPLINGS_OFF = {"X1A": False, "X1B": False, "X2": False, "X3": False, "X4": False}
+
+
+def _resolve_couplings(couplings):
+    """Resolve the active-flags snapshot shared by run_episode/callers."""
+    if couplings is None:
+        return {k: bool(_COUPLING_TABLES[k]["enabled"]) for k in _COUPLING_KEYS}
+    if not isinstance(couplings, dict) or set(couplings) - set(_COUPLING_KEYS):
+        raise ValueError(f"couplings keys must be a subset of {list(_COUPLING_KEYS)}")
+    resolved = {}
+    for k in _COUPLING_KEYS:
+        v = couplings.get(k, _COUPLING_TABLES[k]["enabled"])
+        if not isinstance(v, bool):
+            raise ValueError(f"couplings[{k!r}] must be bool, got {v!r}")  # noqa: TRY004
+        resolved[k] = v
+    return resolved
+
 
 # Wall-clock keys excluded from the canonical replay digest (Scope: sorted
 # keys, repr floats, wall/clock fields excluded).
@@ -1333,15 +1367,20 @@ def run_episode(
     fault: dict | list | None = None,
     *,
     enable_natural_breakdown: bool = True,
+    couplings: dict | None = None,
 ) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
     fault is None, one fault dict, or a list of fault dicts (multi-fault
-    episodes: same-machine windows need a ≥5-step gap). Returns the full
-    episode record (seed, T, cal_win, obs, states, buffers, throughput,
-    events, sbuf_stats, flow_stats, agv_waits, parts, faults).
+    episodes: same-machine windows need a ≥5-step gap). couplings is None
+    (all config flags) or an {Xn: bool} override per coupling. Returns the
+    full episode record (seed, T, cal_win, obs, states, buffers, throughput,
+    events, sbuf_stats, flow_stats, agv_waits, parts, faults, the five
+    26x300 physics grids therm/wear/force/inrush/life, and the couplings
+    active-flags snapshot).
     """
     fault_list = _validate(seed, fault)
+    active = _resolve_couplings(couplings)
     noise, place, drop, rng_agv, fail = _spawn_streams(seed)
     specs = _materialize(place, fault_list)
     env = simpy.Environment()
@@ -1391,6 +1430,15 @@ def run_episode(
             for s in specs
             if s["class"] == "quality"
         ],
+        "couplings": active,
+        "therm": {
+            name: sum(TEMP_RANGES[MACHINES[name]["class"]]) / 2.0 for name in MACHINES
+        },
+        "wear": {name: 0.0 for name in MACHINES},
+        "life": {name: 0.0 for name in MACHINES},
+        "trip_e": {name: 0.0 for name in MACHINES},
+        "trip": {name: False for name in MACHINES},
+        "inr": {name: 7 for name in MACHINES},  # inactive: Todo 6 cut is s > 6
     }
     kit: dict[str, list[Any]] = {"A": [], "B": [], "C": []}
     shared["kit"] = kit
@@ -1489,13 +1537,22 @@ def run_episode(
         "c7tail": len(stores["_C7TAIL"].items),
         "store_final": store_final,
     }
+    therm_grid, wear_grid, force_grid, inrush_grid, life_grid = [], [], [], [], []
+    for name in order:
+        therm_grid.append([shared["therm"][name]] * T)
+        wear_grid.append([0.0] * T)
+        force_grid.append(
+            [1.0 if s == "RUN" else 0.0 for s in shared["states"][MACHINE_INDEX[name]]]
+        )
+        inrush_grid.append([0.0] * T)
+        life_grid.append([0.0] * T)
     return {
         "seed": seed,
         "T": T,
         "cal_win": CAL_WIN,
-        # Topology-A schema v2 version binding (MINIPRO-33): the canonical
+        # Topology-A schema version binding (MINIPRO-33): the canonical
         # replay payload INCLUDES these keys by construction, so version
-        # tampering mismatches the digest. v1 records are non-comparable.
+        # tampering mismatches the digest. Older schemas are non-comparable.
         "schema_version": TWIN_SCHEMA,
         "code_version": CODE_VERSION,
         # Table 3.1 roster snapshot (SIM_SPEC §4.4): per-machine operating
@@ -1511,6 +1568,12 @@ def run_episode(
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
         "faults": specs,
+        "therm": therm_grid,
+        "wear": wear_grid,
+        "force": force_grid,
+        "inrush": inrush_grid,
+        "life": life_grid,
+        "couplings": dict(active),
     }
 
 
@@ -1562,7 +1625,12 @@ def duty_cycle(record: dict) -> dict:
 
 def run_calibration(seed: int):
     """Return (CAL_WIN, 32) clean window: breakdowns off, first CAL_WIN steps."""
-    rec = run_episode(seed, None, enable_natural_breakdown=False)
+    rec = run_episode(
+        seed,
+        None,
+        enable_natural_breakdown=False,
+        couplings=dict(_ALL_COUPLINGS_OFF),
+    )
     return np.asarray(rec["obs"], dtype=float)[:, :CAL_WIN].T
 
 
