@@ -11,12 +11,12 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { EXPECTED_EDGE_COUNT, PINNED_EDGES, bufferIdForEdge, widthForUtil } from "./edges";
+import { PINNED_EDGES, bufferIdForEdge, widthForUtil } from "./edges";
 import { NODE_HEIGHT, NODE_WIDTH, computeLayout, type RankDir } from "./layout";
 import { MachineNode } from "./MachineNode";
 import { anomalyFor } from "../components/events/anomaly";
 import type { FaultSpec } from "../components/events/types";
-import { EXPECTED_NODE_COUNT, PINNED_NODES } from "./nodes";
+import { PINNED_NODES, assertTopologyCounts } from "./nodes";
 import type { MachineNodeDatum } from "./types";
 import { bufferBarsFor, type PanelTick } from "../components/panels/selectors";
 
@@ -88,12 +88,7 @@ function TopologyInner({
         data: { ...n.data } satisfies MachineNodeDatum,
       };
     });
-    if (baseNodes.length !== EXPECTED_NODE_COUNT) {
-      throw new Error(`node drift: ${baseNodes.length}`);
-    }
-    if (PINNED_EDGES.length !== EXPECTED_EDGE_COUNT) {
-      throw new Error(`edge drift: ${PINNED_EDGES.length}`);
-    }
+    assertTopologyCounts(baseNodes.length, PINNED_EDGES.length);
     return { baseNodes };
   }, [layoutPos]);
 
@@ -178,7 +173,7 @@ function TopologyInner({
 
   // Imperative re-fit after first paint: the fitView prop races initial
   // node measurement (edges/nodes mount async), so re-fit once on mount
-  // to guarantee all 34 nodes / 36 edges are visible after fit.
+  // to guarantee all 28 nodes / 31 edges are visible after fit.
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       void fitView({ padding: 0.25, minZoom: 0.1 });

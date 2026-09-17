@@ -1,8 +1,14 @@
-"""T3 frozen tick schema (contract lock, cross-team reuse).
+"""T3 frozen tick schema v2 (contract lock, cross-team reuse) — topology-A only.
 
 Twin-mirror verbatim; bridge-strict labeled. Locks the tick JSON the
 bridge replays (T2) and the frontend consumes (T4+):
 
+- v2-only: N_MACHINES=26 / N_BUFFERS=26 (topology-A roster). Any v1
+  32-machine tick (states/obs/throughput len 32, buffers len 31) is
+  strict-rejected with 'schema v1 non-comparable, rebaseline' — the v1
+  code path is DELETED except this error.
+- V1_NON_COMPARABLE digests (never asserted equal): flow 962b9c54d022,
+  demo d2b4fb23… (32-machine schema v1 baselines, retired).
 - NO `temperature` key: src/twin.py discards `_temp` from
   `_sample_signal` (`val, _temp, ar = ...` at lines 602/764/892/1010).
   The twin never emits it, so the bridge must never invent it.
@@ -26,7 +32,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.config import BUFFERS
+from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
+
+SCHEMA_VERSION = 2  # topology-A v2-only; must equal src.config.TWIN_SCHEMA
+assert SCHEMA_VERSION == TWIN_SCHEMA == 2
+
+V1_REJECT_MSG = "schema v1 non-comparable, rebaseline"
+
+# V1_NON_COMPARABLE digests (schema v1, 32-machine; retired, never equal):
+# flow 962b9c54d022, demo d2b4fb23… .
 
 TICK_KEYS = (
     "step",
@@ -56,6 +70,13 @@ EVENT_FAMILIES = (
     "AGV_WAIT",
     "REJECT_ROUTE",
     "DIVERT_SBUF",
+    # Topology-A trio (Todo 3 normative taxonomy, twin _emit; 7R: the 6R
+    # TAKT5 retime raised per-episode PACK_FORK/LATE_VERDICT volume so
+    # sampled ticks (0/150/299) now carry them — the 7-family allowlist
+    # rejected live twin ticks; each trio event is its own family).
+    "FAILOVER",
+    "PACK_FORK",
+    "LATE_VERDICT",
 )
 
 _EVENT_TO_FAMILY = {
@@ -70,6 +91,9 @@ _EVENT_TO_FAMILY = {
     "AGV_WAIT": "AGV_WAIT",
     "REJECT_ROUTE": "REJECT_ROUTE",
     "DIVERT_SBUF": "DIVERT_SBUF",
+    "FAILOVER": "FAILOVER",
+    "PACK_FORK": "PACK_FORK",
+    "LATE_VERDICT": "LATE_VERDICT",
 }
 
 DOWN_UP_TRIPLE = ("natural", "gt_excluded", "fault_id")
@@ -186,6 +210,21 @@ def validate_event(ev: dict[str, Any]) -> None:
 
 def validate_tick(tick: dict[str, Any]) -> None:
     """Validate one tick; reject loudly on any contract break."""
+    n_states = len(tick.get("states", []))
+    n_obs = len(tick.get("obs", []))
+    n_tput = len(tick.get("throughput", []))
+    n_bufs = len(tick.get("buffers", []))
+    if (n_states, n_obs, n_tput, n_bufs) == (32, 32, 32, 31):
+        raise SchemaViolation(V1_REJECT_MSG)
+    if (n_states, n_obs, n_tput) != (N_MACHINES, N_MACHINES, N_MACHINES):
+        raise SchemaViolation(
+            f"{V1_REJECT_MSG}: want {N_MACHINES}/{N_MACHINES}/{N_MACHINES} "
+            f"states/obs/throughput, got {n_states}/{n_obs}/{n_tput}"
+        )
+    if n_bufs != N_BUFFERS:
+        raise SchemaViolation(
+            f"{V1_REJECT_MSG}: want {N_BUFFERS} buffers, got {n_bufs}"
+        )
     if "temperature" in tick or "temp" in tick:
         raise SchemaViolation(
             "tick must not carry a temperature key "
@@ -246,6 +285,8 @@ def validate_header(header: dict[str, Any]) -> None:
 
 
 FROZEN_SCHEMA: dict[str, Any] = {
+    "schema_version": SCHEMA_VERSION,
+    "code_version": CODE_VERSION,
     "tick_keys": list(TICK_KEYS),
     "header_keys": list(HEADER_KEYS),
     "excluded_channel_2": "thermal signal absent by contract "
@@ -264,7 +305,9 @@ FROZEN_SCHEMA: dict[str, Any] = {
     },
     "throughput_domain": sorted(THROUGHPUT_DOMAIN),
     "throughput_waiver": TPUT_WAIVER,
-    "buffers": {"rule": "0-cap", "sbuf_level": "buffers[SBUF]", "count": len(BUFFERS)},
+    "buffers": {"rule": "0-cap", "sbuf_level": "buffers[SBUF]", "count": N_BUFFERS},
+    "machines": {"count": N_MACHINES},
+    "v1_reject": V1_REJECT_MSG,
     "events": {
         "base_shape": ["event", "t", "machine", "detail"],
         "families": list(EVENT_FAMILIES),

@@ -4,6 +4,16 @@
 
 System: anomaly-twin-trace — ranked causal trace + why-explanation per factory-twin alarm, CPU-only laptop demo <10min. Plant decision (locked): 32 machines per SIM_SPEC — Lines A/B/C (10/10/8) + assembly cell ASM0–2 + rework RWK0, AGV pool + shared overflow buffer, mass-flow-conserved coupling, partitioned causal evidence (SIM_SPEC rewrite on disk; this SDD carries line-scale battery numbers as baselines pending plant-scale re-measurement). Refs: docs/RFC.md, docs/ARCHITECTURE.md, docs/TECHNICAL.md, ELENCHUS_DISCOVERY.md, spike/REPORT*.md, ADR-0012 (FactorySimPy 0.1.0b3 rejected: no trace/fault/RNG API → hand-rolled SimPy twin). Defs: AC@1=top-1 cause accuracy; triple=(fault-window, edge-id, detector-output); chain-cards=≤8s template fallback; K1–K5=regression gates; partition=line/cell evidence unit (Line-A/B/C, assembly-cell, rework-loop) with gateway buffers + AGV/SBUF at coupling points.
 
+> Topology-A amendment (MINIPRO-33, normative): plant is 26 machines per
+> SIM_SPEC §§2–7 (Lines A/B 6/7 + C 5 + packaging fork PKG0–2 + cell
+> ASM0/ASM1/INSP0/ASM2 + RWK0), 26 buffers, 182-row manifest, TWIN_SCHEMA=2,
+> CODE_VERSION='twin-2.1.0-topology-A', battery IDs topology-A-quick16 /
+> topology-A-full182 (evidence `docs-battery-topology-A-full182.json`).
+> The 32-machine config is non-normative (SIM_SPEC Appendix S, until
+> MINIPRO-30 ratifies). T9 duty gates (RUN≥80%, STARVED≤15%, xfer_open==0,
+> pile-up bound) hold on seeds [777,1234,999,42,2026]. Retime pins: AGV_CAP
+> 3, TAKT5 cycles, drain grace 8, standby scope {B7S,RWK0}.
+
 Pipeline: `Twin→Detect→Veto→Walk→Narrate+Verify→Replay→UI+Trail`. Contracts: `Alarm{id,machine,t_start,t_end,detector_output}`→`RankCause{alarm_id,ranked[(machine,score,edge_id)],AC@1}`→`Explanation{alarm_id,sentences[{text,triple|null}],grounding_rate}`→`Replay{alarm_id,seed,subgraph,diverge_bool}`; verifier rejects null/unresolvable triples.
 
 Environment: Python 3.14.7, CPU-only, no torch/GPU. Pinned: simpy==4.1.2, tigramite==5.2.10.1 (evidence-only), networkx==3.6.1, numpy==2.4.6, psutil==7.2.2, scipy==1.18.1. stumpy==1.14.1 offline-validation only (killed as detector). Config constants imported from one table in TECHNICAL.md (CAL_WIN=120, Q_DET, VETO_ASM2, WALK_DEPTH≤3/TOPK, PCMCI ParCorr tau_max=2/pc_alpha=0.05/α=0.01, N_FLOOR=800, ECHO_W=5, NARR_DEADLINE≤8s, CAPS $0.005/2.5k tok/iter, SHED_AT 80%, SEED via SeedSequence). Never hardcode twice.
@@ -286,3 +296,4 @@ Fallback matrix (TECHNICAL.md §Fallback): model tail/429/drop → chain-cards �
 | REQ-008 | per-run caps | §2.8 | §4.6 narrate, §4.7 verify |
 | REQ-009 | no safety-clearance authority | §2.1 | §4.10 ui/, §4.11 trail |
 | REQ-010 | full-plant twin (32 machines: Lines A/B/C + ASM0–2 + RWK0, mass-flow-conserved, partitioned) | §2.1, §2.3 | §4.1 twin, §4.2 detect, §4.3 veto |
+| REQ-010 | topology-A twin (26 machines + PKG fork + B-pair failover + INSP0 delay, 26 buffers, 182-row manifest, schema v2, T9 duty gates) | §2.1, §2.3 | §4.1 twin, SIM_SPEC §§2–7, TEST_CASES TC-006c/TC-006d/TC-008b |

@@ -28,8 +28,14 @@ rng_place at episode start in fault-list order (place/drop at
 injection-time); loss-thinning flips come from rng_drop per step inside
 loss windows; ASM2 reject flips come from rng_place per completion inside
 quality windows; agv holds are drawn on rng_agv at transfer-request time.
-Stream slots per SIM_SPEC 6.2: 0-31 noise, 32 place, 33 drop, 34 agv,
-35 fail.
+Stream slots per SIM_SPEC 6.2 (topology-A schema v2): 0-25 noise
+(index == MACHINE_INDEX literal order), children 26-31 retired (no
+process reads them — asserted in _spawn_streams), 32 place / 33 drop /
+34 agv / 35 fail unchanged.
+Survivor moves (old->new): A7 7->3, A8 8->4, A9 9->5, B0 10->6,
+B1 11->7, B2 12->8, B8 18->11, B9 19->12, C0 20->13, C1 21->14,
+C2 22->15, C6 26->16, C7 27->17, ASM0 28->21, ASM1 29->22,
+ASM2 30->24, RWK0 31->25.
 """
 
 import argparse
@@ -48,11 +54,14 @@ import simpy
 
 from src.config import (
     AGV_CAP,
+    AGV_DRAIN_GRACE,
     AGV_STEPS,
     BUFFERS,
     CAL_WIN,
+    CODE_VERSION,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
+    INSPECT_DELAY_STEPS,
     MACHINE_INDEX,
     MACHINES,
     N_BUFFERS,
@@ -61,9 +70,11 @@ from src.config import (
     REWORK_MAX_PASSES,
     SBUF_CAP,
     SBUF_DIVERT_CLASSES,
+    STANDBY_EXCLUDED,
     STATE_OFFSETS,
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
+    TWIN_SCHEMA,
     T,
 )
 
@@ -94,7 +105,7 @@ _CHANNELS = (
 )
 
 # Independent oracle: representative-machine subset per SIM_SPEC sect 5,
-# including the running example F-21 (drift, B5, t0=150, dur=12, 5.2).
+# including the running example F-21 (drift, B2, t0=150, dur=12, 5.2).
 _ORACLE_REP = (
     {
         "id": "F-06",
@@ -107,7 +118,7 @@ _ORACLE_REP = (
     {
         "id": "F-21",
         "class": "drift",
-        "origin": "B5",
+        "origin": "B2",
         "t0": 150,
         "dur": 12,
         "mag_sigma": 5.2,
@@ -115,7 +126,7 @@ _ORACLE_REP = (
     {
         "id": "F-22",
         "class": "bias",
-        "origin": "B6",
+        "origin": "A7",
         "t0": 160,
         "dur": 12,
         "mag_sigma": 5.0,
@@ -123,7 +134,7 @@ _ORACLE_REP = (
     {
         "id": "F-23",
         "class": "delay",
-        "origin": "B4",
+        "origin": "C2",
         "t0": 170,
         "dur": 12,
         "extra": {"d": 4},
@@ -131,7 +142,7 @@ _ORACLE_REP = (
     {
         "id": "F-24",
         "class": "loss",
-        "origin": "B7",
+        "origin": "B7P",
         "t0": 180,
         "dur": 12,
         "extra": {"drop_rate": 0.2},
@@ -155,11 +166,30 @@ _ORACLE_REP = (
 )
 
 _LINES = (
-    tuple(f"A{i}" for i in range(10))
-    + tuple(f"B{i}" for i in range(10))
-    + tuple(f"C{i}" for i in range(8))
+    "A0",
+    "A1",
+    "A2",
+    "A7",
+    "A8",
+    "A9",
+    "B0",
+    "B1",
+    "B2",
+    "B7P",
+    "B7S",
+    "B8",
+    "B9",
+    "C0",
+    "C1",
+    "C2",
+    "C6",
+    "C7",
+    "PKG0",
+    "PKG1",
+    "PKG2",
+    "INSP0",
 )
-_TAILS = ("A9", "B9", "C7")
+_TAILS = ("A9", "B9", "C7", "PKG1", "PKG2")
 _TAIL_BUF = {"A9": "GA9", "B9": "GB9", "C7": "_C7TAIL"}
 _TAIL_LINE = {"A9": "A", "B9": "B", "C7": "C"}
 # SBUF high-util flag threshold: >=80% of cap (SIM_SPEC §2.2 logging).
@@ -167,23 +197,42 @@ _SBUF_HIGH = 0.8 * SBUF_CAP
 
 
 def _line_edges():
-    """Map line machine -> (upstream gap name or None, downstream key)."""
-    edges = {}
-    for prefix, n in (("A", 10), ("B", 10), ("C", 8)):
-        for i in range(n):
-            name = f"{prefix}{i}"
-            up = None if i == 0 else f"{prefix}{i - 1}{i}"
-            if i < n - 1:
-                down = f"{prefix}{i}{i + 1}"
-            elif prefix == "C":
-                # No C-tail buffer in the roster: C7 stages in a dedicated
-                # cap-15 store (tail cap governs per config); AGV drains it.
-                # Sharing the C67 gap store would deadlock C6 vs C7.
-                down = "_C7TAIL"
-            else:
-                down = _TAIL_BUF[name]
-            edges[name] = (up, down)
-    return edges
+    """Map line machine -> (upstream gap name or None, downstream key).
+
+    Topology-A short+branchy edges (normative MINIPRO-33 roster):
+    A2->A7 via A27, C2->C6 via C26; B2->{B7P,B7S} fork via B2B7P/B2B7S
+    with {B7P,B7S}->B8 join via B7PB8/B7SB8; C7 forks _C7TAIL (AGV kit
+    path, retained as-is) + C7PKG (packaging fork feed to PKG0); PKG0
+    splits PKG01/PKG02 to the PKG1/PKG2 packaging sinks (down None);
+    ASM1->INSP0 via INSP01, INSP0->ASM2 via INSP02 (ASM12 retired).
+
+    Fork downs / join ups are tuples; run_episode spawns the fork-aware
+    _line_process (tuple up/down) plus the dedicated INSP0 process.
+    """
+    return {
+        "A0": (None, "A01"),
+        "A1": ("A01", "A12"),
+        "A2": ("A12", "A27"),
+        "A7": ("A27", "A78"),
+        "A8": ("A78", "A89"),
+        "A9": ("A89", "GA9"),
+        "B0": (None, "B01"),
+        "B1": ("B01", "B12"),
+        "B2": ("B12", ("B2B7P", "B2B7S")),
+        "B7P": ("B2B7P", "B7PB8"),
+        "B7S": ("B2B7S", "B7SB8"),
+        "B8": (("B7PB8", "B7SB8"), "B89"),
+        "B9": ("B89", "GB9"),
+        "C0": (None, "C01"),
+        "C1": ("C01", "C12"),
+        "C2": ("C12", "C26"),
+        "C6": ("C26", "C67"),
+        "C7": ("C67", ("_C7TAIL", "C7PKG")),
+        "PKG0": ("C7PKG", ("PKG01", "PKG02")),
+        "PKG1": ("PKG01", None),
+        "PKG2": ("PKG02", None),
+        "INSP0": ("INSP01", "INSP02"),
+    }
 
 
 def _validate(seed, fault):
@@ -262,11 +311,18 @@ def _validate(seed, fault):
 
 
 def _spawn_streams(seed):
-    """Seeded streams per SIM_SPEC 6.2: noise(0-31) + place/drop/agv/fail."""
+    """Seeded streams per SIM_SPEC 6.2 topology-A: noise(0-25) + place/drop/agv/fail.
+
+    Noise index == MACHINE_INDEX literal order (A0:0..RWK0:25);
+    children 26-31 retired (assert unread below); 32 place, 33 drop,
+    34 agv, 35 fail unchanged.
+    """
     seq = np.random.SeedSequence((seed,))
     children = seq.spawn(36)  # == N_STREAMS; literal kept for the T1 grep
     assert N_STREAMS == 36 and len(children) == N_STREAMS
     order = sorted(MACHINE_INDEX, key=MACHINE_INDEX.get)
+    used = {MACHINE_INDEX[m] for m in order} | {32, 33, 34, 35}
+    assert not (set(range(26, 32)) & used), "children 26-31 retired, must stay unread"
     noise = [np.random.default_rng(children[MACHINE_INDEX[m]]) for m in order]
     place = np.random.default_rng(children[32])
     drop = np.random.default_rng(children[33])
@@ -400,7 +456,14 @@ def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
 
 
 def _emit(shared, event, t, machine, detail):
-    """Append one channel-7 event dict (SIM_SPEC §8: t/machine/event/detail)."""
+    """Append one channel-7 event dict (SIM_SPEC §8: t/machine/event/detail).
+
+    Channel-7 vocabulary: FAULT_START/END, BLOCK_ON/OFF, STARVE_ON/OFF,
+    DOWN/UP, DIVERT_SBUF, AGV_WAIT, REJECT_ROUTE plus the topology-A trio
+    FAILOVER (B2 reroute to B7S, top-level from/to/reason), PACK_FORK
+    (PKG0 split to PKG1/PKG2, detail part/to), LATE_VERDICT (INSP0 release,
+    detail part/verdict).
+    """
     shared["events"].append(
         {"event": event, "t": t, "machine": machine, "detail": detail}
     )
@@ -483,6 +546,14 @@ def _line_process(env, spec, shared):
     natural DOWN), GT-exclusion (natural DOWNs never span fault windows),
     delay (cycle += d), loss (stale-hold thinning on rng_drop), origin-only
     signal deviation, and DEGRADE marking on the held part object.
+    Topology-A fork/join (up/down may be a tuple of stores): join ups pull
+    the first non-empty buffer in tuple order (B8: B7PB8, then B7SB8);
+    fork downs route per machine — B2 failover (B7S iff B7P DOWN or B7PB8
+    full at release, FAILOVER event, spill to the other fork buffer, both
+    full -> BLOCKED with no SBUF divert), C7 broadcast (stage to _C7TAIL
+    as-is plus a copy to C7PKG when it has space, tail full -> BLOCKED),
+    PKG0 round-robin (shared pkg_rr, first part -> PKG1, target full ->
+    other tail, both full -> BLOCKED with no SBUF divert).
     """
     name, idx = spec["name"], spec["idx"]
     cfg = MACHINES[name]
@@ -557,6 +628,15 @@ def _line_process(env, spec, shared):
                 part = {"id": pid, "line": name[0], "diverted": False, "flag": "OK"}
                 shared["flow"]["line_created"] += 1
                 held, rem, st, tput = True, cycle + _delay_d(fx, t), "RUN", 0
+            elif isinstance(up, tuple):
+                src = next((s for s in up if len(s.items) > 0), None)
+                if src is None:
+                    st, tput = "STARVED", 0
+                else:
+                    req = src.get()
+                    yield req
+                    part = req.value
+                    held, rem, st, tput = True, cycle + _delay_d(fx, t), "RUN", 0
             elif len(up.items) > 0:
                 req = up.get()
                 yield req
@@ -567,6 +647,98 @@ def _line_process(env, spec, shared):
         elif rem > 1:
             rem -= 1
             st, tput = "RUN", 0
+        elif down is None:
+            # Packaging sink (PKG1/PKG2 tails): parts SINK here as
+            # packaged goods — flow_stats packaged+=1, never rejoin kit,
+            # never SBUF-divert (tails are excluded via _TAILS).
+            shared["flow"]["packaged"] += 1
+            shared["parts"].append(
+                {
+                    "id": part["id"],
+                    "t": t,
+                    "machine": name,
+                    "via": "PKG",
+                    "disposition": "packaged",
+                    "passes": part.get("passes", 0),
+                    "flag": part.get("flag", "OK"),
+                }
+            )
+            held, rem, part = False, 0, None
+            st, tput = "RUN", 1
+        elif isinstance(down, tuple):
+            if name == "B2":
+                b7p_fx = shared["fx"].get("B7P", [])
+                b7p_down = _inj_down(b7p_fx, t) is not None or (
+                    t > 0 and shared["states"][MACHINE_INDEX["B7P"]][t - 1] == "DOWN"
+                )
+                pair, sib = down  # (B2B7P, B2B7S)
+                join = spec["stores"]["B7PB8"]
+                overflow = len(join.items) >= join.capacity
+                tgt = sib if (b7p_down or overflow) else pair
+                dest = (
+                    tgt
+                    if len(tgt.items) < tgt.capacity
+                    else (pair if tgt is sib else sib)
+                )
+                if dest is not None and len(dest.items) < dest.capacity:
+                    if dest is sib:
+                        reason = "DOWN" if b7p_down else "OVERFLOW"
+                        shared["events"].append(
+                            {
+                                "event": "FAILOVER",
+                                "t": t,
+                                "machine": name,
+                                "from": "B7P",
+                                "to": "B7S",
+                                "reason": reason,
+                                "detail": {
+                                    "from": "B7P",
+                                    "to": "B7S",
+                                    "reason": reason,
+                                },
+                            }
+                        )
+                    yield dest.put(part)
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
+                else:
+                    st, tput = "BLOCKED", 0
+            elif name == "C7":
+                tail, feed = down  # (_C7TAIL, C7PKG)
+                if len(tail.items) < tail.capacity:
+                    yield tail.put(part)
+                    if len(feed.items) < feed.capacity:
+                        yield feed.put(dict(part))
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
+                else:
+                    st, tput = "BLOCKED", 0
+            elif name == "PKG0":
+                first, second = (
+                    down if shared["pkg_rr"] % 2 == 0 else (down[1], down[0])
+                )
+                dest = (
+                    first
+                    if len(first.items) < first.capacity
+                    else (second if len(second.items) < second.capacity else None)
+                )
+                if dest is None:
+                    st, tput = "BLOCKED", 0
+                else:
+                    yield dest.put(part)
+                    shared["pkg_rr"] += 1
+                    to = "PKG1" if dest is down[0] else "PKG2"
+                    _emit(shared, "PACK_FORK", t, name, {"part": part["id"], "to": to})
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
+            else:
+                dest = next((s for s in down if len(s.items) < s.capacity), None)
+                if dest is None:
+                    st, tput = "BLOCKED", 0
+                else:
+                    yield dest.put(part)
+                    held, rem, part = False, 0, None
+                    st, tput = "RUN", 1
         elif len(down.items) < down.capacity:
             yield down.put(part)
             held, rem, part = False, 0, None
@@ -607,6 +779,102 @@ def _line_process(env, spec, shared):
         yield env.timeout(1)
 
 
+def _insp0_process(env, up, down, shared):
+    """INSP0 inspection-delay node: ASM1 -> INSP0 -> ASM2 (normative Todo 3).
+
+    Holds each part exactly INSPECT_DELAY_STEPS (plus active delay-fault
+    extra via _delay_d), then releases with a late verdict: OK -> DEGRADE
+    on the part object (REJECT roll under an active INSP0 quality window
+    via _quality_rate, flowing to ASM2's existing REJECT routing).
+    Emits LATE_VERDICT {part, verdict} in the release step AFTER the put
+    and BEFORE the obs write (draw-order appendix). Signal/dev/loss/
+    breakdown behavior reuses the line-process helpers bit-identically
+    (fail draws, GT-exclusion, _degrade_at marking, loss stale-hold).
+    A full INSP02 holds release BLOCKED; an empty INSP01 STARVEs (which
+    holds ASM1 BLOCKED upstream via the full INSP01 — no loss).
+    """
+    name, idx = "INSP0", MACHINE_INDEX["INSP0"]
+    cfg = MACHINES[name]
+    mttf, mttr, sigma = cfg["mttf"], cfg["mttr"], cfg["sigma"]
+    rng = shared["noise"][idx]
+    obs_row = shared["obs"][idx]
+    state_row = shared["states"][idx]
+    tput_row = shared["tput"][idx]
+    fx = shared["fx"].get(name, [])
+    held, rem, part = False, 0, None
+    down_left, dfault, ar, prev = 0, None, 0.0, "RUN"
+    for t in range(T):
+        inj = _inj_down(fx, t)
+        if inj is not None and down_left > 0:
+            down_left = 0
+            _transition(shared, idx, name, "DOWN", "RUN", t)
+            prev = "RUN"
+        if _gw_at(shared, t):
+            down_left = 0  # GT-exclusion (see _line_process)
+        fid = inj["id"] if inj is not None else dfault
+        if inj is not None:
+            st, tput = "DOWN", 0
+            dfault = inj["id"]
+        elif down_left > 0:
+            st, tput = "DOWN", 0
+            down_left -= 1
+        elif (
+            shared["enable_bd"]
+            and not _gw_at(shared, t)
+            and shared["fail"].random() < 1.0 / mttf
+        ):
+            down_left = int(shared["fail"].geometric(1.0 / mttr)) - 1
+            st, tput = "DOWN", 0
+        elif not held:
+            if len(up.items) > 0:
+                req = up.get()
+                yield req
+                part = req.value
+                held, rem, st, tput = (
+                    True,
+                    INSPECT_DELAY_STEPS + _delay_d(fx, t),
+                    "RUN",
+                    0,
+                )
+            else:
+                st, tput = "STARVED", 0
+        elif rem > 1:
+            rem -= 1
+            st, tput = "RUN", 0
+        elif len(down.items) < down.capacity:
+            yield down.put(part)
+            rate = _quality_rate(shared, t, name)
+            if part.get("flag") != "REJECT":
+                if rate > 0.0 and shared["place"].random() < rate:
+                    part["flag"] = "REJECT"
+                elif part.get("flag") == "OK":
+                    part["flag"] = "DEGRADE"
+            _emit(
+                shared,
+                "LATE_VERDICT",
+                t,
+                name,
+                {"part": part["id"], "verdict": part["flag"]},
+            )
+            held, rem, part = False, 0, None
+            st, tput = "RUN", 1
+        else:
+            st, tput = "BLOCKED", 0
+        if inj is None:
+            dfault = None
+        if held and part is not None and _degrade_at(fx, t):
+            part["flag"] = "DEGRADE"
+        _transition(shared, idx, name, prev, st, t, fault_id=fid)
+        prev = st
+        shared["held"][idx] = part if held else None
+        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        lspec = _loss_at(fx, t)
+        if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
+            val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
+        obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        yield env.timeout(1)
+
+
 def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     """One tail/SBUF->ASM0-kit transfer: request, hold, release, log wait."""
     hold = int(rng_agv.integers(AGV_STEPS[0], AGV_STEPS[1] + 1))
@@ -616,9 +884,12 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     yield env.timeout(hold)
     t_del = int(env.now)
     agv.release(req)
-    if t_del >= T:
-        # Episode ended mid-transfer: part stays counted as in-flight
-        # (conserved via flow xfer_open bucket), never double-logged.
+    if t_del > T + AGV_DRAIN_GRACE:
+        # Beyond the land-grace drain phase: part stays counted as
+        # in-flight (conserved via flow xfer_open bucket), never
+        # double-logged. Unreachable under the spawn guard (which admits
+        # only xfers that land by T+AGV_DRAIN_GRACE); kept as the
+        # conservation backstop.
         return
     kit[part["line"]].append(part)
     shared["flow"]["xfer_open"] -= 1
@@ -652,10 +923,26 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
     unbounded resource queue.
     """
     sbuf = stores["SBUF"]
-    tails = [(stores[_TAIL_BUF[n]], n) for n in _TAILS]
+    # PKG tails are sinks with no tail buffers (nothing to AGV-drain);
+    # only _TAIL_BUF-backed tails ride the AGV path.
+    tails = [(stores[_TAIL_BUF[n]], n) for n in _TAILS if n in _TAIL_BUF]
 
     def _gate_open():
         return agv.count + len(agv.queue) < AGV_CAP + 2
+
+    def _spawn_ok():
+        # Owner-approved option C cap-aware spawn guard. A spawn at `now`
+        # lands at now+queue_wait+hold with queue_wait data-dependent, so
+        # no static cutoff guarantees drainage; admit a spawn only when
+        # its worst-case landing still falls inside the drain phase:
+        # now + est_wait + max_hold <= T + AGV_DRAIN_GRACE, where est_wait
+        # serializes the pipeline ahead ((count+queue) x max_hold / cap).
+        # Deferred parts wait in tail buffers (never lost); the guard
+        # converts unlandable xfer_open into bounded tail occupancy.
+        now = int(env.now)
+        ahead = agv.count + len(agv.queue)
+        est_wait = ahead * AGV_STEPS[1] // AGV_CAP
+        return now + est_wait + AGV_STEPS[1] <= T + AGV_DRAIN_GRACE
 
     def _spawn(part, src):
         shared["flow"]["xfer_open"] += 1
@@ -664,12 +951,12 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
     while True:
         if int(env.now) >= T:
             return
-        if len(sbuf.items) > 0 and _gate_open():
+        if len(sbuf.items) > 0 and _gate_open() and _spawn_ok():
             req = sbuf.get()
             yield req
             _spawn(req.value, "SBUF")
         for store, name in tails:
-            if len(store.items) > 0 and _gate_open():
+            if len(store.items) > 0 and _gate_open() and _spawn_ok():
                 req = store.get()
                 yield req
                 _spawn(req.value, name)
@@ -1034,7 +1321,7 @@ def _fault_clock(env, shared):
 
 
 def _monitor(env, stores, order, rows):
-    """Record the 31 roster buffer levels after machines act each step."""
+    """Record the 26 roster buffer levels after machines act each step."""
     for t in range(T):
         for j, key in enumerate(order):
             rows[j][t] = len(stores[key].items) if key in stores else 0
@@ -1084,11 +1371,13 @@ def run_episode(
         "parts": [],
         "pid": [0],
         "held": [None] * N_MACHINES,
+        "pkg_rr": 0,  # PKG0 round-robin counter: reset 0 at episode start
         "flow": {
             "line_created": 0,
             "asm_created": 0,
             "sunk": 0,
             "scrapped": 0,
+            "packaged": 0,
             "xfer_open": 0,
             "rejected": 0,
             "reworked": 0,
@@ -1108,23 +1397,43 @@ def run_episode(
     shared["rwk_ret"] = stores["RWK_RET"]
     edges = _line_edges()
     for name in _LINES:
+        if name == "INSP0":
+            # Dedicated inspection-delay process (hold + late verdict).
+            env.process(_insp0_process(env, stores["INSP01"], stores["INSP02"], shared))
+            continue
         up_key, down_key = edges[name]
+        # Fork downs / join ups resolve to store tuples; the fork-aware
+        # _line_process routes per machine (B2 failover, C7 broadcast,
+        # PKG0 round-robin) and joins pull first-non-empty.
+        up = (
+            tuple(stores[k] for k in up_key)
+            if isinstance(up_key, tuple)
+            else (stores[up_key] if up_key else None)
+        )
+        down = (
+            tuple(stores[k] for k in down_key)
+            if isinstance(down_key, tuple)
+            else (stores[down_key] if down_key else None)
+        )
         env.process(
             _line_process(
                 env,
                 {
                     "name": name,
                     "idx": MACHINE_INDEX[name],
-                    "up": stores[up_key] if up_key else None,
-                    "down": stores[down_key],
+                    "up": up,
+                    "down": down,
                     "sbuf": stores["SBUF"],
+                    "stores": stores,
                 },
                 shared,
             )
         )
     env.process(_asm0_process(env, stores["ASM01"], kit, shared))
-    env.process(_asm_mid_process(env, "ASM1", stores["ASM01"], stores["ASM12"], shared))
-    env.process(_asm_mid_process(env, "ASM2", stores["ASM12"], None, shared))
+    env.process(
+        _asm_mid_process(env, "ASM1", stores["ASM01"], stores["INSP01"], shared)
+    )
+    env.process(_asm_mid_process(env, "ASM2", stores["INSP02"], None, shared))
     env.process(_rwk0_process(env, shared))
     env.process(_fault_clock(env, shared))
     env.process(_agv_dispatcher(env, agv, rng_agv, stores, kit, shared))
@@ -1132,6 +1441,14 @@ def run_episode(
     buf_rows = [[0] * T for _ in range(N_BUFFERS)]
     env.process(_monitor(env, stores, buf_order, buf_rows))
     env.run(until=T)
+    # Owner-approved option C land-grace drain phase: every machine,
+    # monitor, fault-clock, and dispatcher loop is `for t in range(T)` /
+    # `now >= T -> return` bounded, so at T all obs rows are fully written
+    # and only in-flight _agv_xfer timeouts/requests remain pending. Run
+    # until T+AGV_DRAIN_GRACE so they land (kit append, xfer_open -= 1)
+    # instead of leaking; obs shapes stay T-long, no rng draws occur in
+    # the grace window, and fault marks (validated t0+dur <= T) are done.
+    env.run(until=T + AGV_DRAIN_GRACE)
     # Post-run store census (exact WIP audit — the channel-6 series tail can
     # miss last-step puts/gets that land after the monitor's final record).
     store_final = {k: len(stores[k].items) for k in buf_order}
@@ -1156,6 +1473,7 @@ def run_episode(
         "asm_created": shared["flow"]["asm_created"],
         "sunk": shared["flow"]["sunk"],
         "scrapped": shared["flow"]["scrapped"],
+        "packaged": shared["flow"]["packaged"],
         "rejected": shared["flow"]["rejected"],
         "reworked": shared["flow"]["reworked"],
         "xfer_open": shared["flow"]["xfer_open"],
@@ -1175,6 +1493,11 @@ def run_episode(
         "seed": seed,
         "T": T,
         "cal_win": CAL_WIN,
+        # Topology-A schema v2 version binding (MINIPRO-33): the canonical
+        # replay payload INCLUDES these keys by construction, so version
+        # tampering mismatches the digest. v1 records are non-comparable.
+        "schema_version": TWIN_SCHEMA,
+        "code_version": CODE_VERSION,
         # Table 3.1 roster snapshot (SIM_SPEC §4.4): per-machine operating
         # points so a serialized episode carries its own roster metadata.
         "machines": {name: dict(cfg) for name, cfg in MACHINES.items()},
@@ -1188,6 +1511,52 @@ def run_episode(
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
         "faults": specs,
+    }
+
+
+def duty_cycle(record: dict) -> dict:
+    # Owner-approved option C standby scope: B7S (spare, idle by
+    # construction) + RWK0 (rework loop, zero flow on clean episodes) are
+    # excluded from the plant mean via STANDBY_EXCLUDED. Scope change (26
+    # -> 24 machines) recorded for SIM_SPEC Todo 10.
+    states = record["states"]
+    T_ = record["T"]
+    kept = [i for n, i in MACHINE_INDEX.items() if n not in STANDBY_EXCLUDED]
+    tot = len(kept) * T_
+    edges = _line_edges()
+    down_of: dict[str, str] = {}
+    for m, (up, _down) in edges.items():
+        for b in [up] if isinstance(up, str) else list(up or []):
+            down_of.setdefault(b, m)
+    down_of["INSP02"] = "ASM2"
+    buf_order = list(BUFFERS)
+    violations = []
+    for b, ds in down_of.items():
+        if b not in BUFFERS:
+            continue
+        row = record["buffers"][buf_order.index(b)]
+        srow = states[MACHINE_INDEX[ds]]
+        cap = BUFFERS[b]
+        t = 0
+        while t < T_:
+            if row[t] >= cap:
+                s = t
+                while t < T_ and row[t] >= cap:
+                    t += 1
+                if t - s >= 30 and any(srow[k] == "STARVED" for k in range(s, t)):
+                    violations.append(
+                        {"buffer": b, "downstream": ds, "start": s, "length": t - s}
+                    )
+            else:
+                t += 1
+    return {
+        "run_share": sum(1 for i in kept for s in states[i] if s == "RUN") / tot,
+        "starved_share": sum(1 for i in kept for s in states[i] if s == "STARVED")
+        / tot,
+        "blocked_share": sum(1 for i in kept for s in states[i] if s == "BLOCKED")
+        / tot,
+        "xfer_open": record["flow_stats"]["xfer_open"],
+        "pileup_violations": violations,
     }
 
 
@@ -1227,8 +1596,8 @@ def _try_place(rng, taken, durs, tries=50):
 def build_faults(seed: int = 12345) -> list[dict]:
     """Build the deterministic fault manifest for a master seed.
 
-    Full machine x class cross-product (32 machines x 7 classes = 224
-    rows); the oracle representative subset (incl. F-21 drift B5 t0=150
+    Full machine x class cross-product (26 machines x 7 classes = 182
+    rows); the oracle representative subset (incl. F-21 drift B2 t0=150
     dur=12 mag=5.2) is pinned with rep=True. t0 ~ uniform on [CAL_WIN,
     300-dur] from rng_place = children[32]; same-machine windows keep a
     ≥5-step gap (uniform draw + bounded retry; dur-8 fallback, which
@@ -1357,9 +1726,21 @@ def check_wall_tripwire(walls, budget=600.0):
 def replay_digest(record):
     """Canonical replay digest: sha256 over sorted-key JSON with repr floats.
 
-    Wall/clock fields are excluded. Named digest (not hash) so the T1
+    Canonical payload = {schema_version, code_version, partition,
+    subgraph obs} (the record's partition-scoped subgraph obs plus its
+    version binding), sorted keys, wall/clock fields excluded via
+    _WALLCLOCK_KEYS. schema_version/code_version are INCLUDED by
+    construction: a tampered code_version under schema v2 mismatches the
+    digest, while any other schema_version (v1 32-machine records,
+    unversioned records) is strict-rejected as non-comparable.
+    Named digest (not hash) so the T1
     no-bare-default_rng/no-hash-seeding source grep stays green.
     """
+    if record.get("schema_version") != TWIN_SCHEMA:
+        raise ValueError(
+            f"schema v1 non-comparable, rebaseline: got schema_version="
+            f"{record.get('schema_version')!r}, want {TWIN_SCHEMA}"
+        )
     scrubbed = {k: v for k, v in record.items() if k not in _WALLCLOCK_KEYS}
     return hashlib.sha256(
         json.dumps(scrubbed, sort_keys=True, default=repr).encode()
@@ -1370,7 +1751,7 @@ _CAL_SEEDS = (7, 11, 13)
 _F21_SHAPE = {
     "id": "F-21",
     "class": "drift",
-    "origin": "B5",
+    "origin": "B2",
     "t0": 150,
     "dur": 12,
     "mag_sigma": 5.2,
@@ -1440,8 +1821,12 @@ def _partition_of_machine(name):
         raise ValueError("manifest row missing origin machine")
     if name.startswith("ASM"):
         return "cell"
+    if name.startswith("INSP"):
+        return "cell"
     if name.startswith("RWK"):
         return "rework"
+    if name.startswith("PKG"):
+        return "line-C"
     if name.startswith("A"):
         return "line-A"
     if name.startswith("B"):
@@ -1677,7 +2062,9 @@ def main(argv=None):
     try:
         cal_mean = _load_calibration(args.calibration)
     except ValueError as exc:
-        return _fail(f"{exc}; bootstrap: run --calibrate {args.calibration} to create it")
+        return _fail(
+            f"{exc}; bootstrap: run --calibrate {args.calibration} to create it"
+        )
     budget_cap = (
         args.budget_override if args.budget_override is not None else _BATTERY_BUDGET_S
     )

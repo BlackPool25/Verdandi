@@ -8,6 +8,7 @@ export const EDGE_CLASSES = [
   "agv-drain",
   "assembly",
   "rework",
+  "packaging",
 ] as const;
 export type EdgeClass = (typeof EDGE_CLASSES)[number];
 

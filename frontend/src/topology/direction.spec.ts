@@ -10,10 +10,10 @@ describe("direction toggle re-layout", () => {
     expect(implicit).toEqual(explicit);
   });
 
-  it("TB layout is lossless: same 34 ids, no overlap, positions actually change", () => {
+  it("TB layout is lossless: same 28 ids, no overlap, positions actually change", () => {
     const lr = computeLayout(PINNED_NODES, PINNED_EDGES, undefined, "LR");
     const tb = computeLayout(PINNED_NODES, PINNED_EDGES, undefined, "TB");
-    expect(tb).toHaveLength(34);
+    expect(tb).toHaveLength(28);
     expect(new Set(tb.map((n) => n.id))).toEqual(new Set(lr.map((n) => n.id)));
     expect(hasOverlap(tb, { width: NODE_WIDTH, height: NODE_HEIGHT })).toBe(false);
     expect(tb).not.toEqual(lr);

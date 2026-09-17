@@ -1,13 +1,15 @@
-# sim_bridge frozen tick schema (T3 contract lock)
+# sim_bridge frozen tick schema v2 (T3 contract lock, topology-A only)
 
 Twin-mirror verbatim; bridge-strict labeled. This document freezes the
 tick JSON the bridge replays and the frontend consumes. `GET /schema`
 returns the same contract as JSON (`services/sim_bridge/schema.py`
-`FROZEN_SCHEMA`).
+`FROZEN_SCHEMA`). v1 32-machine ticks are rejected with
+`schema v1 non-comparable, rebaseline` (v1 digests flow 962b9c54d022 /
+demo d2b4fb23… retired, never compared).
 
 ## Tick keys (frozen)
 
-`step, states[32], obs[32], throughput[32], buffers[31], sbuf_level,
+`step, states[26], obs[26], throughput[26], buffers[26], sbuf_level,
 events_at_k[], faults[], quality{}`. No other keys. In particular there
 is **no `temperature` key** (temp gap waiver below).
 
@@ -39,7 +41,7 @@ is **no `temperature` key** (temp gap waiver below).
 
 ## Buffers
 
-31 roster buffers, each level in `0-cap`. `sbuf_level` is extracted from
+26 roster buffers, each level in `0-cap`. `sbuf_level` is extracted from
 `buffers[SBUF]` (must equal it; `validate_tick` asserts this).
 
 ## Events
@@ -50,7 +52,11 @@ Base shape `{event, t, machine, detail}` for ALL variants. The trio
 window), `None` means natural (`natural:true, gt_excluded:true`).
 Seven families: FAULT (`FAULT_START`/`END`), BLOCK (`BLOCK_ON`/`OFF`),
 STARVE (`STARVE_ON`/`OFF`), DOWN_UP (`DOWN`/`UP`), `AGV_WAIT`,
-`REJECT_ROUTE`, `DIVERT_SBUF`.
+`REJECT_ROUTE`, `DIVERT_SBUF` — plus the topology-A trio, each its own
+family: `FAILOVER` (B-pair reroute, top-level `from`/`to`/`reason`),
+`PACK_FORK` (PKG0 split, detail `part`/`to`), `LATE_VERDICT` (INSP0
+release, detail `part`/`verdict`). Ten families total (7R: the 6R TAKT5
+retime raised trio volume onto sampled ticks, exposing the 7-family gap).
 
 ## Episode header (once per episode, NOT per tick)
 

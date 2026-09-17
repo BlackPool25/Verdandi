@@ -13,14 +13,40 @@ buffer_cap (buffer after machine; None = sink + rework tap), transit
 # Episode / calibration scalars (SIM_SPEC Table 3.1 header + §2.3).
 T = 300
 CAL_WIN = 120
-N_MACHINES = 32
-N_BUFFERS = 31
+N_MACHINES = 26
+N_BUFFERS = 26
 N_STREAMS = 36
 
+# Topology-A schema version (MINIPRO-33): v2 = 26-machine roster. v1
+# 32-machine baselines are V1_NON_COMPARABLE, never asserted equal.
+TWIN_SCHEMA = 2
+CODE_VERSION = "twin-2.1.0-topology-A"
+
+# INSP0 holds each part exactly this many steps before late-verdict release.
+INSPECT_DELAY_STEPS = 3
+
 # Shared resources (SIM_SPEC §2.2).
-AGV_CAP = 2
+# Owner-approved option C (bounded MINIPRO-24 retime, 2026-09-17): AGV_CAP
+# 2->3. Rationale: AGV drain throttles the C-line kit feed (C7 BLOCKED 45
+# steps/episode at cap 2, kit_C=0 vs kit_A=19/kit_B=18 backlog); in-memory
+# probe measured +5-6pp RUN with balanced-kit signature. Cap 3 keeps the
+# 2-queue gate shape (AGV_CAP+2) and the hold distribution unchanged.
+AGV_CAP = 3
 AGV_STEPS = (4, 8)  # ints: uniform transit per trip, sampled on rng_agv stream
 SBUF_CAP = 30
+# Owner-approved option C: land-grace bound for AGV drain accounting. An
+# xfer spawned at t_req lands at t_req+queue_wait+hold; the drain phase
+# runs the (already obs-silent) AGV processes until T+AGV_DRAIN_GRACE so
+# in-flight xfers land instead of leaking xfer_open. Bound = max hold (8):
+# covers any zero-wait tail spawn; the spawn guard covers the rest.
+AGV_DRAIN_GRACE = 8
+# Owner-approved option C: standby-scope decision for duty_cycle().
+# B7S (spare: ~1 failover/episode, idle by construction) and RWK0 (rework
+# loop: zero flow on clean episodes, idle by design) are EXCLUDED from the
+# plant duty mean. Rationale: counting redundancy/rework-by-design as
+# starved punishes spare capacity, not flow health. Scope change recorded
+# for SIM_SPEC Todo 10 (plant mean is now over 24 machines, not 26).
+STANDBY_EXCLUDED = frozenset({"B7S", "RWK0"})
 # Owner ruling 2026-09-12: process/finish divert, feed/form never; inspect
 # tails excluded — A9/B9/C7 ride the AGV path, never SBUF-direct
 # (guard `cfg["class"] in SBUF_DIVERT_CLASSES and name not in _TAILS`).
@@ -79,45 +105,57 @@ def _row(cls, base, sigma, cycle, mttf, mttr, buffer_cap, transit):
     }
 
 
-# Per-machine Table 3.1 rows: (name, entry). Rows expand the class lines of
-# Table 3.1 (feed A0/B0/C0; form A1/B1/C1; process A2–A7/B2–B7/C2–C6;
-# finish A8/B8; inspect-tail A9/B9/C7; ASM0–2; RWK0).
+# Per-machine Table 3.1 rows: (name, entry). Topology-A roster (26):
+# line survivors A0,A1,A2,A7,A8,A9 / B0,B1,B2,B8,B9 / C0,C1,C2,C6,C7
+# (interiors A3-A6/B3-B6/C3-C5 dropped, single B7 removed) + B7P/B7S
+# redundant pair + PKG0/PKG1/PKG2 packaging fork + INSP0 delay node
+# + ASM0,ASM1,ASM2,RWK0 cell.
+#
+# Owner-approved option C TAKT5 retime (2026-09-17): single-takt line
+# balancing at takt=5 (the form/kit cadence A1/B1/C1/ASM0/PKG0 already
+# ran). Every consumer at-or-slower than its producer kills structural
+# upstream-empty STARVED. Changed cycles old->new with reason:
+# feed 4->5 (A0,B0,C0: match takt, stop overproduction/BLOCKED risk);
+# process 6->5 (A2,A7,B2,B7P,C2,C6: feed the finish tier 1:1);
+# finish 4->5 (A8,B8: match slowed producers, was ~1/3 idle);
+# inspect-tail 3->5 (A9,B9,C7: match feeders; C7 AGV-drained);
+# assembly-join 6->5 (ASM1), test 3->5 (ASM2: match kit cadence);
+# finish-sink 4->10 (PKG1,PKG2: PKG0@5 round-robins, each tail fed 1/10).
+# Frozen: A1/B1/C1 (already 5), PKG0/ASM0 (already 5), INSP0 (2:
+# delay-paced via INSPECT_DELAY_STEPS, cycle knob is dead), B7S (6:
+# spare, excluded from duty mean; pair asymmetry only in failover
+# windows), RWK0 (8: rework loop, excluded from duty mean).
+# Classes, mttf/mttr, buffer caps, transits, signal coefficients all frozen.
 _MACHINE_ROWS = [
-    ("A0", _row("feed", 50.0, 1.0, 4, 2000, 15, 20, 2)),
+    ("A0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("A1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
-    ("A2", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A3", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A4", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A5", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A6", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A7", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("A8", _row("finish", 55.0, 1.1, 4, 1200, 10, 15, 3)),
-    ("A9", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
-    ("B0", _row("feed", 50.0, 1.0, 4, 2000, 15, 20, 2)),
+    ("A2", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("A7", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("A8", _row("finish", 55.0, 1.1, 5, 1200, 10, 15, 3)),
+    ("A9", _row("inspect-tail", 48.0, 1.4, 5, 1500, 8, 15, None)),
+    ("B0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("B1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
-    ("B2", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B3", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B4", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B5", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B6", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B7", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("B8", _row("finish", 55.0, 1.1, 4, 1200, 10, 15, 3)),
-    ("B9", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
-    ("C0", _row("feed", 50.0, 1.0, 4, 2000, 15, 20, 2)),
+    ("B2", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("B7P", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("B7S", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
+    ("B8", _row("finish", 55.0, 1.1, 5, 1200, 10, 15, 3)),
+    ("B9", _row("inspect-tail", 48.0, 1.4, 5, 1500, 8, 15, None)),
+    ("C0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("C1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
-    ("C2", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("C3", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("C4", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("C5", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
-    ("C6", _row("process", 70.0, 1.5, 6, 800, 20, 25, 3)),
+    ("C2", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
+    ("C6", _row("process", 70.0, 1.5, 5, 800, 20, 25, 3)),
     # C7 "finish" label is line shorthand only (Table 3.1 note); params are inspect.
     # buffer_cap=15 (tail cap governs dedicated _C7TAIL store); mttr=8 is repair, not cap.
-    ("C7", _row("inspect-tail", 48.0, 1.4, 3, 1500, 8, 15, None)),
+    ("C7", _row("inspect-tail", 48.0, 1.4, 5, 1500, 8, 15, None)),
+    ("PKG0", _row("assembly-kit", 65.0, 1.3, 5, 1000, 12, 25, 2)),
+    ("PKG1", _row("finish", 55.0, 1.1, 10, 1200, 10, 15, None)),
+    ("PKG2", _row("finish", 55.0, 1.1, 10, 1200, 10, 15, None)),
     # ASM0 cycle 5 explicit per Table 3.1 (assembly/kit).
     ("ASM0", _row("assembly-kit", 65.0, 1.3, 5, 1000, 12, 25, 2)),
-    ("ASM1", _row("assembly-join", 66.0, 1.3, 6, 1000, 12, 25, 2)),
+    ("ASM1", _row("assembly-join", 66.0, 1.3, 5, 1000, 12, 25, 2)),
+    ("INSP0", _row("test", 45.0, 2.0, 2, 1200, 10, 25, 2)),
     # ASM2 σ=2.0 kept noisy per spec — do not quiet it; VETO_ASM2 compensates (§7).
-    ("ASM2", _row("test", 45.0, 2.0, 3, 1200, 10, None, None)),
+    ("ASM2", _row("test", 45.0, 2.0, 5, 1200, 10, None, None)),
     ("RWK0", _row("rework", 62.0, 1.6, 8, 900, 18, 10, 5)),
 ]
 
@@ -128,31 +166,76 @@ for _tail in ("A9", "B9", "C7"):
 
 MACHINES = dict(_MACHINE_ROWS)
 
-# Canonical index order: A0–A9=0–9, B0–B9=10–19, C0–C7=20–27, ASM0–2=28–30, RWK0=31.
-MACHINE_INDEX = (
-    {f"A{i}": i for i in range(10)}
-    | {f"B{i}": 10 + i for i in range(10)}
-    | {f"C{i}": 20 + i for i in range(8)}
-    | {"ASM0": 28, "ASM1": 29, "ASM2": 30, "RWK0": 31}
-)
+# Canonical index order (topology-A literal, index = noise stream):
+# A0:0,A1:1,A2:2,A7:3,A8:4,A9:5, B0:6,B1:7,B2:8,B7P:9,B7S:10,B8:11,B9:12,
+# C0:13,C1:14,C2:15,C6:16,C7:17, PKG0:18,PKG1:19,PKG2:20,
+# ASM0:21,ASM1:22,INSP0:23,ASM2:24,RWK0:25.
+# Survivor moves (old->new): A7 7->3, A8 8->4, A9 9->5, B0 10->6,
+# B1 11->7, B2 12->8, B8 18->11, B9 19->12, C0 20->13, C1 21->14,
+# C2 22->15, C6 26->16, C7 27->17, ASM0 28->21, ASM1 29->22,
+# ASM2 30->24, RWK0 31->25. Noise children 26-31 retired.
+MACHINE_INDEX = {
+    "A0": 0,
+    "A1": 1,
+    "A2": 2,
+    "A7": 3,
+    "A8": 4,
+    "A9": 5,
+    "B0": 6,
+    "B1": 7,
+    "B2": 8,
+    "B7P": 9,
+    "B7S": 10,
+    "B8": 11,
+    "B9": 12,
+    "C0": 13,
+    "C1": 14,
+    "C2": 15,
+    "C6": 16,
+    "C7": 17,
+    "PKG0": 18,
+    "PKG1": 19,
+    "PKG2": 20,
+    "ASM0": 21,
+    "ASM1": 22,
+    "INSP0": 23,
+    "ASM2": 24,
+    "RWK0": 25,
+}
 
-# Buffer roster: 29 gap buffers + 1 rework return + SBUF = 31 (SIM_SPEC §2.2).
-# Gap caps mirror the upstream machine's "buffer after (cap)"; tail gateways
-# GA9/GB9 cap 15; C7 tail stages in the dedicated cap-15 _C7TAIL store
-# (AGV-drained, NOT the C67 gap buffer; tail cap 15 governs _C7TAIL).
-_BUFFER_ROWS = (
-    [(f"A{i}{i + 1}", 25 if 2 <= i <= 7 else (20 if i <= 1 else 15)) for i in range(9)]
-    + [
-        (f"B{i}{i + 1}", 25 if 2 <= i <= 7 else (20 if i <= 1 else 15))
-        for i in range(9)
-    ]
-    + [
-        (f"C{i}{i + 1}", 25 if 2 <= i <= 5 else (20 if i <= 1 else 15))
-        for i in range(7)
-    ]
-    + [("ASM01", 25), ("ASM12", 25), ("GA9", 15), ("GB9", 15)]
-    + [("RWK_RET", 10), ("SBUF", SBUF_CAP)]
-)
+# Buffer roster (26, SIM_SPEC §2.2 topology-A): 16 line-gap + 5 cell
+# (ASM01, INSP01, INSP02, GA9, GB9) + 3 pkg (C7PKG, PKG01, PKG02)
+# + RWK_RET + SBUF. Gap caps mirror the upstream machine's buffer cap;
+# C7 tail stages in the dedicated cap-15 _C7TAIL store (AGV-drained,
+# off-roster, never the C67 gap buffer).
+_BUFFER_ROWS = [
+    ("A01", 20),
+    ("A12", 20),
+    ("A27", 25),
+    ("A78", 15),
+    ("A89", 15),
+    ("B01", 20),
+    ("B12", 20),
+    ("B2B7P", 25),
+    ("B2B7S", 25),
+    ("B7PB8", 25),
+    ("B7SB8", 25),
+    ("B89", 15),
+    ("C01", 20),
+    ("C12", 20),
+    ("C26", 25),
+    ("C67", 15),
+    ("ASM01", 25),
+    ("INSP01", 25),
+    ("INSP02", 25),
+    ("GA9", 15),
+    ("GB9", 15),
+    ("C7PKG", 15),
+    ("PKG01", 15),
+    ("PKG02", 15),
+    ("RWK_RET", 10),
+    ("SBUF", SBUF_CAP),
+]
 BUFFERS = dict(_BUFFER_ROWS)
 
 

@@ -56,6 +56,8 @@ async def create_episode(req: Request) -> JSONResponse:
     episode_id = str(uuid.uuid4())
     # T2 batch precompute: run the whole episode once server-side (no twin
     # stepper, no partial compute) and cache the record for cursor replay.
+    # Topology-A v2 roster: 26 machines / 26 buffers, T=300, digest bound to
+    # schema_version=2 + code_version twin-2.1.0-topology-A (see schema.py).
     from src.twin import replay_digest, run_episode
 
     record = run_episode(seed, result.faults, enable_natural_breakdown=bool(enable_natural_breakdown))

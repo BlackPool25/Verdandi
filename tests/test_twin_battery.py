@@ -75,12 +75,12 @@ def test_missing_default_calibration_fails_loud_with_bootstrap(
 
 def test_quick_validates_full_manifest_before_slice():
     full = twin.build_faults()
-    assert len(full) == 224
+    assert len(full) == 182
     assert twin.validate_manifest(full) == []
     manifest, label = twin._load_manifest("quick", 12345)
     assert label == "quick"
-    # quick loads FULL 224 for validation; execution slices 16 after.
-    assert len(manifest) == 224
+    # quick loads FULL 182 for validation; execution slices 16 after.
+    assert len(manifest) == 182
     assert twin.validate_manifest(manifest) == []
     assert len(manifest[: twin._BATTERY_QUICK_ROWS]) == 16
 
@@ -88,7 +88,7 @@ def test_quick_validates_full_manifest_before_slice():
 def test_quick_hole_in_truncated_region_fails():
     full = twin.build_faults()
     holey = [r for r in full if r["id"] != "F-21"]
-    assert len(holey) == 223
+    assert len(holey) == 181
     gaps = twin.validate_manifest(holey)
     assert any("F-21" in g for g in gaps)
     # truncated-16 execution slice still fails because FULL is validated first.
