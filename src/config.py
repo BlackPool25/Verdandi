@@ -10,6 +10,9 @@ buffer_cap (buffer after machine; None = sink + rework tap), transit
 (nominal transit steps to next; None = sink).
 """
 
+import math
+from typing import Any
+
 # Episode / calibration scalars (SIM_SPEC Table 3.1 header + §2.3).
 T = 300
 CAL_WIN = 120
@@ -19,8 +22,11 @@ N_STREAMS = 36
 
 # Topology-A schema version (MINIPRO-33): v2 = 26-machine roster. v1
 # 32-machine baselines are V1_NON_COMPARABLE, never asserted equal.
-TWIN_SCHEMA = 2
-CODE_VERSION = "twin-2.1.0-topology-A"
+# MINIPRO-34 Todo 1: v3 adds five 26x300 physics grids (therm/wear/force/
+# inrush/life) + the couplings active-flags snapshot. v2 digests are
+# V2_NON_COMPARABLE, never asserted equal.
+TWIN_SCHEMA = 3
+CODE_VERSION = "twin-3.0.0-xcouplings"
 
 # INSP0 holds each part exactly this many steps before late-verdict release.
 INSPECT_DELAY_STEPS = 3
@@ -260,3 +266,210 @@ if len(MACHINES) != N_MACHINES or len(BUFFERS) != N_BUFFERS:
     raise ValueError("roster size mismatch vs N_MACHINES/N_BUFFERS")
 if set(MACHINE_INDEX) != set(MACHINES):
     raise ValueError("MACHINE_INDEX does not cover MACHINES exactly")
+
+
+# MINIPRO-34 physics couplings (all default OFF; schema v3). Normative
+# coefficient table: .omo/plans/minipro-34-top4-couplings.md Scope — the
+# values below are verbatim, invented nothing. twin.py reads every
+# coefficient ONLY via COUPLING_Xn["key"] subscriptions, never literals.
+COUPLING_X1A: dict[str, Any] = {
+    "enabled": False,
+    "alpha_cu": 0.00393,
+    "k_cu_scale": 0.3,
+    "tau_th": 12,
+    "t_amb": 25.0,
+    "i_base": 50.0,
+}
+COUPLING_X1B: dict[str, Any] = {
+    "enabled": False,
+    "t_rated_offset": 12.0,
+    "kappa_der": 0.01,
+    "trip_offset": 30.0,
+    "reset_offset": 5.0,
+    "e_trip": 150.0,
+    "trip_code": "ELEC/MOTOR_OVLD",
+    "i_delay_mult": 1.25,
+}
+COUPLING_X2: dict[str, Any] = {
+    "enabled": False,
+    "mu_bv": 0.2,
+    "lambda_tv": 0.3,
+    "v_ref": 1.0,
+    "t_warn_offset": -10.0,
+    "alpha_b": 1 / 200,
+    "b_warn": 0.7,
+}
+COUPLING_X3: dict[str, Any] = {
+    "enabled": False,
+    "f_0": 1.0,
+    "zeta": 1.0,
+    "w_knee": 0.8,
+    "alpha_w": 1 / 200,
+    "r_0": 0.0,
+    "rho": 1.4,
+}
+COUPLING_X4: dict[str, Any] = {
+    "enabled": False,
+    "inrush_mult": 5.0,
+    "tau_inr": 2,
+    "kappa_sag": 0.03,
+}
+
+
+def _class_mean_base(cls):
+    vals = [entry["base"] for _, entry in _MACHINE_ROWS if entry["class"] == cls]
+    return sum(vals) / len(vals)
+
+
+# Derived per-class tables (computed once at import; twin.py subscribes,
+# never recomputes): I_rated = class mean base / i_base; dT = band top -
+# t_amb; k_cu = k_cu_scale * dT / I_rated^2; T_rated = band top +
+# t_rated_offset; T_trip/reset = T_rated + trip/reset_offset;
+# T_warn = T_rated + t_warn_offset.
+COUPLING_X1A["I_rated"] = {
+    cls: _class_mean_base(cls) / COUPLING_X1A["i_base"] for cls in TEMP_RANGES
+}
+COUPLING_X1A["dT"] = {
+    cls: TEMP_RANGES[cls][1] - COUPLING_X1A["t_amb"] for cls in TEMP_RANGES
+}
+COUPLING_X1A["k_cu"] = {
+    cls: COUPLING_X1A["k_cu_scale"]
+    * COUPLING_X1A["dT"][cls]
+    / COUPLING_X1A["I_rated"][cls] ** 2
+    for cls in TEMP_RANGES
+}
+COUPLING_X1B["T_rated"] = {
+    cls: TEMP_RANGES[cls][1] + COUPLING_X1B["t_rated_offset"] for cls in TEMP_RANGES
+}
+COUPLING_X1B["T_trip"] = {
+    cls: COUPLING_X1B["T_rated"][cls] + COUPLING_X1B["trip_offset"]
+    for cls in TEMP_RANGES
+}
+COUPLING_X1B["T_reset"] = {
+    cls: COUPLING_X1B["T_rated"][cls] + COUPLING_X1B["reset_offset"]
+    for cls in TEMP_RANGES
+}
+COUPLING_X2["T_warn"] = {
+    cls: COUPLING_X1B["T_rated"][cls] + COUPLING_X2["t_warn_offset"]
+    for cls in TEMP_RANGES
+}
+
+# Float bounds per coupling key: (lo, hi, lo_inclusive, hi_inclusive).
+_COUPLING_FLOAT_BOUNDS = {
+    "X1A": {
+        "alpha_cu": (0.0, 1.0, False, True),
+        "k_cu_scale": (0.0, 2.0, True, True),
+        "t_amb": (-50.0, 100.0, True, True),
+        "i_base": (0.0, float("inf"), False, True),
+    },
+    "X1B": {
+        "t_rated_offset": (-50.0, 50.0, True, True),
+        "kappa_der": (0.0, 1.0, True, False),
+        "trip_offset": (0.0, 200.0, False, True),
+        "reset_offset": (0.0, 200.0, True, True),
+        "e_trip": (0.0, float("inf"), False, True),
+        "i_delay_mult": (1.0, 2.0, True, True),
+    },
+    "X2": {
+        "mu_bv": (0.0, 2.0, True, True),
+        "lambda_tv": (0.0, 2.0, True, True),
+        "v_ref": (0.0, float("inf"), False, True),
+        "t_warn_offset": (-50.0, 50.0, True, True),
+        "alpha_b": (0.0, 1.0, False, True),
+        "b_warn": (0.0, 1.0, True, True),
+    },
+    "X3": {
+        "f_0": (0.0, float("inf"), False, True),
+        "zeta": (0.0, 5.0, True, True),
+        "w_knee": (0.0, 1.0, True, True),
+        "alpha_w": (0.0, 1.0, False, True),
+        "r_0": (0.0, 1.0, True, True),
+        "rho": (0.0, 5.0, True, True),
+    },
+    "X4": {
+        "inrush_mult": (1.0, 10.0, True, True),
+        "kappa_sag": (0.0, 1.0, True, False),
+    },
+}
+_COUPLING_INT_KEYS = {("X1A", "tau_th"): (1, 1000), ("X4", "tau_inr"): (1, 1000)}
+_COUPLING_DERIVED_KEYS = {
+    "X1A": ("I_rated", "dT", "k_cu"),
+    "X1B": ("T_rated", "T_trip", "T_reset"),
+    "X2": ("T_warn",),
+    "X3": (),
+    "X4": (),
+}
+
+
+def _check_coupling_number(name, key, v, lo, hi, lo_inc, hi_inc):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or math.isnan(v):
+        raise ValueError(f"coupling {name}[{key!r}] must be a number, got {v!r}")
+    if v < lo or (not lo_inc and v == lo) or v > hi or (not hi_inc and v == hi):
+        raise ValueError(f"coupling {name}[{key!r}]={v!r} out of range")
+
+
+def check_couplings(couplings):
+    """Validate coupling tables; unknown coupling/key or out-of-range -> ValueError."""
+    if not isinstance(couplings, dict):
+        raise ValueError(f"couplings must be a dict, got {couplings!r}")  # noqa: TRY004
+    for name, table in couplings.items():
+        if name not in _COUPLING_FLOAT_BOUNDS:
+            raise ValueError(f"unknown coupling {name!r}")
+        if not isinstance(table, dict):
+            raise ValueError(  # noqa: TRY004
+                f"coupling {name} must be a dict, got {table!r}"
+            )
+        bounds = _COUPLING_FLOAT_BOUNDS[name]
+        allowed = set(bounds) | {"enabled"} | set(_COUPLING_DERIVED_KEYS[name])
+        allowed |= {k for (n, k) in _COUPLING_INT_KEYS if n == name}
+        if name == "X1B":
+            allowed.add("trip_code")
+        for key in table:
+            if key not in allowed:
+                raise ValueError(f"coupling {name} has unknown key {key!r}")
+        for key in (
+            "enabled",
+            *bounds,
+            *[k for (n, k) in _COUPLING_INT_KEYS if n == name],
+        ):
+            if key not in table:
+                raise ValueError(f"coupling {name} missing key {key!r}")
+        if not isinstance(table["enabled"], bool):
+            raise ValueError(  # noqa: TRY004
+                f"coupling {name}['enabled'] must be bool"
+            )
+        for key, (lo, hi, lo_inc, hi_inc) in bounds.items():
+            _check_coupling_number(name, key, table[key], lo, hi, lo_inc, hi_inc)
+        for (n, key), (lo, hi) in _COUPLING_INT_KEYS.items():
+            if n != name:
+                continue
+            v = table[key]
+            if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
+                raise ValueError(f"coupling {name}[{key!r}]={v!r} out of range")
+        if name == "X1B" and table["trip_code"] != "ELEC/MOTOR_OVLD":
+            raise ValueError(
+                f"coupling X1B['trip_code']={table['trip_code']!r} unknown"
+            )
+        for key in _COUPLING_DERIVED_KEYS[name]:
+            if key not in table:
+                continue
+            grid = table[key]
+            if not isinstance(grid, dict) or not grid:
+                raise ValueError(f"coupling {name}[{key!r}] must be a class table")
+            for cls, v in grid.items():
+                if cls not in TEMP_RANGES:
+                    raise ValueError(f"coupling {name}[{key!r}] unknown class {cls!r}")
+                _check_coupling_number(
+                    name, f"{key}[{cls}]", v, 0.0, float("inf"), False, True
+                )
+
+
+check_couplings(
+    {
+        "X1A": COUPLING_X1A,
+        "X1B": COUPLING_X1B,
+        "X2": COUPLING_X2,
+        "X3": COUPLING_X3,
+        "X4": COUPLING_X4,
+    }
+)
