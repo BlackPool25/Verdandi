@@ -484,10 +484,14 @@ def wear_force(w: float, ld: float) -> float:
 
 
 def _apply_couplings(shared, name, fx, t, st):
-    # C4-PLUG + C3-PLUG: per-machine per-step therm/wear update; BEFORE sampling.
+    # C4-PLUG + C3-PLUG + C1-PLUG: per-machine per-step therm/wear/inrush
+    # update; BEFORE sampling. Returns the X4 obs overlay (0.0 when X4 off
+    # or the counter is inactive); callers add it AFTER the +-6σ clamp so
+    # the clamp stays the honest ceiling (D2: magnitude truth lives in the
+    # inrush grid, obs saturates).
     flags = shared.get("couplings")
     if flags is None:
-        return None
+        return 0.0
     # C3-PLUG: machine-local wear integrator (station tool/fixture state,
     # never part-carried) + live force-grid write. Independent of the therm
     # flags below (Todo 5 needs only shared init from Todo 1).
@@ -501,10 +505,35 @@ def _apply_couplings(shared, name, fx, t, st):
     else:
         shared["wear_rows"][name][t] = shared["wear"][name]
         shared["force_rows"][name][t] = 1.0 if st == "RUN" else 0.0
+    # C1-PLUG: inrush counter dynamics (RNG-free: counters + closed-form
+    # decay only). Restart = any->RUN step-top entry; prev comes from this
+    # machine's own committed row (t==0 starts RUN by construction). Sits
+    # BEFORE the therm early-return below (Todo-5 lesson: shared writes
+    # must not sit behind unrelated flag gates).
+    ovl = 0.0
+    if flags.get("X4"):
+        idx = MACHINE_INDEX[name]
+        prev_st = "RUN" if t == 0 else shared["states"][idx][t - 1]
+        if st == "RUN" and prev_st != "RUN":
+            shared["inr"][name] = 0
+            _emit(shared, "INRUSH_START", t, name, {"s": 0})
+        else:
+            shared["inr"][name] = min(shared["inr"][name] + 1, 7)
+        age = shared["inr"][name]
+        if age <= 6:
+            cls_nm = MACHINES[name]["class"]
+            sig = MACHINES[name]["sigma"]
+            peak = COUPLING_X4["inrush_mult"] * COUPLING_X1A["I_rated"][cls_nm] * sig
+            raw = peak * math.exp(-age / COUPLING_X4["tau_inr"])
+            busf = 1.0 - COUPLING_X4["kappa_sag"] * (
+                shared.get("n_start_lag1", 0) / N_MACHINES
+            )
+            ovl = raw * busf
+        shared["inr_rows"][name][t] = ovl
     cur = shared["therm"][name]
     if not (flags.get("X1A") or flags.get("X1B") or flags.get("X2")):
         shared["therm_rows"][name][t] = cur
-        return cur
+        return ovl
     cls = MACHINES[name]["class"]
     load = 1.0
     rated = COUPLING_X1A["I_rated"][cls]
@@ -525,7 +554,22 @@ def _apply_couplings(shared, name, fx, t, st):
     )
     shared["therm"][name] = new
     shared["therm_rows"][name][t] = new
-    return new
+    return ovl
+
+
+def _inrush_clock(env, shared):
+    # C1-PLUG: lag-1 sag census, computed ONCE per sim-step (never per
+    # machine) and stored in shared. Same-step census is order-dependent
+    # under SimPy spawn order; lag-1 (counters as committed through the
+    # previous sim-step) is deterministic and order-free. Spawned FIRST so
+    # each sim-step's census lands before that step's machine continuations.
+    # BUS_SAG fires here (once per step, never per machine) with n detail.
+    for now in range(T):
+        census = sum(1 for v in shared["inr"].values() if v <= 2)
+        shared["n_start_lag1"] = census
+        if shared.get("couplings", {}).get("X4") and census >= 2:
+            _emit(shared, "BUS_SAG", now, "BUS", {"n_start": census})
+        yield env.timeout(1)
 
 
 def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
@@ -861,11 +905,13 @@ def _line_process(env, spec, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
+        ovl = _apply_couplings(shared, name, fx, t, st)  # C1-PLUG: obs overlay
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
+        if ovl:
+            val = min(cfg["base"] + _CLAMP_SIGMA * cfg["sigma"], val + ovl)
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         yield env.timeout(1)
 
@@ -969,11 +1015,13 @@ def _insp0_process(env, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
+        ovl = _apply_couplings(shared, name, fx, t, st)  # C1-PLUG: obs overlay
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
+        if ovl:
+            val = min(cfg["base"] + _CLAMP_SIGMA * cfg["sigma"], val + ovl)
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         yield env.timeout(1)
 
@@ -1151,11 +1199,13 @@ def _asm0_process(env, asm01, kit, shared):
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
-        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
+        ovl = _apply_couplings(shared, name, fx, t, st)  # C1-PLUG: obs overlay
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
+        if ovl:
+            val = min(cfg["base"] + _CLAMP_SIGMA * cfg["sigma"], val + ovl)
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         yield env.timeout(1)
 
@@ -1311,11 +1361,13 @@ def _asm_mid_process(env, name, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
+        ovl = _apply_couplings(shared, name, fx, t, st)  # C1-PLUG: obs overlay
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
+        if ovl:
+            val = min(cfg["base"] + _CLAMP_SIGMA * cfg["sigma"], val + ovl)
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         yield env.timeout(1)
 
@@ -1430,11 +1482,13 @@ def _rwk0_process(env, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
+        ovl = _apply_couplings(shared, name, fx, t, st)  # C1-PLUG: obs overlay
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
+        if ovl:
+            val = min(cfg["base"] + _CLAMP_SIGMA * cfg["sigma"], val + ovl)
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         yield env.timeout(1)
 
@@ -1549,11 +1603,17 @@ def run_episode(
         "trip_e": {name: 0.0 for name in MACHINES},
         "trip": {name: False for name in MACHINES},
         "inr": {name: 7 for name in MACHINES},  # inactive: Todo 6 cut is s > 6
+        # C1-PLUG: per-step unclipped inrush rows + lag-1 sag census slot.
+        "inr_rows": {name: [0.0] * T for name in MACHINES},
+        "n_start_lag1": 0,
     }
     kit: dict[str, list[Any]] = {"A": [], "B": [], "C": []}
     shared["kit"] = kit
     shared["rwk_ret"] = stores["RWK_RET"]
     edges = _line_edges()
+    if active.get("X4"):
+        # C1-PLUG: census clock first in spawn order (see _inrush_clock).
+        env.process(_inrush_clock(env, shared))
     for name in _LINES:
         if name == "INSP0":
             # Dedicated inspection-delay process (hold + late verdict).
@@ -1661,7 +1721,10 @@ def run_episode(
                     for s in shared["states"][MACHINE_INDEX[name]]
                 ]
             )
-        inrush_grid.append([0.0] * T)
+        if active.get("X4"):
+            inrush_grid.append(list(shared["inr_rows"][name]))
+        else:
+            inrush_grid.append([0.0] * T)
         life_grid.append([0.0] * T)
     return {
         "seed": seed,

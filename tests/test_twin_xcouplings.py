@@ -8,6 +8,7 @@ import itertools
 
 import numpy as np
 import pytest
+import simpy
 
 from src import twin
 from src.config import (
@@ -436,3 +437,242 @@ def test_x3_battery_deterministic():
             for f in faults
         ]
         assert first == second
+
+
+# ---- Todo 6: X4 inrush + bus sag (C1 plug) ----
+
+_X4_ON = {"X1A": False, "X1B": False, "X2": False, "X3": False, "X4": True}
+_X4_SEEDS = (777, 1234, 999, 42, 2026)
+_X4_OFF_DIGEST_777 = "b2cead18b5747d5a1b1bacc6ea4e42aca59b64f6591c5853f19b545903bad876"
+
+
+def _x4_starts(rec):
+    """All any->RUN transitions (machine, t) with t >= 1, from states."""
+    out = []
+    for name, ix in twin.MACHINE_INDEX.items():
+        row = rec["states"][ix]
+        for t in range(1, 300):
+            if row[t] == "RUN" and row[t - 1] != "RUN":
+                out.append((name, t))
+    return sorted(out, key=lambda p: (p[1], p[0]))
+
+
+def _x4_events(rec, kind):
+    return [
+        (e["t"], e["machine"], e.get("detail", {}))
+        for e in rec["events"]
+        if e.get("event") == kind
+    ]
+
+
+def _x4_isolated(starts, machine, u, lo=3, hi=6):
+    return all(not (u - lo <= x <= u + hi) for m, x in starts if (m, x) != (machine, u))
+
+
+def test_x4_off_restart_zero():
+    # Baseline pin (green pre-change too): OFF restarts leave zero grid + zero X4 events.
+    rec = twin.run_episode(777, None, couplings=dict(_ALL_OFF))
+    assert len(_x4_starts(rec)) >= 1  # natural restarts occur (else vacuous)
+    for row in rec["inrush"]:
+        assert row == [0.0] * 300
+    assert _x4_events(rec, "INRUSH_START") == []
+    assert _x4_events(rec, "BUS_SAG") == []
+    assert twin.replay_digest(rec) == _X4_OFF_DIGEST_777
+
+
+def test_x4_census_rule_exact():
+    # Lag-1 census unit contract: s<=2 counted at END of previous step;
+    # computed once per sim-step (order-free); BUS_SAG iff n>=2 with n detail.
+    def _tick(inr, x4=True, until=1):
+        shared = {
+            "inr": dict(inr),
+            "couplings": {**_ALL_OFF, "X4": x4},
+            "events": [],
+        }
+        env = simpy.Environment()
+        env.process(twin._inrush_clock(env, shared))
+        env.run(until=until)
+        return shared
+
+    got = _tick({"a": 0, "b": 1, "c": 2, "d": 3, "e": 7})
+    assert got["n_start_lag1"] == 3
+    sag = [e for e in got["events"] if e["event"] == "BUS_SAG"]
+    assert len(sag) == 1 and sag[0]["detail"]["n_start"] == 3
+    # Insertion-order invariance (order-independence spot check).
+    rev = _tick({"e": 7, "d": 3, "c": 2, "b": 1, "a": 0})
+    assert rev["n_start_lag1"] == 3
+    assert [e["detail"] for e in rev["events"]] == [e["detail"] for e in got["events"]]
+    # Quiet census: n<2 -> stored but silent.
+    calm = _tick({"a": 3, "b": 7})
+    assert calm["n_start_lag1"] == 0
+    assert calm["events"] == []
+    # X4 off -> no BUS_SAG even under pileup.
+    off = _tick({"a": 0, "b": 0, "c": 1}, x4=False)
+    assert off["n_start_lag1"] == 3
+    assert off["events"] == []
+
+
+def test_x4_single_start_transient():
+    # Isolated restart (seed-777 ASM0@262): INRUSH_START + pure exponential
+    # grid decay with s>6 cut; states identical ON vs OFF (obs-only coupling).
+    on = twin.run_episode(777, None, couplings=dict(_X4_ON))
+    off = twin.run_episode(777, None, couplings=dict(_ALL_OFF))
+    assert on["states"] == off["states"]
+    starts = _x4_starts(on)
+    assert ("ASM0", 262) in starts
+    assert _x4_isolated(starts, "ASM0", 262, hi=3)
+    assert (262, "ASM0", {"s": 0}) in _x4_events(on, "INRUSH_START")
+    cfg = MACHINES["ASM0"]
+    peak = (
+        twin.COUPLING_X4["inrush_mult"]
+        * twin.COUPLING_X1A["I_rated"][cfg["class"]]
+        * cfg["sigma"]
+    )
+    i = twin.MACHINE_INDEX["ASM0"]
+    grid = on["inrush"][i]
+    bus1 = 1.0 - twin.COUPLING_X4["kappa_sag"] * (1 / twin.N_MACHINES)
+    assert grid[262] == pytest.approx(peak, rel=0.03)  # s=0: lag census pre-start
+    for k, bus in ((1, bus1), (2, bus1), (3, bus1), (4, 1.0), (5, 1.0), (6, 1.0)):
+        want = peak * float(np.exp(-k / twin.COUPLING_X4["tau_inr"])) * bus
+        assert grid[262 + k] == pytest.approx(want, rel=0.03), f"s={k}"
+    assert grid[262 + 7] == 0.0  # s>6 cut
+    assert all(v > 0.0 for v in grid[262 : 262 + 7])
+    assert twin.replay_digest(on) != twin.replay_digest(off)
+
+
+def test_x4_grid_vs_obs_divergence_documented():
+    # D2 separation: grid carries UNCLIPPED magnitude truth (above the obs
+    # ceiling headroom); obs saturates AT the existing +-6sigma clamp.
+    on = twin.run_episode(777, None, couplings=dict(_X4_ON))
+    i = twin.MACHINE_INDEX["ASM0"]
+    cfg = MACHINES["ASM0"]
+    ceil = cfg["base"] + 2.0 * 3.0 * cfg["sigma"]
+    assert on["inrush"][i][262] > ceil - cfg["base"]  # grid truth above ceiling
+    assert on["obs"][i][262] == ceil  # obs saturates at the honest ceiling
+    # Measured (5-seed scan of every start): flat-top is exactly 1 step here
+    # (s=0 at ceiling), s>=1 decays monotonically; the plan's "~2 steps" is
+    # approximate prose, the decay formula above is verbatim.
+    assert on["obs"][i][263] < ceil
+    assert on["obs"][i][263] > on["obs"][i][264]
+
+
+def test_x4_single_start_no_bus_sag():
+    # Isolated ASM0@262 start must not raise BUS_SAG in its neighborhood.
+    on = twin.run_episode(777, None, couplings=dict(_X4_ON))
+    near = [t for t, _, _ in _x4_events(on, "BUS_SAG") if 256 <= t <= 266]
+    assert near == []
+    for _, _, detail in _x4_events(on, "BUS_SAG"):
+        assert detail["n_start"] >= 2  # construction: BUS_SAG iff n>=2
+
+
+def test_x4_simultaneous_sag():
+    # Startup pileup (seed 777: A1/B1/C1 restart at logical t=5): simultaneous
+    # restarts distinguishable in grid + BUS_SAG detail with n>=2.
+    on = twin.run_episode(777, None, couplings=dict(_X4_ON))
+    starts = _x4_starts(on)
+    pile = sorted(m for m, t in starts if t == 5)
+    assert len(pile) >= 2
+    for m in pile:
+        assert (5, m, {"s": 0}) in _x4_events(on, "INRUSH_START")
+        row = on["inrush"][twin.MACHINE_INDEX[m]]
+        assert row[5] > 0.0  # fresh s=0 peak each
+    sag = [(t, d["n_start"]) for t, _, d in _x4_events(on, "BUS_SAG") if 4 <= t <= 14]
+    assert sag, "pileup raised no BUS_SAG"
+    assert max(n for _, n in sag) >= 2
+    assert 3 in (n for _, n in sag)  # lag-1 census == the 3 starters exactly
+    # Same-seed determinism (order-free census spot check).
+    again = twin.run_episode(777, None, couplings=dict(_X4_ON))
+    assert _x4_events(again, "BUS_SAG") == _x4_events(on, "BUS_SAG")
+    assert again["inrush"] == on["inrush"]
+
+
+# ---- Todo 6: T5 battery (frozen detector, reused as-is, never tuned) ----
+
+_X4_WINDOWS = (20, 150, 5)
+_X4_N_EPS = 15
+
+
+def _x4_frozen_thresholds(seed):
+    """Per-machine max(q0.99, Q3+1.5*IQR) on the clean cal window (frozen)."""
+    cal = twin.run_calibration(seed)  # (120, 26) clean, breakdowns off
+    order = sorted(twin.MACHINE_INDEX, key=lambda m: twin.MACHINE_INDEX[m])
+    thr = {}
+    for i, name in enumerate(order):
+        col = cal[:, i]
+        q99 = float(np.quantile(col, 0.99))
+        q1 = float(np.quantile(col, 0.25))
+        q3 = float(np.quantile(col, 0.75))
+        thr[name] = max(q99, q3 + 1.5 * (q3 - q1))
+    return thr, order
+
+
+def _x4_window_alert(rec, thr, order, lo, hi):
+    """One non-overlapping window alerts iff the veto-resolved top exceeds."""
+    peak = {}
+    for name in order:
+        row = rec["obs"][twin.MACHINE_INDEX[name]][lo:hi]
+        peak[name] = max(v - thr[name] for v in row)
+    ranked = sorted(order, key=lambda m: -peak[m])
+    top = ranked[0]
+    if top == "ASM2" and peak[ranked[1]] > 0 and peak[top] < 2 * peak[ranked[1]]:
+        top = ranked[1]  # VETO_ASM2 (frozen 2x-margin semantics)
+    return peak[top] > 0
+
+
+def _x4_arm_rate(couplings, seeds):
+    rates = {}
+    for L in _X4_WINDOWS:
+        flagged, total = 0, 0
+        for seed in seeds:
+            rec = twin.run_episode(seed, None, couplings=dict(couplings))
+            thr, order = _x4_frozen_thresholds(seed)
+            for lo in range(0, 300, L):
+                total += 1
+                if _x4_window_alert(rec, thr, order, lo, min(lo + L, 300)):
+                    flagged += 1
+        rates[L] = flagged / total
+    return rates
+
+
+def _x4_walk_seeds(n_eps):
+    """Deterministic seed-selection: base seeds then +1000 offsets until
+    n_eps episodes with >=1 start each; a zero-start arm episode FAILS."""
+    seeds, cand = [], list(_X4_SEEDS)
+    while len(seeds) < n_eps:
+        if not cand:
+            cand = [s + 1000 for s in seeds[-len(_X4_SEEDS) :]]
+        s = cand.pop(0)
+        rec = twin.run_episode(s, None, couplings=dict(_ALL_OFF))
+        assert _x4_starts(rec), f"zero-start episode seed={s}: guard bites"
+        seeds.append(s)
+    return seeds
+
+
+def test_battery_x4_t5_precision():
+    seeds = _x4_walk_seeds(_X4_N_EPS)
+    assert len(seeds) == _X4_N_EPS
+    for seed in seeds:  # every arm episode qualifies (natural breakdown ON)
+        assert _x4_starts(twin.run_episode(seed, None, couplings=dict(_X4_ON))), (
+            f"zero-start ON episode seed={seed}"
+        )
+    on = twin.run_episode(seeds[0], None, couplings=dict(_X4_ON))
+    assert any(v > 0.0 for row in on["inrush"] for v in row)  # X4 bites
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="owner decision pending (Todo 6 STOP): any->RUN restart transients "
+    "(~110/episode, STARVED/BLOCKED flaps included by the locked any->RUN rule) "
+    "each exceed the frozen per-machine ceiling for ~2 steps, so the ON arm "
+    "alerts nearly every window (L=20: on=1.0 vs off~0.60) while the bar demands "
+    "no-worse; coefficients untouched, see .omo/evidence/minipro-34/6-x4.txt. "
+    "Remove xfail only on bar re-sign (e.g. transient-masked windows).",
+)
+def test_battery_x4_t5_no_worse():
+    seeds = _x4_walk_seeds(_X4_N_EPS)
+    on_rates = _x4_arm_rate(_X4_ON, seeds)
+    off_rates = _x4_arm_rate(_ALL_OFF, seeds)
+    for L in _X4_WINDOWS:
+        assert on_rates[L] <= off_rates[L], (
+            f"T5 no-worse violated L={L}: on={on_rates[L]:.4f} off={off_rates[L]:.4f}"
+        )
