@@ -478,11 +478,29 @@ def _therm_step(cur, load, eff, heat, amb, band, gain, tau):
     return cur + (tot - cur) / tau
 
 
-def _apply_couplings(shared, name, fx, t):
-    # C4-PLUG: per-machine per-step thermal update; runs BEFORE sampling.
+def wear_force(w: float, ld: float) -> float:
+    # C3-PLUG: pure cutting-force shape, ML-importable; wear_force(0,L)==L.
+    return COUPLING_X3["f_0"] * ld * (1.0 + COUPLING_X3["zeta"] * w)
+
+
+def _apply_couplings(shared, name, fx, t, st):
+    # C4-PLUG + C3-PLUG: per-machine per-step therm/wear update; BEFORE sampling.
     flags = shared.get("couplings")
     if flags is None:
         return None
+    # C3-PLUG: machine-local wear integrator (station tool/fixture state,
+    # never part-carried) + live force-grid write. Independent of the therm
+    # flags below (Todo 5 needs only shared init from Todo 1).
+    if flags.get("X3"):
+        nxt = shared["wear"][name] + (COUPLING_X3["alpha_w"] if st == "RUN" else 0.0)
+        shared["wear"][name] = min(1.0, nxt)
+        shared["wear_rows"][name][t] = shared["wear"][name]
+        shared["force_rows"][name][t] = wear_force(
+            shared["wear"][name], 1.0 if st == "RUN" else 0.0
+        )
+    else:
+        shared["wear_rows"][name][t] = shared["wear"][name]
+        shared["force_rows"][name][t] = 1.0 if st == "RUN" else 0.0
     cur = shared["therm"][name]
     if not (flags.get("X1A") or flags.get("X1B") or flags.get("X2")):
         shared["therm_rows"][name][t] = cur
@@ -843,7 +861,7 @@ def _line_process(env, spec, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
+        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -917,6 +935,17 @@ def _insp0_process(env, up, down, shared):
         elif len(down.items) < down.capacity:
             yield down.put(part)
             rate = _quality_rate(shared, t, name)
+            # X3 (C3-PLUG): union p on the SAME single shared["place"] draw
+            # — no second draw; uses INSP0's OWN w for its late verdict.
+            flags = shared.get("couplings") or {}
+            if flags.get("X3"):
+                qw = COUPLING_X3["r_0"] + COUPLING_X3["rho"] * max(
+                    0.0, shared["wear"][name] - COUPLING_X3["w_knee"]
+                )
+                rate = min(
+                    1.0 - (1.0 - rate) * (1.0 - qw),
+                    FAULT_RANGES["reject_rate"][1],
+                )
             if part.get("flag") != "REJECT":
                 if rate > 0.0 and shared["place"].random() < rate:
                     part["flag"] = "REJECT"
@@ -940,7 +969,7 @@ def _insp0_process(env, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
+        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1122,7 +1151,7 @@ def _asm0_process(env, asm01, kit, shared):
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
-        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
+        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1191,11 +1220,32 @@ def _asm_mid_process(env, name, up, down, shared):
             # REJECT part never re-rolls: full RWK_RET holds it BLOCKED with
             # flag/passes intact until a slot frees, then it enqueues.
             rate = _quality_rate(shared, t, name)
+            # X3 (C3-PLUG): union p evaluated on the SAME single
+            # shared["place"] draw below — no second draw; arm comparability
+            # is outcome-level. Uses this machine's OWN w.
+            flags = shared.get("couplings") or {}
+            if flags.get("X3"):
+                qw = COUPLING_X3["r_0"] + COUPLING_X3["rho"] * max(
+                    0.0, shared["wear"][name] - COUPLING_X3["w_knee"]
+                )
+                rate = min(
+                    1.0 - (1.0 - rate) * (1.0 - qw),
+                    FAULT_RANGES["reject_rate"][1],
+                )
             rej = part.get("flag") == "REJECT" or (
                 rate > 0.0 and shared["place"].random() < rate
             )
             if rej:
                 part["flag"] = "REJECT"
+                # C3-PLUG: wear/force verdict provenance (X3-gated; routing unchanged).
+                vextra = (
+                    {
+                        "wear": shared["wear"][name],
+                        "force": wear_force(shared["wear"][name], 1.0),
+                    }
+                    if (shared.get("couplings") or {}).get("X3")
+                    else {}
+                )
                 if part.get("passes", 0) >= REWORK_MAX_PASSES:
                     shared["flow"]["sunk"] += 1
                     shared["flow"]["scrapped"] += 1
@@ -1204,7 +1254,12 @@ def _asm_mid_process(env, name, up, down, shared):
                         "REJECT_ROUTE",
                         t,
                         name,
-                        {"part": part["id"], "to": "scrap", "passes": part["passes"]},
+                        {
+                            "part": part["id"],
+                            "to": "scrap",
+                            "passes": part["passes"],
+                            **vextra,
+                        },
                     )
                     shared["parts"].append(
                         {
@@ -1227,7 +1282,12 @@ def _asm_mid_process(env, name, up, down, shared):
                         "REJECT_ROUTE",
                         t,
                         name,
-                        {"part": part["id"], "to": "RWK0", "passes": part["passes"]},
+                        {
+                            "part": part["id"],
+                            "to": "RWK0",
+                            "passes": part["passes"],
+                            **vextra,
+                        },
                     )
                     shared["flow"]["rejected"] += 1
                     held, rem, part = False, 0, None
@@ -1251,7 +1311,7 @@ def _asm_mid_process(env, name, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
+        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1370,7 +1430,7 @@ def _rwk0_process(env, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
+        _apply_couplings(shared, name, fx, t, st)  # C4-PLUG + C3-PLUG: BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1482,6 +1542,9 @@ def run_episode(
             for name in MACHINES
         },
         "wear": {name: 0.0 for name in MACHINES},
+        # C3-PLUG: per-step wear/force rows feeding the live grids when X3 on.
+        "wear_rows": {name: [0.0] * T for name in MACHINES},
+        "force_rows": {name: [0.0] * T for name in MACHINES},
         "life": {name: 0.0 for name in MACHINES},
         "trip_e": {name: 0.0 for name in MACHINES},
         "trip": {name: False for name in MACHINES},
@@ -1587,10 +1650,17 @@ def run_episode(
     therm_grid, wear_grid, force_grid, inrush_grid, life_grid = [], [], [], [], []
     for name in order:
         therm_grid.append(list(shared["therm_rows"][name]))
-        wear_grid.append([0.0] * T)
-        force_grid.append(
-            [1.0 if s == "RUN" else 0.0 for s in shared["states"][MACHINE_INDEX[name]]]
-        )
+        if active.get("X3"):
+            wear_grid.append(list(shared["wear_rows"][name]))
+            force_grid.append(list(shared["force_rows"][name]))
+        else:
+            wear_grid.append([0.0] * T)
+            force_grid.append(
+                [
+                    1.0 if s == "RUN" else 0.0
+                    for s in shared["states"][MACHINE_INDEX[name]]
+                ]
+            )
         inrush_grid.append([0.0] * T)
         life_grid.append([0.0] * T)
     return {
