@@ -472,6 +472,44 @@ def _delay_d(fx, t):
     return 0
 
 
+def _therm_step(cur, load, eff, heat, amb, band, gain, tau):
+    # C4-PLUG: pure first-order winding-node step (no episodes, no draws).
+    tot = amb + band * load + gain * eff * eff + heat
+    return cur + (tot - cur) / tau
+
+
+def _apply_couplings(shared, name, fx, t):
+    # C4-PLUG: per-machine per-step thermal update; runs BEFORE sampling.
+    flags = shared.get("couplings")
+    if flags is None:
+        return None
+    cur = shared["therm"][name]
+    if not (flags.get("X1A") or flags.get("X1B") or flags.get("X2")):
+        shared["therm_rows"][name][t] = cur
+        return cur
+    cls = MACHINES[name]["class"]
+    load = 1.0
+    rated = COUPLING_X1A["I_rated"][cls]
+    alpha = COUPLING_X1A["alpha_cu"]
+    mult = COUPLING_X1B["i_delay_mult"] if _delay_d(fx, t) > 0 else 1.0
+    eff = rated * load * (1.0 + alpha * (cur - 20.0)) * mult
+    gain = COUPLING_X1A["k_cu"][cls] if flags.get("X1A") else 0.0
+    heat = 0.0
+    new = _therm_step(
+        cur,
+        load,
+        eff,
+        heat,
+        COUPLING_X1A["t_amb"],
+        COUPLING_X1A["dT"][cls],
+        gain,
+        COUPLING_X1A["tau_th"],
+    )
+    shared["therm"][name] = new
+    shared["therm_rows"][name][t] = new
+    return new
+
+
 def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
     """One step of the SIM_SPEC 4.1 clean-signal eq; returns (obs, temp, ar).
 
@@ -805,6 +843,7 @@ def _line_process(env, spec, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
+        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -901,6 +940,7 @@ def _insp0_process(env, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
+        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1082,6 +1122,7 @@ def _asm0_process(env, asm01, kit, shared):
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
+        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1210,6 +1251,7 @@ def _asm_mid_process(env, name, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
+        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1328,6 +1370,7 @@ def _rwk0_process(env, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
+        _apply_couplings(shared, name, fx, t)  # C4-PLUG: therm BEFORE sampling
         val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1434,6 +1477,10 @@ def run_episode(
         "therm": {
             name: sum(TEMP_RANGES[MACHINES[name]["class"]]) / 2.0 for name in MACHINES
         },
+        "therm_rows": {
+            name: [sum(TEMP_RANGES[MACHINES[name]["class"]]) / 2.0] * T
+            for name in MACHINES
+        },
         "wear": {name: 0.0 for name in MACHINES},
         "life": {name: 0.0 for name in MACHINES},
         "trip_e": {name: 0.0 for name in MACHINES},
@@ -1539,7 +1586,7 @@ def run_episode(
     }
     therm_grid, wear_grid, force_grid, inrush_grid, life_grid = [], [], [], [], []
     for name in order:
-        therm_grid.append([shared["therm"][name]] * T)
+        therm_grid.append(list(shared["therm_rows"][name]))
         wear_grid.append([0.0] * T)
         force_grid.append(
             [1.0 if s == "RUN" else 0.0 for s in shared["states"][MACHINE_INDEX[name]]]
