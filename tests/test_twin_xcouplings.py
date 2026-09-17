@@ -822,12 +822,13 @@ def test_battery_x2_svp_absolute():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="owner decision pending (Todo 4 STOP): D3 dev-stripping (mandated, "
-    "H4-critical) removes the only fault-specific therm signal and the mu/lam "
-    "loop is class-symmetric, so no ranker gains origin info — measured ladder "
-    "obs-only gap +0.000, therm-only 0.143=chance both arms, fused -0.229 "
-    "(therm dilutes obs), see .omo/evidence/minipro-34/4-x2.txt. Remove xfail "
-    "only on bar re-sign.",
+    reason="OWNER-ACCEPTED documented deviation (Q2=A, 2026-09-17, ledger "
+    ".omo/start-work/ledger.jsonl): absolute-H4-only is the bar "
+    "(test_battery_x2_svp_absolute 35/35 S-episodes therm-flat, GREEN); the "
+    "+10pp svp gain bar is WAIVED — measured fused gap -0.229 (obs-only "
+    "+0.000, therm-only chance), structural under D3 dev-stripping, see "
+    ".omo/evidence/minipro-34/4-x2.txt. Strict-xfail retained as tripwire: "
+    "any behavior change XPASS-forces re-ratification. X2b work adapts.",
 )
 def test_battery_x2_svp_gain_bar():
     faults = _x2_slice()
