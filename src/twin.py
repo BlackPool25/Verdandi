@@ -90,6 +90,14 @@ _FAULT_CLASSES = ("drift", "bias", "delay", "loss", "breakdown", "quality", _PUL
 # keys, repr floats, wall/clock fields excluded).
 _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 
+# Additive-only keys excluded from the canonical replay digest (STARVED-split
+# census nested under flow_stats["starved_split"] is pure post-hoc accounting
+# over states + the per-step kit snapshot — no condition, RNG, draw-order, or
+# event change — so the digest must stay bit-identical to its pre-split value
+# (777-clean 652fba4f…, 777 F-21 523b0b9e…). replay_digest scrubs these before
+# hashing; old records without the key hash exactly as before.
+_DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split"})
+
 # Coverage matrix axes (TC-006): 5 partition groups x 7 channels x 7
 # classes. The class axis reuses _FAULT_CLASSES (runtime-equal to the
 # oracle literals; the source spelling above dodges the T3 grep).
@@ -980,9 +988,11 @@ def _asm0_process(env, asm01, kit, shared):
     tput_row = shared["tput"][idx]
     fx = shared["fx"].get(name, [])
     held, rem, batch = False, 0, None
+    _kit_log = shared.setdefault("kit_empty_log", [])
     down_left, dfault, ar, prev = 0, None, 0.0, "RUN"
     for t in range(T):
         detail = {}
+        miss_now: tuple = ()
         inj = _inj_down(fx, t)
         if inj is not None and down_left > 0:
             down_left = 0
@@ -1006,6 +1016,7 @@ def _asm0_process(env, asm01, kit, shared):
             st, tput = "DOWN", 0
         elif not held:
             missing = [ln for ln in ("A", "B", "C") if not kit[ln]]
+            miss_now = tuple(missing)
             if missing:
                 st, tput = "STARVED", 0
                 if prev != "STARVED":
@@ -1053,6 +1064,7 @@ def _asm0_process(env, asm01, kit, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _kit_log.append(miss_now)
         yield env.timeout(1)
 
 
@@ -1383,6 +1395,7 @@ def run_episode(
             "reworked": 0,
         },
         "sbuf": {"diverted": 0, "drained": 0},
+        "kit_empty_log": [],
         "specs": specs,
         "fx": fx,
         "gwin": [(s["t0"], s["t1"]) for s in specs],
@@ -1488,6 +1501,37 @@ def run_episode(
         "kit_C": len(kit["C"]),
         "c7tail": len(stores["_C7TAIL"].items),
         "store_final": store_final,
+    }
+    _st = shared["states"]
+    _line_idx = [MACHINE_INDEX[n] for n in _LINES]
+    _asm0 = MACHINE_INDEX["ASM0"]
+    _cell_idx = (MACHINE_INDEX["ASM1"], MACHINE_INDEX["ASM2"])
+    _rwk0 = MACHINE_INDEX["RWK0"]
+    _feed_wait = sum(1 for i in _line_idx for t in range(T) if _st[i][t] == "STARVED")
+    _kit_log = shared["kit_empty_log"]
+    _kit_a = _kit_b = _kit_c = 0
+    for _t in range(T):
+        if _st[_asm0][_t] == "STARVED":
+            _miss = _kit_log[_t]
+            if "A" in _miss:
+                _kit_a += 1
+            elif "B" in _miss:
+                _kit_b += 1
+            else:
+                _kit_c += 1
+    _cell_wait = sum(1 for i in _cell_idx for t in range(T) if _st[i][t] == "STARVED")
+    _rwk_idle = sum(1 for t in range(T) if _st[_rwk0][t] == "STARVED")
+    _raw_st = sum(1 for m in range(N_MACHINES) for t in range(T) if _st[m][t] == "STARVED")
+    assert _feed_wait + _kit_a + _kit_b + _kit_c + _cell_wait + _rwk_idle == _raw_st
+    flow_stats["starved_split"] = {
+        "feed_wait": _feed_wait,
+        "kit_miss_A": _kit_a,
+        "kit_miss_B": _kit_b,
+        "kit_miss_C": _kit_c,
+        "kit_miss": _kit_a + _kit_b + _kit_c,
+        "cell_wait": _cell_wait,
+        "rwk_idle": _rwk_idle,
+        "raw_starved": _raw_st,
     }
     return {
         "seed": seed,
@@ -1735,6 +1779,10 @@ def replay_digest(record):
     unversioned records) is strict-rejected as non-comparable.
     Named digest (not hash) so the T1
     no-bare-default_rng/no-hash-seeding source grep stays green.
+
+    Additive-only flow_stats sub-dicts listed in _DIGEST_SCRUB_FLOW_KEYS (pure
+    census accounting, no behavior change) are scrubbed before hashing so
+    same-seed digests stay bit-identical.
     """
     if record.get("schema_version") != TWIN_SCHEMA:
         raise ValueError(
@@ -1742,6 +1790,10 @@ def replay_digest(record):
             f"{record.get('schema_version')!r}, want {TWIN_SCHEMA}"
         )
     scrubbed = {k: v for k, v in record.items() if k not in _WALLCLOCK_KEYS}
+    _fs = scrubbed.get("flow_stats")
+    if isinstance(_fs, dict) and any(k in _fs for k in _DIGEST_SCRUB_FLOW_KEYS):
+        _fs = {k: v for k, v in _fs.items() if k not in _DIGEST_SCRUB_FLOW_KEYS}
+        scrubbed = {**scrubbed, "flow_stats": _fs}
     return hashlib.sha256(
         json.dumps(scrubbed, sort_keys=True, default=repr).encode()
     ).hexdigest()
