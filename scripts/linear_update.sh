@@ -90,12 +90,14 @@ def redact(val):
         return val
     return val
 
+redacted_obj = None
 parsed_json = None
 try:
     parsed_json = json.loads(raw)
     redacted_obj = redact(parsed_json)
     redacted_str = json.dumps(redacted_obj)
 except Exception:
+    redacted_obj = None
     redacted_str = raw
     if secret_key and secret_key in redacted_str:
         redacted_str = redacted_str.replace(secret_key, "[REDACTED]")
@@ -153,6 +155,7 @@ PYTHON_OUTPUT=$(python3 - "$RAW_PAYLOAD" "$KEY" <<'EOF'
 import sys, json
 
 raw = sys.argv[1].strip()
+secret_key = sys.argv[2] if len(sys.argv) > 2 else ""
 
 def determine_status(raw_val):
     if raw_val.lower() in ("success", "green", "passed", "true"):
