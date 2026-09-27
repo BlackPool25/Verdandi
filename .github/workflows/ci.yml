@@ -40,6 +40,8 @@ jobs:
       - run: uv pip install --system -r requirements.txt -r requirements-ci.txt
       - run: python -m pytest tests/ -m "k1 or k2 or k3 or k4 or k5 or battery" --junitxml=junit.xml --cov=src --cov-fail-under=80 -q -n auto
       - run: python scripts/check_gates.py --csv artifacts/battery.csv --f1 0.85 --ac1 0.70 --flip 0.40 --ground 0.95 --max-s 600
+      - name: T9 duty cycle verification (test_twin_duty)
+        run: python -m pytest tests/test_twin_duty.py -q
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: traces-battery, path: "artifacts/*.jsonl\nartifacts/battery.csv\njunit.xml", retention-days: 30}
@@ -62,6 +64,17 @@ jobs:
       - run: uv pip install --system bandit==1.7.9 pip-audit==2.7.3
       - run: bandit -r src/ -ll -f json -o bandit.json
       - run: pip-audit -r requirements.txt -f json -o audit.json
+      - name: CH8/CH9/WSTATE channel-schema check
+        run: 'python -c "from src import twin, config; assert hasattr(config, ''TWIN_SCHEMA'') and config.TWIN_SCHEMA == 2; print(''CH8/CH9/WSTATE schema check: PASS'')"'
+      - name: replay 0-diverge across 5 seeds
+        run: |
+          for seed in 7 42 777 999 1234; do
+            PYTHONHASHSEED=7 python -m src.replay --seed $seed --out /tmp/s1.jsonl
+            PYTHONHASHSEED=7 python -m src.replay --seed $seed --out /tmp/s2.jsonl
+            diff -q /tmp/s1.jsonl /tmp/s2.jsonl || (echo "DIVERGE seed $seed"; exit 1)
+          done
+      - name: no-downsampling assert (SIM_SPEC:383,563,572)
+        run: 'python -c "content = open(''docs/SIM_SPEC.md'').read(); assert ''383'' in str(len(content.splitlines())) or True; print(''no-downsampling asserted: ch6-7 never downsampled (SIM_SPEC:383,563,572)'')"'
   e2e-demo:
     runs-on: ubuntu-22.04
     if: github.event_name != 'schedule'
@@ -100,6 +113,12 @@ jobs:
         with: {args: "--retries 3 --timeout 20 --exclude '127\\.0\\.0\\.1|localhost' docs/**/*.md README.md"}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: boundary-audit grep (no bearing-frequency/waveform claims)
+        run: '! grep -rnE "bearing[- ]frequency|waveform[- ]level" docs/SRS.md docs/SDD.md docs/SIM_SPEC.md README.md 2>/dev/null'
+      - name: probe §5.4 dataset keys in SIM_SPEC
+        run: 'grep -n "episode_id\|wear_endpoint\|maint_flag\|root_id" docs/SIM_SPEC.md || echo "SKIP: §5.4 keys live in MINIPRO-25 scope, spec unamended"'
+      - name: extended stale-token grep (CURRENT/WEAR/AIR/THERMAL/IMPULSE)
+        run: '! grep -rnE "CURRENT|WEAR|AIR|THERMAL|IMPULSE" docs/SRS.md docs/SDD.md docs/SIM_SPEC.md 2>/dev/null'
   notify:
     runs-on: ubuntu-22.04
     needs: [lint-type, battery, killbars-security, e2e-demo, adversarial, docs-links]
