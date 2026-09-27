@@ -1,0 +1,12 @@
+metric,value
+f1,0.92
+ac1_intra,0.78
+ac1_cross,0.74
+flip_line-A,0.12
+flip_line-B,0.15
+flip_line-C,0.10
+flip_cell,0.08
+flip_rework,0.05
+p99,1.8
+wall,1.28
+grounding,0.98
