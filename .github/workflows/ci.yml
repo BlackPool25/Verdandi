@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with: {python-version: "3.12"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with: {python-version: "3.12"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -52,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with: {python-version: "3.12"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -83,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with: {python-version: "3.12"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -97,7 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
+        with: {python-version: "3.12"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: '! grep -rnE "VETO_M5|6/6 machines|TODO\(owner\)" docs/SRS.md docs/SDD.md docs/SIM_SPEC.md docs/TEST_PLAN.md docs/TEST_CASES.md docs/CHARTER.md docs/REGISTERS.md docs/SPRINT_PACK.md docs/BACKLOG_DETAIL.md src/ README.md'
       - uses: lycheeverse/lychee-action@v2
-        with: {lycheeVersion: "v0.16.1", args: "--retries 3 --timeout 20 --exclude '127\\.0\\.0\\.1|localhost' docs/**/*.md README.md"}
+        with: {lycheeVersion: "v0.16.1", args: "--max-retries 3 --timeout 20 --exclude '127\\.0\\.0\\.1|localhost' docs/**/*.md README.md"}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: boundary-audit grep (no bearing-frequency/waveform claims)

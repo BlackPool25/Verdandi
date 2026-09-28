@@ -11,7 +11,7 @@ Pipeline specification: `.github/workflows/ci.yml`.
   - Weekly cron schedule (`schedule: [{cron: "0 2 * * 1"}]` at 02:00 UTC Mondays) for dependency vulnerability auditing
   - Manual execution via `workflow_dispatch`
 - **Runner**: `ubuntu-22.04` pinned across all jobs
-- **Python**: `3.11` pinned (`actions/setup-python@v5` with `{python-version: "3.11", cache: false}`)
+- **Python**: `3.12` pinned (`actions/setup-python@v5` with `{python-version: "3.12"}` satisfying `scipy>=1.18.1` runtime requirement)
 - **Package Management & Caching**: `astral-sh/setup-uv@v5` with native `uv` caching enabled (`enable-cache: true`); dependencies installed via `uv pip install --system`
 - **Wall Budget**: Total pipeline execution wall budget is `<15min` (<900s). Individual job timeouts enforce strict execution bounds:
   - `battery`: 10 minutes (`timeout-minutes: 10`)
@@ -69,7 +69,7 @@ Source: Linear MINIPRO-18 comment date: `2026-09-13` (integrated into `.github/w
 
 All pipeline gates are verified with red-proof failure logs proving defect rejection before passing green. Evidence logs are archived in `.omo/evidence/`:
 
-- **Task 1** (`task-1-minipro-18-brutal-ci-pipeline.log`): Pinned Python 3.11, `astral-sh/setup-uv`, action SHA/tags, notify aggregation.
+- **Task 1** (`task-1-minipro-18-brutal-ci-pipeline.log`): Pinned Python 3.12, `astral-sh/setup-uv`, action SHA/tags, notify aggregation.
 - **Task 2** (`task-2-minipro-18-brutal-ci-pipeline.log`): `scripts/check_gates.py` gate thresholds and F1=0.5 red failure proof.
 - **Task 3** (`task-3-minipro-18-brutal-ci-pipeline.log`): `src/replay.py` deterministic JSONL generation and invalid seed rejection proof.
 - **Task 4** (`task-4-minipro-18-brutal-ci-pipeline.log`): Pytest marker configuration for `adversarial` and `mutation`.
