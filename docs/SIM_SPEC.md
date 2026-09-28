@@ -174,7 +174,7 @@ Notes:
 - `base`, `σ` fix the clean operating point. Envelope is `base ± 3σ`
   (matches detector §7 on clean data). ASM2 σ=2.0 is the documented
   known-noisy tail; VETO_ASM2 (§7) compensates, do not quiet ASM2 by
-  shrinking its σ. VETO rule renamed from VETO_M5 (6-machine era) with
+  shrinking its σ. VETO rule operates with
   identical 2×-margin semantics. INSP0 shares the test-class σ=2.0
   operating point; its delay behavior is pacing, not noise shaping.
 - `MTTF/MTTR`: natural breakdowns sampled as geometric per step
@@ -336,7 +336,7 @@ C7 27→17, ASM0 28→21, ASM1 29→22, ASM2 30→24, RWK0 31→25.
 `Q_DET = max(q0.99, Q3 + 1.5·IQR)` computed on that machine's clean window
 (`t < 120`). No global fixed threshold.
 7.2. Veto-mask (fixed topology prior): ASM2 is known-noisy; ASM2 wins top-1
-only with a 2× margin over the runner-up score (VETO_ASM2, ex-VETO_M5).
+only with a 2× margin over the runner-up score (VETO_ASM2).
 No other mask.
 7.3. Walk: from the symptom machine upstream along flow edges (through
 buffers, AGV links, and the rework return edge), depth ≤3 (WALK_DEPTH),
