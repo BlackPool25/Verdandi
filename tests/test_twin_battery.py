@@ -38,8 +38,18 @@ def test_battery_entry_point_subset1(tmp_path, capsys):
     cal = tmp_path / "cal.json"
     twin._calibrate(str(cal))
     capsys.readouterr()  # drain calibrate print
-    rc = twin.main(["--manifest", "full", "--subset", "1", "--jobs", "1",
-                    "--calibration", str(cal)])
+    rc = twin.main(
+        [
+            "--manifest",
+            "full",
+            "--subset",
+            "1",
+            "--jobs",
+            "1",
+            "--calibration",
+            str(cal),
+        ]
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "verdict=PASS" in out
@@ -50,9 +60,21 @@ def test_subset1_coverage_reflects_executed_row(tmp_path, capsys):
     twin._calibrate(str(cal))
     capsys.readouterr()  # drain calibrate print
     evdir = tmp_path / "ev"
-    rc = twin.main(["--manifest", "full", "--subset", "1", "--jobs", "1",
-                    "--calibration", str(cal), "--wall-report",
-                    "--evidence-dir", str(evdir)])
+    rc = twin.main(
+        [
+            "--manifest",
+            "full",
+            "--subset",
+            "1",
+            "--jobs",
+            "1",
+            "--calibration",
+            str(cal),
+            "--wall-report",
+            "--evidence-dir",
+            str(evdir),
+        ]
+    )
     assert rc == 0
     capsys.readouterr()  # drain battery print
     payload = json.loads((evdir / "coverage_matrix.json").read_text())

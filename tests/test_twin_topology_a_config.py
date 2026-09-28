@@ -23,25 +23,76 @@ from src.config import (
 pytestmark = pytest.mark.k1
 
 _EXPECTED_ORDER = (
-    "A0", "A1", "A2", "A7", "A8", "A9",
-    "B0", "B1", "B2", "B7P", "B7S", "B8", "B9",
-    "C0", "C1", "C2", "C6", "C7",
-    "PKG0", "PKG1", "PKG2",
-    "ASM0", "ASM1", "INSP0", "ASM2", "RWK0",
+    "A0",
+    "A1",
+    "A2",
+    "A7",
+    "A8",
+    "A9",
+    "B0",
+    "B1",
+    "B2",
+    "B7P",
+    "B7S",
+    "B8",
+    "B9",
+    "C0",
+    "C1",
+    "C2",
+    "C6",
+    "C7",
+    "PKG0",
+    "PKG1",
+    "PKG2",
+    "ASM0",
+    "ASM1",
+    "INSP0",
+    "ASM2",
+    "RWK0",
 )
 
 _EXPECTED_CAPS = {
-    "A01": 20, "A12": 20, "A27": 25, "A78": 15, "A89": 15,
-    "B01": 20, "B12": 20, "B2B7P": 25, "B2B7S": 25, "B7PB8": 25,
-    "B7SB8": 25, "B89": 15,
-    "C01": 20, "C12": 20, "C26": 25, "C67": 15,
-    "ASM01": 25, "INSP01": 25, "INSP02": 25, "GA9": 15, "GB9": 15,
-    "C7PKG": 15, "PKG01": 15, "PKG02": 15,
-    "RWK_RET": 10, "SBUF": 30,
+    "A01": 20,
+    "A12": 20,
+    "A27": 25,
+    "A78": 15,
+    "A89": 15,
+    "B01": 20,
+    "B12": 20,
+    "B2B7P": 25,
+    "B2B7S": 25,
+    "B7PB8": 25,
+    "B7SB8": 25,
+    "B89": 15,
+    "C01": 20,
+    "C12": 20,
+    "C26": 25,
+    "C67": 15,
+    "ASM01": 25,
+    "INSP01": 25,
+    "INSP02": 25,
+    "GA9": 15,
+    "GB9": 15,
+    "C7PKG": 15,
+    "PKG01": 15,
+    "PKG02": 15,
+    "RWK_RET": 10,
+    "SBUF": 30,
 }
 
 _DROPPED = (
-    "A3", "A4", "A5", "A6", "B3", "B4", "B5", "B6", "B7", "C3", "C4", "C5",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "B3",
+    "B4",
+    "B5",
+    "B6",
+    "B7",
+    "C3",
+    "C4",
+    "C5",
 )
 
 
@@ -76,29 +127,59 @@ def test_schema_version_pins():
 
 def test_new_table31_rows():
     assert MACHINES["PKG0"] == {
-        "class": "assembly-kit", "base": 65.0, "sigma": 1.3, "cycle": 5,
-        "mttf": 1000, "mttr": 12, "buffer_cap": 25, "transit": 2,
+        "class": "assembly-kit",
+        "base": 65.0,
+        "sigma": 1.3,
+        "cycle": 5,
+        "mttf": 1000,
+        "mttr": 12,
+        "buffer_cap": 25,
+        "transit": 2,
     }
     for name in ("PKG1", "PKG2"):
         assert MACHINES[name] == {
-            "class": "finish", "base": 55.0, "sigma": 1.1, "cycle": 10,
-            "mttf": 1200, "mttr": 10, "buffer_cap": 15, "transit": None,
+            "class": "finish",
+            "base": 55.0,
+            "sigma": 1.1,
+            "cycle": 10,
+            "mttf": 1200,
+            "mttr": 10,
+            "buffer_cap": 15,
+            "transit": None,
         }, name
     # Owner-approved option C TAKT5: B7P 6->5 (pair primary aligns to
     # takt); B7S stays 6 (spare, excluded from duty mean — pair asymmetry
     # only inside failover windows).
     assert MACHINES["B7P"] == {
-        "class": "process", "base": 70.0, "sigma": 1.5, "cycle": 5,
-        "mttf": 800, "mttr": 20, "buffer_cap": 25, "transit": 3,
+        "class": "process",
+        "base": 70.0,
+        "sigma": 1.5,
+        "cycle": 5,
+        "mttf": 800,
+        "mttr": 20,
+        "buffer_cap": 25,
+        "transit": 3,
     }
     for name in ("B7S",):
         assert MACHINES[name] == {
-            "class": "process", "base": 70.0, "sigma": 1.5, "cycle": 6,
-            "mttf": 800, "mttr": 20, "buffer_cap": 25, "transit": 3,
+            "class": "process",
+            "base": 70.0,
+            "sigma": 1.5,
+            "cycle": 6,
+            "mttf": 800,
+            "mttr": 20,
+            "buffer_cap": 25,
+            "transit": 3,
         }, name
     assert MACHINES["INSP0"] == {
-        "class": "test", "base": 45.0, "sigma": 2.0, "cycle": 2,
-        "mttf": 1200, "mttr": 10, "buffer_cap": 25, "transit": 2,
+        "class": "test",
+        "base": 45.0,
+        "sigma": 2.0,
+        "cycle": 2,
+        "mttf": 1200,
+        "mttr": 10,
+        "buffer_cap": 25,
+        "transit": 2,
     }
 
 
