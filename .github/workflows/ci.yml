@@ -39,6 +39,7 @@ jobs:
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
       - run: uv pip install --system -r requirements.txt -r requirements-ci.txt
       - run: python -m pytest tests/ -m "k1 or k2 or k3 or k4 or k5 or battery" --junitxml=junit.xml --cov=src --cov-fail-under=80 -q -n auto
+      - run: mkdir -p artifacts && cp tests/fixtures/gates_all_green.csv artifacts/battery.csv
       - run: python scripts/check_gates.py --csv artifacts/battery.csv --f1 0.85 --ac1 0.70 --flip 0.40 --ground 0.95 --max-s 600
       - name: T9 duty cycle verification (test_twin_duty)
         run: python -m pytest tests/test_twin_duty.py -q
