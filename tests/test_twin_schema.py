@@ -143,7 +143,9 @@ def test_cal_win_t0_spread_uniform():
     t0s = [f["t0"] for f in faults if not f.get("rep")]
     assert len(t0s) == 26 * 7 - 7  # 182 rows, 7 oracle reps pinned
     at_floor = sum(1 for t in t0s if t == 120)
-    assert at_floor < 0.10 * len(t0s), f"cursor-packed: {at_floor}/{len(t0s)} at CAL_WIN"
+    assert at_floor < 0.10 * len(t0s), (
+        f"cursor-packed: {at_floor}/{len(t0s)} at CAL_WIN"
+    )
     edges = [120, 163, 206, 249, 293]
     bins = [0, 0, 0, 0]
     for t in t0s:

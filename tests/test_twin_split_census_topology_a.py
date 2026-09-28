@@ -48,12 +48,8 @@ _F21_B2 = {
     "mag_sigma": 5.2,
 }
 
-_DIGEST_CLEAN777 = (
-    "652fba4f5f5f2e92cda0d1d71ee1be081731d1c638cf48f05dec9eac9cb5458b"
-)
-_DIGEST_F21_777 = (
-    "523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4"
-)
+_DIGEST_CLEAN777 = "652fba4f5f5f2e92cda0d1d71ee1be081731d1c638cf48f05dec9eac9cb5458b"
+_DIGEST_F21_777 = "523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4"
 
 
 def _raw_starved(rec):
@@ -91,15 +87,9 @@ def test_split_buckets_sum_to_raw_starved(seed):
 def test_split_fault_episode_still_partitions(seed):
     rec = twin.run_episode(seed, copy.deepcopy(_F21_B2))
     split = rec["flow_stats"]["starved_split"]
-    assert (
-        split["feed_wait"]
-        + split["kit_miss_A"]
-        + split["kit_miss_B"]
-        + split["kit_miss_C"]
-        + split["cell_wait"]
-        + split["rwk_idle"]
-        == _raw_starved(rec)
-    )
+    assert split["feed_wait"] + split["kit_miss_A"] + split["kit_miss_B"] + split[
+        "kit_miss_C"
+    ] + split["cell_wait"] + split["rwk_idle"] == _raw_starved(rec)
 
 
 def test_digest_ignores_split_key():
@@ -108,7 +98,9 @@ def test_digest_ignores_split_key():
     assert twin.replay_digest(r1) == twin.replay_digest(r2)  # rerun-identical
     stripped = copy.deepcopy(r1)
     del stripped["flow_stats"]["starved_split"]
-    assert twin.replay_digest(r1) == twin.replay_digest(stripped)  # old-records-hash-same
+    assert twin.replay_digest(r1) == twin.replay_digest(
+        stripped
+    )  # old-records-hash-same
 
 
 def test_golden_digests_unmoved():

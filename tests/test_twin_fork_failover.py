@@ -6,6 +6,8 @@ no INSP0 delay process) and PASSES after Todo 3 lands fork/failover/delay
 semantics in src/twin.py. Seed 777, T=300 pins throughout.
 """
 
+from itertools import pairwise
+
 import pytest
 
 from src import twin
@@ -48,7 +50,7 @@ def test_pkg_round_robin_split():
     assert seq, "expected PACK_FORK routing events"
     assert seq[0] == "PKG1", "first part routes to PKG1"
     assert set(seq) == {"PKG1", "PKG2"}, "strict alternation feeds both tails"
-    assert all(b != a for a, b in zip(seq, seq[1:])), "no two in a row to one tail"
+    assert all(b != a for a, b in pairwise(seq)), "no two in a row to one tail"
     sunk = {p["machine"] for p in rec["parts"] if p.get("via") == "PKG"}
     assert sunk == {"PKG1", "PKG2"}
 
