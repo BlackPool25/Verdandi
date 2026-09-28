@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: false}
+        with: {python-version: "3.11"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: false}
+        with: {python-version: "3.11"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -52,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: false}
+        with: {python-version: "3.11"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -83,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: false}
+        with: {python-version: "3.11"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -97,7 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: false}
+        with: {python-version: "3.11"}
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true}
       - run: find . -name __pycache__ -type d -prune -exec rm -rf {} +
@@ -126,5 +126,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./scripts/linear_update.sh "${{ toJSON(needs) }}"
+        continue-on-error: true
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
