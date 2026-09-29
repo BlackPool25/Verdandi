@@ -73,10 +73,12 @@ from src.config import (
     SBUF_DIVERT_CLASSES,
     STANDBY_EXCLUDED,
     STATE_OFFSETS,
+    STEP_SECONDS,
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
     T,
+    VOLT,
 )
 from src.config import resolve_current
 
@@ -98,7 +100,10 @@ _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 # event change — so the digest must stay bit-identical to its pre-split value
 # (777-clean 652fba4f…, 777 F-21 523b0b9e…). replay_digest scrubs these before
 # hashing; old records without the key hash exactly as before.
-_DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split"})
+# CH9 header-only energy (flow_stats["energy"]) is likewise pure post-hoc
+# accounting over I_clamped currents — no behavior change — so it is
+# scrubbed too.
+_DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split", "energy"})
 
 # Coverage matrix axes (TC-006): 5 partition groups x 7 channels x 7
 # classes. The class axis reuses _FAULT_CLASSES (runtime-equal to the
@@ -490,6 +495,38 @@ def _record_current(shared, name, idx, st, held, tput, t):
     lm = 1 if (st == "RUN" and (held or tput == 1)) else 0
     i = i_idle + k * lm * (i_rated - i_idle) + float(shared["eta"][idx][t])
     shared["currents"][idx][t] = i if i > 0.0 else 0.0
+
+
+def _energy_header(currents, packaged):
+    """CH9 header-only apparent-energy index (Todo W4).
+
+    E_step = sqrt(3) * 400V * I_clamped * STEP_SECONDS / 3600 summed over
+    all machines x steps; I_clamped = max(0, I) (the W3 hook already
+    clamps at 0.0, negatives contribute 0 here regardless). Apparent
+    kVAh, relative-only, no power factor. packaged == 0 -> per_unit None.
+    Header-only: no per-tick series. No RNG.
+    """
+    e_sum = 0.0
+    for row in currents:
+        for i in row:
+            i_c = i if i > 0.0 else 0.0
+            e_sum += math.sqrt(3.0) * VOLT * i_c * STEP_SECONDS / 3600.0
+    e_sum = float(e_sum)
+    if packaged == 0:
+        return {
+            "sum_kVAh": e_sum,
+            "per_unit": None,
+            "note": "packaged==0",
+            "unit": "kVAh-apparent",
+            "step_seconds": STEP_SECONDS,
+        }
+    return {
+        "sum_kVAh": e_sum,
+        "per_unit": e_sum / packaged,
+        "note": "relative-only apparent index, no PF",
+        "unit": "kVAh-apparent",
+        "step_seconds": STEP_SECONDS,
+    }
 
 
 def _emit(shared, event, t, machine, detail):
@@ -1569,6 +1606,9 @@ def run_episode(
         "rwk_idle": _rwk_idle,
         "raw_starved": _raw_st,
     }
+    flow_stats["energy"] = _energy_header(
+        shared["currents"], shared["flow"]["packaged"]
+    )
     return {
         "seed": seed,
         "T": T,
