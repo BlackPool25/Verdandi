@@ -245,10 +245,28 @@ def _line_edges():
     }
 
 
+def _tuple_to_fault_dict(tup: tuple) -> dict:
+    if len(tup) < 4:
+        raise ValueError(
+            f"fault tuple must have at least 4 elements (class, origin, t0, dur), got {tup!r}"
+        )
+    d = {
+        "class": tup[0],
+        "origin": tup[1],
+        "t0": tup[2],
+        "dur": tup[3],
+    }
+    if len(tup) > 4:
+        d["mag_sigma"] = tup[4]
+    if len(tup) > 5:
+        d["extra"] = tup[5]
+    return d
+
+
 def _validate(seed, fault):
     """Validate seed + fault(s); return a list of normalized fault dicts.
 
-    fault may be None, one dict, or a list of dicts (multi-fault
+    fault may be None, one dict, a tuple, or a list of dicts/tuples (multi-fault
     episodes). Bad seed / unknown origin or class / out-of-range window
     -> ValueError. Same-machine windows closer than 5 steps -> ValueError;
     single-fault episodes are exempt from the gap check (vacuous) — see
@@ -258,7 +276,22 @@ def _validate(seed, fault):
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
     if fault is None:
         return []
-    flist = [fault] if isinstance(fault, dict) else list(fault)
+    if isinstance(fault, tuple) and fault and isinstance(fault[0], str):
+        raw_list = [fault]
+    elif isinstance(fault, dict):
+        raw_list = [fault]
+    elif isinstance(fault, (list, tuple)):
+        raw_list = list(fault)
+    else:
+        raise ValueError("fault must be a dict, a list of dicts, or None")
+
+    flist = []
+    for f in raw_list:
+        if isinstance(f, tuple) and f and isinstance(f[0], str):
+            flist.append(_tuple_to_fault_dict(f))
+        else:
+            flist.append(f)
+
     if not all(isinstance(f, dict) for f in flist):
         raise ValueError("fault must be a dict, a list of dicts, or None")
     allowed = set(_FAULT_CLASSES) | set(STUCK_IS_BREAKDOWN)
@@ -1342,6 +1375,96 @@ def _monitor(env, stores, order, rows):
         yield env.timeout(1)
 
 
+_FAULT_MODE_OBSERVATION = "observation-only"
+_FAULT_MODE_PHYSICAL = "physical-propagation"
+_OBSERVATION_CLASSES = frozenset({"drift", "bias", "loss", _PULSE})
+_PHYSICAL_CLASSES = frozenset(
+    {"delay", "breakdown", "quality", "wear_drift", "wear-drift", "wear"}
+)
+
+
+def classify_fault_mode(fault_class: str) -> str:
+    """Return fault mode: 'observation-only' vs 'physical-propagation' (SPEC_UP §4)."""
+    cls = STUCK_IS_BREAKDOWN.get(fault_class, fault_class)
+    if cls in _OBSERVATION_CLASSES:
+        return _FAULT_MODE_OBSERVATION
+    if cls in _PHYSICAL_CLASSES:
+        return _FAULT_MODE_PHYSICAL
+    return _FAULT_MODE_OBSERVATION if "sensor" in cls else _FAULT_MODE_PHYSICAL
+
+
+# Downstream and upstream topology adjacency for propagation derivation (depth <= 3)
+_DOWNSTREAM_MACHINES = {
+    "A0": ["A1"], "A1": ["A2"], "A2": ["A7"], "A7": ["A8"], "A8": ["A9"],
+    "A9": ["ASM0"],
+    "B0": ["B1"], "B1": ["B2"], "B2": ["B7P", "B7S"],
+    "B7P": ["B8"], "B7S": ["B8"], "B8": ["B9"], "B9": ["ASM0"],
+    "C0": ["C1"], "C1": ["C2"], "C2": ["C6"], "C6": ["C7"],
+    "C7": ["PKG0", "ASM0"],
+    "PKG0": ["PKG1", "PKG2"],
+    "PKG1": [], "PKG2": [],
+    "ASM0": ["ASM1"], "ASM1": ["INSP0"], "INSP0": ["ASM2"],
+    "ASM2": ["RWK0"], "RWK0": ["C0"],
+}
+_UPSTREAM_MACHINES = {
+    "A0": [], "A1": ["A0"], "A2": ["A1"], "A7": ["A2"], "A8": ["A7"], "A9": ["A8"],
+    "B0": [], "B1": ["B0"], "B2": ["B1"], "B7P": ["B2"], "B7S": ["B2"],
+    "B8": ["B7P", "B7S"], "B9": ["B8"],
+    "C0": ["RWK0"], "C1": ["C0"], "C2": ["C1"], "C6": ["C2"], "C7": ["C6"],
+    "PKG0": ["C7"], "PKG1": ["PKG0"], "PKG2": ["PKG0"],
+    "ASM0": ["A9", "B9", "C7"], "ASM1": ["ASM0"], "INSP0": ["ASM1"],
+    "ASM2": ["INSP0"], "RWK0": ["ASM2"],
+}
+
+
+def compute_hop(
+    root_id: str | None, target_machine: str | None, max_depth: int = 3
+) -> int | None:
+    """Compute shortest propagation hop distance between root_id and target_machine (depth <= max_depth).
+
+    Returns 0 if target_machine == root_id, 1..max_depth if within max_depth hops along
+    downstream (starvation/routing) or upstream (blockage) paths, or None if beyond max_depth or disconnected.
+    """
+    if not root_id or not target_machine:
+        return None
+    if root_id == target_machine:
+        return 0
+
+    visited = {root_id: 0}
+    queue = [(root_id, 0)]
+    while queue:
+        curr, d = queue.pop(0)
+        if d >= max_depth:
+            continue
+        neighbors = _DOWNSTREAM_MACHINES.get(curr, []) + _UPSTREAM_MACHINES.get(curr, [])
+        for n in neighbors:
+            if n not in visited:
+                visited[n] = d + 1
+                if n == target_machine:
+                    return d + 1
+                queue.append((n, d + 1))
+    return visited.get(target_machine, None)
+
+
+def derive_roots_and_hops(
+    specs: list[dict], events: list[dict] | None = None
+) -> tuple[str | None, int | None, list[str]]:
+    """Derive primary root_id, hop, and root_ids list from specs and propagation events.
+
+    For single-fault: root_id is origin, hop is 0, root_ids = [root_id].
+    For multi-fault: root_id is primary origin, hop is 0, root_ids is list of distinct origins.
+    For clean runs: root_id is None, hop is None, root_ids = [].
+    """
+    if not specs:
+        return None, None, []
+    root_ids = list(dict.fromkeys(s["origin"] for s in specs if "origin" in s))
+    if not root_ids:
+        return None, None, []
+    root_id = root_ids[0]
+    hop = 0
+    return root_id, hop, root_ids
+
+
 def compute_wear(states: list[list[str]]) -> list[float]:
     """Compute minimal C3 wear-lite scalar per machine over episode states.
 
@@ -1366,13 +1489,13 @@ def compute_wear(states: list[list[str]]) -> list[float]:
 
 def run_episode(
     seed: int,
-    fault: dict | list | None = None,
+    fault: dict | list | tuple | None = None,
     *,
     enable_natural_breakdown: bool = True,
 ) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
-    fault is None, one fault dict, or a list of fault dicts (multi-fault
+    fault is None, one fault dict, a tuple, or a list of fault dicts (multi-fault
     episodes: same-machine windows need a ≥5-step gap). Returns the full
     episode record (seed, T, cal_win, obs, states, buffers, throughput,
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
@@ -1557,6 +1680,18 @@ def run_episode(
         "rwk_idle": _rwk_idle,
         "raw_starved": _raw_st,
     }
+    root_id, hop, root_ids = derive_roots_and_hops(specs, shared["events"])
+    if specs:
+        family = specs[0]["class"]
+        mode = (
+            _FAULT_MODE_PHYSICAL
+            if any(classify_fault_mode(s["class"]) == _FAULT_MODE_PHYSICAL for s in specs)
+            else _FAULT_MODE_OBSERVATION
+        )
+    else:
+        family = None
+        mode = None
+
     return {
         "seed": seed,
         "T": T,
@@ -1580,9 +1715,17 @@ def run_episode(
         "parts": shared["parts"],
         "faults": specs,
         "strat": {
+            "episode_id": seed,
             "wear_endpoint": float(max(compute_wear(shared["states"]))),
             "maint_flag": False,
             "maint_flag_unvalidated": True,
+            "family": family,
+            "mode": mode,
+            "root_id": root_id,
+            "hop": hop,
+            "root_ids": root_ids,
+            "sensor_vs_process": "unknown",
+            "sensor_vs_process_unvalidated": True,
         },
     }
 
