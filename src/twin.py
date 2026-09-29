@@ -323,7 +323,11 @@ def _spawn_streams(seed):
 
     Noise index == MACHINE_INDEX literal order (A0:0..RWK0:25);
     children 26-31 retired (assert unread below); 32 place, 33 drop,
-    34 agv, 35 fail unchanged.
+    34 agv, 35 fail unchanged. CH8 eta rides dedicated grandchildren
+    children[idx].spawn(1)[0] (MINIPRO-22 G3: never noise[idx], so legacy
+    draws are untouched — deleting the eta block restores byte-identical
+    obs/states), vectorized into one (26,300) episode-start pre-draw indexed
+    [idx][t] in-step (W3 wires the hook; W2 stores it disabled-safe).
     """
     seq = np.random.SeedSequence((seed,))
     children = seq.spawn(36)  # == N_STREAMS; literal kept for the T1 grep
@@ -336,7 +340,14 @@ def _spawn_streams(seed):
     drop = np.random.default_rng(children[33])
     agv = np.random.default_rng(children[34])
     fail = np.random.default_rng(children[35])
-    return noise, place, drop, agv, fail
+    eta_rngs = [
+        np.random.default_rng(children[MACHINE_INDEX[m]].spawn(1)[0])
+        for m in order
+    ]
+    eta = np.empty((N_MACHINES, T))
+    for i, g in enumerate(eta_rngs):
+        g.standard_normal(out=eta[i])
+    return noise, place, drop, agv, fail, eta
 
 
 def _materialize(place, fault_list):
@@ -1354,7 +1365,7 @@ def run_episode(
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
     """
     fault_list = _validate(seed, fault)
-    noise, place, drop, rng_agv, fail = _spawn_streams(seed)
+    noise, place, drop, rng_agv, fail, eta = _spawn_streams(seed)
     specs = _materialize(place, fault_list)
     env = simpy.Environment()
     agv = simpy.Resource(env, capacity=AGV_CAP)
@@ -1374,6 +1385,7 @@ def run_episode(
         "place": place,
         "drop": drop,
         "fail": fail,
+        "eta": eta,  # CH8 disabled-safe: stored, unread until the W3 hook
         "enable_bd": enable_natural_breakdown,
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],

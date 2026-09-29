@@ -168,7 +168,7 @@ def test_omitted_mag_materializes_in_fault_range():
     fault = {"id": "F-T", "class": "drift", "origin": "B2", "t0": 150, "dur": 12}
     flist = twin._validate(777, fault)
     assert flist[0].get("mag_sigma") is None
-    _, place, _, _, _ = twin._spawn_streams(777)
+    _, place, _, _, _, _ = twin._spawn_streams(777)
     specs = twin._materialize(place, flist)
     mlo, mhi = FAULT_RANGES["mag_sigma"]
     assert mlo <= specs[0]["mag"] <= mhi
@@ -185,7 +185,7 @@ def test_explicit_mag_preserved():
     }
     flist = twin._validate(777, fault)
     assert flist[0]["mag_sigma"] == 5.2
-    _, place, _, _, _ = twin._spawn_streams(777)
+    _, place, _, _, _, _ = twin._spawn_streams(777)
     specs = twin._materialize(place, flist)
     assert specs[0]["mag"] == 5.2
 
