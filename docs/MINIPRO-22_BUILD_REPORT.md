@@ -6,8 +6,8 @@ MINIPRO-22 (Linear M0.2b CH8 current + CH9 energy, C1-C2) on the topology-A
 26-machine twin.
 
 Branch lineage: `origin/main 2854f03` through work branch
-`athmabhiram/minipro-22-verify-fixes` (11 commits, HEAD `f3378a2` at report
-time). Single golden re-baseline for the deliberate schema 2 to 3 break.
+`athmabhiram/minipro-22-verify-fixes` (12 commits, HEAD `29914fd`; report
+content written at `f3378a2`, committed as `29914fd`). Single golden re-baseline for the deliberate schema 2 to 3 break.
 Linear issue MINIPRO-22 updated via comment `bb23d104`, left In Progress
 (NOT closed) pending owner sign-off.
 
@@ -27,7 +27,9 @@ Linear issue MINIPRO-22 updated via comment `bb23d104`, left In Progress
 
 - `children[idx].spawn(1)[0]` per machine; `N_STREAMS == 36` literal and
   `spawn(36)` literal untouched; retired 26-31 assert untouched.
-- `(26, 300)` episode-start pre-draw, approximately 0.18 ms class.
+- `(26, 300)` episode-start pre-draw, approximately 1-2 ms class warm
+  (median ~1.7 ms over 7 repeats, range 1.3-2.3 ms; ~18 ms cold
+  first-touch including numpy init; single `standard_normal` site).
 - Noise spec (verify-fix, commit `f3378a2`): stored eta rows are
   `N(0, 0.05 * I_rated)` per-row scaled via `ETA_SIGMA_RATIO = 0.05`.
   Audit-caught gap: pre-fix rows were flat `N(0, 1)`.
@@ -95,15 +97,17 @@ Linear issue MINIPRO-22 updated via comment `bb23d104`, left In Progress
 | 9 | `25471b0` | docs(twin): fix stale eta-hook comment | fix |
 | 10 | `f045f45` | fix(lint): ruff check+format clean (I001/FURB136/RUF059/PLR0402) | fix |
 | 11 | `f3378a2` | fix(twin): scale CH8 eta to N(0,0.05·I_rated) per Linear + re-baseline | fix |
+| 12 | `29914fd` | docs(minipro-22): add CH8/CH9 build report with results | report |
 
 Subjects above are as recorded by `git log --oneline origin/main..HEAD`
-in the worktree.
+in the worktree (rows 1-11 written at `f3378a2`; row 12 is this report's
+own commit).
 
 ## 4. Results
 
 | Check | Result |
 |-------|--------|
-| pytest ch8 (6) + ch9 (5) + bridge-schema (16) + split-census | 34 passed |
+| pytest ch8 (7) + ch9 (5) + bridge-schema (16) + split-census (6) | 34 passed |
 | diverge filter (`-k "diverge and (777 or 1234 or 999 or 42 or 2026)"`) | 10 passed |
 | `check_replay --seed 777` | PASS (300 ticks, resume-150 identical, digest `0280680a39d0c712a6d494931a92f66cabee04946681fa2bb98bb398ec9c4d34`) |
 | `ruff check` | clean |
@@ -154,12 +158,13 @@ Run from the worktree root (as recorded in build ledger):
 ```powershell
 $env:GIT_MASTER='1'; pytest tests/test_ch8_current.py tests/test_ch9_energy.py services/sim_bridge/tests/test_schema.py tests/test_twin_split_census_topology_a.py
 $env:GIT_MASTER='1'; pytest -k "diverge and (777 or 1234 or 999 or 42 or 2026)"
-$env:GIT_MASTER='1'; python scripts/check_replay.py --seed 777
-$env:GIT_MASTER='1'; ruff check .
-$env:GIT_MASTER='1'; ruff format --check .
+$env:GIT_MASTER='1'; python services/sim_bridge/scripts/check_replay.py --seed 777
+$env:GIT_MASTER='1'; ruff check src/ tests/
+$env:GIT_MASTER='1'; ruff format --check src/ tests/
 $env:GIT_MASTER='1'; mypy src/
 $env:GIT_MASTER='1'; git log --oneline origin/main..HEAD
 ```
 
-`check_replay` invocation above is as recorded in build ledger; flag
-spelling follows the repo script's own `--help` if it differs.
+Bare `ruff check .` / `ruff format --check .` are NOT green at repo scope
+(53 pre-existing errors / 14 files outside `src/ tests/`); the verified
+gate scope is `src/ tests/` only.
