@@ -18,10 +18,10 @@ N_MACHINES = 26
 N_BUFFERS = 26
 N_STREAMS = 36
 
-# Topology-A schema version (MINIPRO-33): v2 = 26-machine roster. v1
-# 32-machine baselines are V1_NON_COMPARABLE, never asserted equal.
-TWIN_SCHEMA = 2
-CODE_VERSION = "twin-2.1.0-topology-A"
+# Topology-A schema version: v3 = stratification keys + funnel rebalancing.
+# v1 32-machine baselines and v2 unstratified records are non-comparable.
+TWIN_SCHEMA = 3
+CODE_VERSION = "twin-2.2.0-topology-A"
 WALL_REPORT_SCHEMA = 2
 
 # Rolling 20-seed batch for hermetic funnel gate evaluation (Todo 7).
