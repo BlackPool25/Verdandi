@@ -73,6 +73,7 @@ from src.config import (
     REWORK_MAX_PASSES,
     SBUF_CAP,
     SBUF_DIVERT_CLASSES,
+    SEEDS_20,
     STANDBY_EXCLUDED,
     STATE_OFFSETS,
     STUCK_IS_BREAKDOWN,
@@ -80,6 +81,7 @@ from src.config import (
     TWIN_SCHEMA,
     T,
     UNFROZEN_BUFFER_CAPS,
+    WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
     WEAR,
 )
@@ -1535,6 +1537,11 @@ def compute_wear(states: list[list[str]]) -> list[float]:
     return wear
 
 
+def compute_kits_completed(flow_stats: dict) -> int:
+    """Kits completed = sunk minus scrapped; excludes kit_A/B/C leftovers and xfer_open."""
+    return int(flow_stats["sunk"] - flow_stats.get("scrapped", 0))
+
+
 def _resolve_variant(variant: str | dict | None) -> dict | None:
     if variant is None:
         return None
@@ -1815,7 +1822,7 @@ def run_episode(
         "sunk": shared["flow"]["sunk"],
         "scrapped": shared["flow"]["scrapped"],
         "packaged": shared["flow"]["packaged"],
-        "kits_completed": shared["flow"]["sunk"] - shared["flow"]["scrapped"],
+        "kits_completed": compute_kits_completed(shared["flow"]),
         "kit_A": len(kit["A"]),
         "kit_B": len(kit["B"]),
         "kit_C": len(kit["C"]),
@@ -1928,6 +1935,7 @@ def check_variant_gate(
     seeds: list[int] | None = None,
     *,
     strict: bool = False,
+    jobs: int = 1,
 ) -> dict:
     """Gate a configuration variant by buffer roster and duty_cycle pileup_violations.
 
@@ -1955,6 +1963,7 @@ def check_variant_gate(
             "variant_id": str(variant),
             "pileup_violations": [],
             "seeds": list(seeds),
+            "jobs": jobs,
         }
 
     var_id = var_dict.get("variant_id", "custom") if var_dict else "baseline"
@@ -1974,6 +1983,7 @@ def check_variant_gate(
             "unlisted_buffers": unlisted,
             "pileup_violations": [],
             "seeds": list(seeds),
+            "jobs": jobs,
         }
 
     # Check rule 2: Pileup violations across seeds
@@ -1983,7 +1993,8 @@ def check_variant_gate(
         rec = run_episode(s, None, variant=var_dict)
         dc = duty_cycle(rec)
         v = dc.get("pileup_violations", [])
-        sunks.append(rec["flow_stats"]["sunk"])
+        kits_c = compute_kits_completed(rec["flow_stats"])
+        sunks.append(kits_c)
         if v:
             all_violations.extend(v)
             msg = f"Variant gate rejected: pileup violations detected on seed {s}: {v}"
@@ -1997,6 +2008,7 @@ def check_variant_gate(
                 "pileup_violations": all_violations,
                 "failed_seed": s,
                 "seeds": list(seeds),
+                "jobs": jobs,
             }
 
     median_sunk = float(np.median(sunks))
@@ -2012,24 +2024,32 @@ def check_variant_gate(
         "p10": p10,
         "p90": p90,
         "seeds": list(seeds),
+        "jobs": jobs,
     }
 
 
 def check_funnel_gate(
     seeds: list[int] | None = None,
     variant: str | dict | None = "baseline",
+    jobs: int = 1,
 ) -> dict:
     """Validate rolling median sunk >= 30 and zero pileup violations over exact seed batch."""
     if seeds is None:
-        seeds = [
-            7, 11, 13, 42, 777, 1234, 999, 2026, 12345,
-            1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
-        ]
-    report = check_variant_gate(variant=variant, seeds=seeds)
-    if report["passed"] and report.get("median_sunk", 0) < 30:
+        seeds = list(SEEDS_20)
+    report = check_variant_gate(variant=variant, seeds=seeds, jobs=jobs)
+    median_sunk = float(report.get("median_sunk", 0.0))
+    passed = bool(report.get("passed", False) and (median_sunk >= 30))
+    if report.get("passed", False) and median_sunk < 30:
         report["passed"] = False
         report["rejected"] = True
-        report["reason"] = f"Funnel gate failed: median_sunk={report.get('median_sunk')} < 30"
+        report["reason"] = f"Funnel gate failed: median_sunk={median_sunk} < 30"
+    report["passed"] = passed
+    report["gate_passed"] = passed
+    report["jobs"] = jobs
+    report["env"] = {
+        "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+        "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+    }
     return report
 
 
@@ -2509,6 +2529,11 @@ def _battery_parser():
         default=None,
         help="legacy T5 entry: time clean+F-21 episodes to PATH and exit",
     )
+    parser.add_argument(
+        "--check-funnel-gate",
+        action="store_true",
+        help="evaluate hermetic 20-seed funnel gate and print report",
+    )
     return parser
 
 
@@ -2523,6 +2548,10 @@ def main(argv=None):
     if args.calibrate is not None:
         _calibrate(args.calibrate)
         return 0
+    if getattr(args, "check_funnel_gate", False):
+        res = check_funnel_gate(jobs=args.jobs)
+        print(json.dumps(res, indent=2))
+        return 0 if res["passed"] else 1
     if args.jobs is None or args.jobs < 1:
         parser.error("--jobs must be an integer >= 1")
     if args.seed is None or args.seed < 0:
@@ -2605,9 +2634,25 @@ def main(argv=None):
 
         evdir = pathlib.Path(args.evidence_dir)
         evdir.mkdir(parents=True, exist_ok=True)
+        funnel_res = check_funnel_gate(jobs=args.jobs)
+        funnel_obj = {
+            "median_sunk": funnel_res["median_sunk"],
+            "p10": funnel_res["p10"],
+            "p90": funnel_res["p90"],
+            "gate_passed": funnel_res["passed"],
+            "passed": funnel_res["passed"],
+            "variant_id": funnel_res["variant_id"],
+            "seeds": list(funnel_res["seeds"]),
+            "jobs": args.jobs,
+            "env": funnel_res.get("env", {
+                "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+                "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+            }),
+        }
         _write_json(
             evdir / "wall_report.json",
             {
+                "schema_version": WALL_REPORT_SCHEMA,
                 "per_episode_s": walls,
                 "calibration_mean_s": cal_mean,
                 "calibration_path": args.calibration,
@@ -2632,6 +2677,7 @@ def main(argv=None):
                 "joined_digest": joined,
                 "anomalies_over_120s": anomalies,
                 "verdict": verdict,
+                "funnel": funnel_obj,
             },
         )
         _write_json(
@@ -2685,18 +2731,36 @@ def _write_partial(args, manifest, rows, master, cal_mean, budget_cap):
     evdir = pathlib.Path(args.evidence_dir)
     evdir.mkdir(parents=True, exist_ok=True)
     walls = [r["wall_s"] for r in rows]
+    jobs_val = getattr(args, "jobs", 1)
+    funnel_res = check_funnel_gate(jobs=jobs_val)
+    funnel_obj = {
+        "median_sunk": funnel_res["median_sunk"],
+        "p10": funnel_res["p10"],
+        "p90": funnel_res["p90"],
+        "gate_passed": funnel_res["passed"],
+        "passed": funnel_res["passed"],
+        "variant_id": funnel_res["variant_id"],
+        "seeds": list(funnel_res["seeds"]),
+        "jobs": jobs_val,
+        "env": funnel_res.get("env", {
+            "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+            "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+        }),
+    }
     _write_json(
         evdir / "wall_report.json",
         {
+            "schema_version": WALL_REPORT_SCHEMA,
             "partial": True,
             "per_episode_s": walls,
             "calibration_mean_s": cal_mean,
             "wall_total_s": sum(walls),
-            "jobs": args.jobs,
+            "jobs": jobs_val,
             "n_episodes": len(manifest),
             "n_finished": len(rows),
             "budget_cap_s": budget_cap,
             "verdict": "PARTIAL",
+            "funnel": funnel_obj,
         },
     )
 

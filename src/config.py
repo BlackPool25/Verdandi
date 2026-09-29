@@ -22,6 +22,13 @@ N_STREAMS = 36
 # 32-machine baselines are V1_NON_COMPARABLE, never asserted equal.
 TWIN_SCHEMA = 2
 CODE_VERSION = "twin-2.1.0-topology-A"
+WALL_REPORT_SCHEMA = 2
+
+# Rolling 20-seed batch for hermetic funnel gate evaluation (Todo 7).
+SEEDS_20 = [
+    7, 11, 13, 42, 777, 1234, 999, 2026, 12345,
+    1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
+]
 
 # INSP0 holds each part exactly this many steps before late-verdict release.
 INSPECT_DELAY_STEPS = 3
