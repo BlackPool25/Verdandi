@@ -1,0 +1,53 @@
+{
+  "mean_per_episode_s": 0.11670148332389847,
+  "seeds": [
+    7,
+    11,
+    13
+  ],
+  "episodes_timed": 6,
+  "episodes": [
+    {
+      "seed": 7,
+      "fault": "clean",
+      "wall_s": 0.12824729998828843,
+      "enable_natural_breakdown": true,
+      "faultdev_applied": false
+    },
+    {
+      "seed": 7,
+      "fault": "F-21-drift-shape",
+      "wall_s": 0.11239589998149313,
+      "enable_natural_breakdown": true,
+      "faultdev_applied": true
+    },
+    {
+      "seed": 11,
+      "fault": "clean",
+      "wall_s": 0.114677000005031,
+      "enable_natural_breakdown": true,
+      "faultdev_applied": false
+    },
+    {
+      "seed": 11,
+      "fault": "F-21-drift-shape",
+      "wall_s": 0.11951859999680892,
+      "enable_natural_breakdown": true,
+      "faultdev_applied": true
+    },
+    {
+      "seed": 13,
+      "fault": "clean",
+      "wall_s": 0.12007919998723082,
+      "enable_natural_breakdown": true,
+      "faultdev_applied": false
+    },
+    {
+      "seed": 13,
+      "fault": "F-21-drift-shape",
+      "wall_s": 0.10529089998453856,
+      "enable_natural_breakdown": true,
+      "faultdev_applied": true
+    }
+  ]
+}
