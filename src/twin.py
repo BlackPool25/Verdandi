@@ -1677,7 +1677,7 @@ def run_episode(
         "place": place,
         "drop": drop,
         "fail": fail,
-        "eta": eta,  # CH8 disabled-safe: stored, unread until the W3 hook
+        "eta": eta,  # stored for the W3 in-step hook (5 sites read shared['eta'])
         "enable_bd": enable_natural_breakdown,
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
