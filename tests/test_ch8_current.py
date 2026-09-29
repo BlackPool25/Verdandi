@@ -87,15 +87,17 @@ def test_delete_eta_disabled_digests_identical():
     """Delete-eta proof: eta machinery leaves legacy obs/states byte-identical.
 
     _spawn_streams returns dedicated eta streams as a 6th value; with the
-    CH8 path disabled (no record["currents"] yet — W3 wires the hook), two
-    same-seed episodes hash identically over obs + states.
+    CH8 hook wired (record["currents"] present — W3); two same-seed
+    episodes hash identically over obs + states.
     """
     noise, place, drop, agv, fail, eta = _spawn_streams(777)
     assert eta.shape == (N_MACHINES, T)
     assert eta.dtype == np.float64
     rec1 = run_episode(777, None)
     rec2 = run_episode(777, None)
-    assert "currents" not in rec1  # CH8 disabled-safe: W3 adds the hook
+    assert "currents" in rec1  # CH8 hook wired: W3 adds the currents channel
+    assert len(rec1["currents"]) == N_MACHINES
+    assert all(len(row) == T for row in rec1["currents"])
     assert _old_channel_digest(rec1) == _old_channel_digest(rec2)
 
 
@@ -115,3 +117,88 @@ def test_spawn_literal_and_retired_assert():
         assert f"children[{i}]" not in body.replace(
             "set(range(26, 32))", ""
         ), f"child {i} must stay unread outside the retired assert"
+
+
+def _idx_order():
+    """Machine name per row index (MACHINE_INDEX literal order)."""
+    return sorted(MACHINE_INDEX, key=MACHINE_INDEX.get)
+
+
+def test_ch8_idle_draw_blocked_starved():
+    """W3 in-step hook: STARVED/BLOCKED draw idle, RUN cycles load (Todo W3).
+
+    I = I_idle + k*L*(I_rated-I_idle) + eta[idx][t], clamped at 0.
+    L=1 iff RUN-cycling (held or tput==1 release); BLOCKED-holding L=0,
+    STARVED L=0. Never derived from obs val (non-collinear by construction).
+    """
+    seed = 777
+    rec = run_episode(seed, None)
+    cur = rec["currents"]  # KeyError before the W3 hook lands
+    arr = np.asarray(cur, dtype=np.float64)
+    assert arr.shape == (N_MACHINES, T)
+    assert arr.dtype == np.float64
+    _, _, _, _, _, eta = _spawn_streams(seed)
+    order = _idx_order()
+    n_idle = n_run = 0
+    for m, name in enumerate(order):
+        i_rated, k = resolve_current(name)
+        i_idle = I_IDLE_RATIO * i_rated
+        assert i_idle > 0  # idle draw is a positive standby draw (G4)
+        for t in range(T):
+            st = rec["states"][m][t]
+            e = float(eta[m][t])
+            if st in ("STARVED", "BLOCKED"):
+                assert cur[m][t] == pytest.approx(max(0.0, i_idle + e))
+                n_idle += 1
+            elif st == "RUN":
+                assert cur[m][t] == pytest.approx(
+                    max(0.0, i_idle + k * (i_rated - i_idle) + e)
+                )
+                n_run += 1
+    assert n_idle > 0 and n_run > 0
+    # QA pin: A2 (k=1.0) RUN-cycling base tops exactly at I_rated.
+    a2 = MACHINE_INDEX["A2"]
+    assert resolve_current("A2") == (15.0, 1.0)
+    run_ts = [t for t in range(T) if rec["states"][a2][t] == "RUN"]
+    assert run_ts
+    for t in run_ts:
+        assert cur[a2][t] == pytest.approx(max(0.0, 15.0 + float(eta[a2][t])))
+    # Non-collinearity: obs varies over A2 RUN steps, current base is flat.
+    assert float(np.std([rec["obs"][a2][t] for t in run_ts])) > 0
+
+
+def test_ch8_down_draw():
+    """W3 in-step hook: DOWN draws idle (G4 lock), eta rides on top."""
+    fault = {
+        "id": "F-T",
+        "class": "breakdown",
+        "origin": "A2",
+        "t0": 150,
+        "dur": 12,
+        "extra": {"mttr_mult": 2},
+    }
+    seed = 777
+    rec = run_episode(seed, fault)
+    cur = rec["currents"]  # KeyError before the W3 hook lands
+    _, _, _, _, _, eta = _spawn_streams(seed)
+    a2 = MACHINE_INDEX["A2"]
+    i_rated, _ = resolve_current("A2")
+    i_idle = I_IDLE_RATIO * i_rated
+    # Injected window [150, 150+ceil(12*2)): forced DOWN every step.
+    down_ts = [t for t in range(150, 174) if rec["states"][a2][t] == "DOWN"]
+    assert len(down_ts) == 174 - 150
+    for t in down_ts:
+        assert cur[a2][t] == pytest.approx(max(0.0, i_idle + float(eta[a2][t])))
+
+
+def test_ch8_clamp():
+    """W3 in-step hook: currents are 26x300 float64, >= 0, with clamped dips."""
+    seed = 777
+    rec = run_episode(seed, None)
+    cur = rec["currents"]  # KeyError before the W3 hook lands
+    arr = np.asarray(cur, dtype=np.float64)
+    assert arr.shape == (N_MACHINES, T)
+    assert arr.dtype == np.float64
+    assert bool(np.all(arr >= 0.0))
+    # Deep-negative eta dips under small I_idle (e.g. RWK0 0.525A) clamp.
+    assert bool(np.any(arr == 0.0))
