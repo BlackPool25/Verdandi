@@ -1613,7 +1613,7 @@ def run_episode(
         "seed": seed,
         "T": T,
         "cal_win": CAL_WIN,
-        # Topology-A schema v2 version binding (MINIPRO-33): the canonical
+        # Topology-A schema v3 version binding (MINIPRO-33 + MINIPRO-22 W5):
         # replay payload INCLUDES these keys by construction, so version
         # tampering mismatches the digest. v1 records are non-comparable.
         "schema_version": TWIN_SCHEMA,
@@ -1851,7 +1851,7 @@ def replay_digest(record):
     subgraph obs} (the record's partition-scoped subgraph obs plus its
     version binding), sorted keys, wall/clock fields excluded via
     _WALLCLOCK_KEYS. schema_version/code_version are INCLUDED by
-    construction: a tampered code_version under schema v2 mismatches the
+    construction: a tampered code_version under schema v3 mismatches the
     digest, while any other schema_version (v1 32-machine records,
     unversioned records) is strict-rejected as non-comparable.
     Named digest (not hash) so the T1

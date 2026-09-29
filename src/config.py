@@ -17,10 +17,12 @@ N_MACHINES = 26
 N_BUFFERS = 26
 N_STREAMS = 36
 
-# Topology-A schema version (MINIPRO-33): v2 = 26-machine roster. v1
-# 32-machine baselines are V1_NON_COMPARABLE, never asserted equal.
-TWIN_SCHEMA = 2
-CODE_VERSION = "twin-2.1.0-topology-A"
+# Topology-A schema version (MINIPRO-33 + MINIPRO-22 W5): v3 = 26-machine
+# roster + TICK currents row (CH8) + header energy dict (CH9). v1
+# 32-machine baselines are V1_NON_COMPARABLE, never asserted equal;
+# v2 records (no currents/energy keys) are likewise rejected non-comparable.
+TWIN_SCHEMA = 3
+CODE_VERSION = "twin-2.2.0-ch8ch9"
 
 # INSP0 holds each part exactly this many steps before late-verdict release.
 INSPECT_DELAY_STEPS = 3

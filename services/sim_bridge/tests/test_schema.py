@@ -137,3 +137,53 @@ def test_unknown_event_family_rejected_loudly():
     ]
     with pytest.raises(S.SchemaViolation, match="[Ee]vent"):
         S.validate_tick(bad)
+
+
+def test_bridge_currents_key_and_energy_header():
+    """W5: tick carries currents row verbatim; header carries energy verbatim."""
+    from src.config import N_MACHINES, TWIN_SCHEMA
+
+    assert S.SCHEMA_VERSION == TWIN_SCHEMA == 3
+    tick, rec = good_tick()
+    # tick currents: verbatim row passthrough, same machine order as states
+    assert "currents" in tick, "tick must carry currents row (W5)"
+    order = sorted(rec["machines"])
+    idx = {m: i for i, m in enumerate(order)}
+    expected = [rec["currents"][idx[m]][0] for m in order]
+    assert tick["currents"] == expected
+    assert len(tick["currents"]) == N_MACHINES
+    S.validate_tick(tick)
+    # header energy: verbatim dict carriage from flow_stats
+    header = S.build_header(rec)
+    assert "energy" in header, "header must carry energy dict (W5)"
+    assert header["energy"] == rec["flow_stats"]["energy"]
+    assert header["energy"]["unit"] == "kVAh-apparent"
+    S.validate_header(header)
+
+
+def test_bridge_currents_negative_rejected():
+    tick, _ = good_tick()
+    bad = copy.deepcopy(tick)
+    bad["currents"] = list(bad["currents"])
+    bad["currents"][0] = -0.5
+    with pytest.raises(S.SchemaViolation, match="[Cc]urrent"):
+        S.validate_tick(bad)
+
+
+def test_bridge_v2_tick_missing_currents_rejected():
+    """Old v2 tick (no currents key) is rejected non-comparable."""
+    tick, _ = good_tick()
+    bad = copy.deepcopy(tick)
+    del bad["currents"]
+    with pytest.raises(S.SchemaViolation, match="missing keys"):
+        S.validate_tick(bad)
+
+
+def test_bridge_v2_header_missing_energy_rejected():
+    """Old v2 header (no energy key) is rejected non-comparable."""
+    _, rec = good_tick()
+    header = S.build_header(rec)
+    bad = copy.deepcopy(header)
+    del bad["energy"]
+    with pytest.raises(S.SchemaViolation, match="missing keys"):
+        S.validate_header(bad)
