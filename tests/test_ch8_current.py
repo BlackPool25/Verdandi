@@ -205,3 +205,20 @@ def test_ch8_clamp():
     assert bool(np.all(arr >= 0.0))
     # Deep-negative eta dips under small I_idle (e.g. RWK0 0.525A) clamp.
     assert bool(np.any(arr == 0.0))
+
+
+def test_ch8_eta_scaled_to_spec_sigma():
+    """Linear noise spec (MINIPRO-22): stored eta IS N(0, 0.05*I_rated) per row.
+
+    RED-first pin: per-row sample std over T=300 steps must sit within 20%
+    of 0.05 * I_rated of that row's machine (unit-normal N(0,1) fails this:
+    sample std ~1.0 everywhere). Spot rows: RWK0 (3.5A -> 0.175),
+    A2 (15A -> 0.75).
+    """
+    _, _, _, _, _, eta = _spawn_streams(777)
+    order = _idx_order()
+    for m, name in enumerate(order):
+        i_rated, _ = resolve_current(name)
+        assert float(np.std(eta[m])) == pytest.approx(0.05 * i_rated, rel=0.20)
+    assert float(np.std(eta[MACHINE_INDEX["RWK0"]])) == pytest.approx(0.175, rel=0.20)
+    assert float(np.std(eta[MACHINE_INDEX["A2"]])) == pytest.approx(0.75, rel=0.20)

@@ -364,6 +364,11 @@ def _validate(seed, fault):
     return normed
 
 
+# Linear noise spec (MINIPRO-22): CH8 eta sigma is 0.05 * I_rated per
+# machine — stored eta rows ARE N(0, 0.05*I_rated), not unit-normal.
+ETA_SIGMA_RATIO = 0.05
+
+
 def _spawn_streams(seed):
     """Seeded streams per SIM_SPEC 6.2 topology-A: noise(0-25) + place/drop/agv/fail.
 
@@ -374,6 +379,8 @@ def _spawn_streams(seed):
     draws are untouched — deleting the eta block restores byte-identical
     obs/states), vectorized into one (26,300) episode-start pre-draw indexed
     [idx][t] in-step (W3 wires the hook; W2 stores it disabled-safe).
+    Each row is scaled to N(0, 0.05*I_rated) per the Linear noise spec
+    (ETA_SIGMA_RATIO; deterministic — scaling touches no RNG state).
     """
     seq = np.random.SeedSequence((seed,))
     children = seq.spawn(36)  # == N_STREAMS; literal kept for the T1 grep
@@ -391,8 +398,10 @@ def _spawn_streams(seed):
         for m in order
     ]
     eta = np.empty((N_MACHINES, T))
-    for i, g in enumerate(eta_rngs):
+    for i, (g, m) in enumerate(zip(eta_rngs, order)):
         g.standard_normal(out=eta[i])
+        # Linear noise spec: scale the pre-drawn unit row to N(0, 0.05*I_rated).
+        eta[i] *= ETA_SIGMA_RATIO * resolve_current(m)[0]
     return noise, place, drop, agv, fail, eta
 
 

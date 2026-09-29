@@ -39,6 +39,10 @@ def q_det_wall(wall_s, fresh_mean_s, factor):
 Same functions live in `tests/test_twin_w6_determinism_wall.py`
 (`test_q_det_wall_math_pure` pins the math deterministically).
 
+## CH8 current noise
+
+Stored eta rows are N(0, 0.05·I_rated) per-row scaled (Linear noise spec; ETA_SIGMA_RATIO in src/twin.py) — not unit-normal.
+
 ## Evidence (worktree `verdandi-ch8-ch9` @ 6369123, clean `git status`)
 
 Determinism — `pytest -k "diverge and (777 or 1234 or 999 or 42 or 2026)"`:

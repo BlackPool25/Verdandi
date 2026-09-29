@@ -26,7 +26,9 @@ twin._DIGEST_SCRUB_FLOW_KEYS — reruns stay identical AND old records
 without the key hash exactly as before. W7 re-baselined golden pins
 (777-clean d624b3e3…, 777 F-21 3936efde… == services/sim_bridge/golden/
 replay-777-topology-A.json, schema v3 twin-2.2.0-ch8ch9): CH8 "currents"
-is hashed by design, CH9 "energy" is scrubbed.
+is hashed by design, CH9 "energy" is scrubbed. Verify-fixes re-baseline
+(777-clean cef610ac…, 777 F-21 0280680a…): CH8 eta scaled to the Linear
+noise spec N(0, 0.05*I_rated) — currents move by design, schema unchanged.
 """
 
 import copy
@@ -49,8 +51,8 @@ _F21_B2 = {
     "mag_sigma": 5.2,
 }
 
-_DIGEST_CLEAN777 = "033b0d89dd8b3f88913220bb37c1ec76e9fcd024982b40b4f2b6f1e8cc650d5a"
-_DIGEST_F21_777 = "f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5"
+_DIGEST_CLEAN777 = "cef610ac61162a49d592c48cba42594ba7a7641c86832cc564fefb4485157caf"
+_DIGEST_F21_777 = "0280680a39d0c712a6d494931a92f66cabee04946681fa2bb98bb398ec9c4d34"
 
 
 def _raw_starved(rec):
