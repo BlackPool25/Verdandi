@@ -2,8 +2,17 @@
 
 Example amps (A2/C2 15A, RWK0 3.5A) are ASSUMPTIONS for QA pinning,
 not normative spec claims — owner sign-off gates merge (plan G4).
+
+Todo W2: dedicated eta streams + vectorized pre-draw + delete-eta proof
+(plan G3: children[idx].spawn(1)[0] grandchildren, N_STREAMS==36
+unchanged, single (26,300) episode-start pre-draw, [idx][t] indexing).
 """
 
+import hashlib
+import json
+import pathlib
+
+import numpy as np
 import pytest
 
 from src.config import (
@@ -12,10 +21,15 @@ from src.config import (
     K_BY_GROUP,
     MACHINE_INDEX,
     MACHINES,
+    N_MACHINES,
+    N_STREAMS,
     STEP_SECONDS,
+    T,
     VOLT,
     resolve_current,
 )
+from src import twin as twin_mod
+from src.twin import _spawn_streams, run_episode
 
 
 def test_tables_resolve():
@@ -59,3 +73,45 @@ def test_tables_resolve():
         resolve_current("ZZZ9")  # unknown prefix/machine
     with pytest.raises((TypeError, ValueError)):
         resolve_current("A2", i_rated=99.0)  # v1: no per-machine override
+
+
+def _old_channel_digest(rec):
+    """Byte-stable digest over legacy channels only (obs + states)."""
+    payload = {"obs": rec["obs"], "states": rec["states"]}
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=repr).encode()
+    ).hexdigest()
+
+
+def test_delete_eta_disabled_digests_identical():
+    """Delete-eta proof: eta machinery leaves legacy obs/states byte-identical.
+
+    _spawn_streams returns dedicated eta streams as a 6th value; with the
+    CH8 path disabled (no record["currents"] yet — W3 wires the hook), two
+    same-seed episodes hash identically over obs + states.
+    """
+    noise, place, drop, agv, fail, eta = _spawn_streams(777)
+    assert eta.shape == (N_MACHINES, T)
+    assert eta.dtype == np.float64
+    rec1 = run_episode(777, None)
+    rec2 = run_episode(777, None)
+    assert "currents" not in rec1  # CH8 disabled-safe: W3 adds the hook
+    assert _old_channel_digest(rec1) == _old_channel_digest(rec2)
+
+
+def test_spawn_literal_and_retired_assert():
+    """spawn(36) literal kept for the T1 grep; retired 26-31 assert intact.
+
+    Eta uses spawn(1) grandchildren (G3) and never reads children 26-31
+    directly outside the retired assert.
+    """
+    src = pathlib.Path(twin_mod.__file__).read_text()
+    assert "seq.spawn(36)" in src  # == N_STREAMS; literal kept
+    assert ".spawn(1)[0]" in src  # dedicated eta grandchildren (G3)
+    assert N_STREAMS == 36
+    assert "children 26-31 retired, must stay unread" in src
+    body = src.split("def _spawn_streams", 1)[1].split("\ndef ", 1)[0]
+    for i in range(26, 32):
+        assert f"children[{i}]" not in body.replace(
+            "set(range(26, 32))", ""
+        ), f"child {i} must stay unread outside the retired assert"

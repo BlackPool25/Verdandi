@@ -391,7 +391,7 @@ def test_retired_noise_children_unread():
 
     assert max(MACHINE_INDEX.values()) == 25
     assert set(MACHINE_INDEX) == set(twin.MACHINES)
-    noise, _, _, _, _ = twin._spawn_streams(777)
+    noise, _, _, _, _, _ = twin._spawn_streams(777)
     assert len(noise) == 26
     src = pathlib.Path(twin.__file__).read_text()
     assert "children 26-31 retired" in src

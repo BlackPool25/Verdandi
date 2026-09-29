@@ -73,7 +73,7 @@ def test_b2_blocked_backpressure_no_loss_when_both_full():
 
     from src.config import BUFFERS, N_MACHINES, T
 
-    noise, _place, drop, _agv, fail = twin._spawn_streams(_SEED)
+    noise, _place, drop, _agv, fail, _eta = twin._spawn_streams(_SEED)
     shared = {
         "noise": noise,
         "place": _place,
@@ -132,7 +132,7 @@ def test_inspect_hold_three_steps_scripted():
 
     from src.config import BUFFERS, N_MACHINES, T
 
-    noise, _place, drop, _agv, fail = twin._spawn_streams(_SEED)
+    noise, _place, drop, _agv, fail, _eta = twin._spawn_streams(_SEED)
     shared = {
         "noise": noise,
         "place": _place,
