@@ -76,6 +76,7 @@ from src.config import (
     TEMP_RANGES,
     TWIN_SCHEMA,
     T,
+    WARMUP_STEPS,
     WEAR,
 )
 
@@ -1692,6 +1693,43 @@ def run_episode(
         family = None
         mode = None
 
+    # Per-machine state histograms (sums to 1.0 +- 0.01 over 26 machines)
+    state_histograms = {}
+    for m_name, m_idx in MACHINE_INDEX.items():
+        st_row = _st[m_idx]
+        state_histograms[m_name] = {
+            st: sum(1 for s in st_row if s == st) / T
+            for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+        }
+
+    # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
+    active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
+    total_active_steps = len(active_machines) * T
+    active_indices = [MACHINE_INDEX[m] for m in active_machines]
+    plant_shares = {
+        st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
+        for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+    }
+    plant_state_rollup = {
+        "shares": plant_shares,
+        "machines": active_machines,
+        **plant_shares,
+    }
+
+    # Warm-up tracking: steps 0..WARMUP_STEPS-1 (transient-inclusive pool)
+    warmup_pool = np.asarray(shared["obs"], dtype=float)[:, :WARMUP_STEPS].T.tolist()
+
+    # Funnel census counts
+    funnel_census = {
+        "sunk": shared["flow"]["sunk"],
+        "scrapped": shared["flow"]["scrapped"],
+        "packaged": shared["flow"]["packaged"],
+        "kits_completed": shared["flow"]["sunk"] - shared["flow"]["scrapped"],
+        "kit_A": len(kit["A"]),
+        "kit_B": len(kit["B"]),
+        "kit_C": len(kit["C"]),
+    }
+
     return {
         "seed": seed,
         "T": T,
@@ -1726,6 +1764,20 @@ def run_episode(
             "root_ids": root_ids,
             "sensor_vs_process": "unknown",
             "sensor_vs_process_unvalidated": True,
+            "warmup_flag": True,
+            "warmup_steps": WARMUP_STEPS,
+            "warmup_window": (0, WARMUP_STEPS - 1),
+            "warmup_mask": [t < WARMUP_STEPS for t in range(T)],
+            "warmup_pool": warmup_pool,
+            "transient_pool": warmup_pool,
+            "is_warmup": True,
+            "state_histogram": state_histograms,
+            "state_histograms": state_histograms,
+            "machine_histograms": state_histograms,
+            "per_machine_histogram": state_histograms,
+            "plant_state_rollup": plant_state_rollup,
+            "plant_rollup": plant_state_rollup,
+            "funnel_census": funnel_census,
         },
     }
 
@@ -1777,9 +1829,9 @@ def duty_cycle(record: dict) -> dict:
 
 
 def run_calibration(seed: int):
-    """Return (CAL_WIN, 32) clean window: breakdowns off, first CAL_WIN steps."""
+    """Return clean window excluding warm-up: steps WARMUP_STEPS to CAL_WIN (105 steps)."""
     rec = run_episode(seed, None, enable_natural_breakdown=False)
-    return np.asarray(rec["obs"], dtype=float)[:, :CAL_WIN].T
+    return np.asarray(rec["obs"], dtype=float)[:, WARMUP_STEPS:CAL_WIN].T
 
 
 def _try_place(rng, taken, durs, tries=50):
