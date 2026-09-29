@@ -15,6 +15,7 @@ import pathlib
 import numpy as np
 import pytest
 
+from src import twin as twin_mod
 from src.config import (
     I_IDLE_RATIO,
     I_RATED_BY_CLASS,
@@ -24,11 +25,10 @@ from src.config import (
     N_MACHINES,
     N_STREAMS,
     STEP_SECONDS,
-    T,
     VOLT,
+    T,
     resolve_current,
 )
-from src import twin as twin_mod
 from src.twin import _spawn_streams, run_episode
 
 
@@ -61,7 +61,10 @@ def test_tables_resolve():
 
     # QA happy pins (ASSUMPTIONS, not normative):
     assert resolve_current("A2") == (15.0, 1.0)  # assumption: process 15A
-    assert resolve_current("C2") == (15.0, 0.7)  # assumption: process 15A, C-group k=0.7
+    assert resolve_current("C2") == (
+        15.0,
+        0.7,
+    )  # assumption: process 15A, C-group k=0.7
     assert resolve_current("RWK0") == (3.5, 0.3)  # assumption: rework 3.5A, RWK k=0.3
 
     # K group spot checks.
@@ -90,7 +93,7 @@ def test_delete_eta_disabled_digests_identical():
     CH8 hook wired (record["currents"] present — W3); two same-seed
     episodes hash identically over obs + states.
     """
-    noise, place, drop, agv, fail, eta = _spawn_streams(777)
+    _noise, _place, _drop, _agv, _fail, eta = _spawn_streams(777)
     assert eta.shape == (N_MACHINES, T)
     assert eta.dtype == np.float64
     rec1 = run_episode(777, None)
@@ -114,9 +117,9 @@ def test_spawn_literal_and_retired_assert():
     assert "children 26-31 retired, must stay unread" in src
     body = src.split("def _spawn_streams", 1)[1].split("\ndef ", 1)[0]
     for i in range(26, 32):
-        assert f"children[{i}]" not in body.replace(
-            "set(range(26, 32))", ""
-        ), f"child {i} must stay unread outside the retired assert"
+        assert f"children[{i}]" not in body.replace("set(range(26, 32))", ""), (
+            f"child {i} must stay unread outside the retired assert"
+        )
 
 
 def _idx_order():

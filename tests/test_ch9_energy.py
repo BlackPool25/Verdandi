@@ -11,13 +11,13 @@ series, NO kWh label, NO RNG in the CH9 path.
 import inspect
 import math
 
-import src.twin as twin
+from src import twin
 from src.config import STEP_SECONDS, VOLT
 
 
 def _expected_sum(currents):
     return sum(
-        math.sqrt(3.0) * VOLT * (i if i > 0.0 else 0.0) * STEP_SECONDS / 3600.0
+        math.sqrt(3.0) * VOLT * (max(0.0, i)) * STEP_SECONDS / 3600.0
         for row in currents
         for i in row
     )

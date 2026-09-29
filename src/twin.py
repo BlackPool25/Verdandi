@@ -86,8 +86,8 @@ from src.config import (
     WEAR,
     T,
     VOLT,
+    resolve_current,
 )
-from src.config import resolve_current
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
 _CLAMP_SIGMA = 2.0 * ENVELOPE_SIGMA
@@ -533,7 +533,7 @@ def _record_current(shared, name, idx, st, held, tput, t):
     i_idle = I_IDLE_RATIO * i_rated
     lm = 1 if (st == "RUN" and (held or tput == 1)) else 0
     i = i_idle + k * lm * (i_rated - i_idle) + float(shared["eta"][idx][t])
-    shared["currents"][idx][t] = i if i > 0.0 else 0.0
+    shared["currents"][idx][t] = max(0.0, i)
 
 
 def _energy_header(currents, packaged):
@@ -548,7 +548,7 @@ def _energy_header(currents, packaged):
     e_sum = 0.0
     for row in currents:
         for i in row:
-            i_c = i if i > 0.0 else 0.0
+            i_c = max(0.0, i)
             e_sum += math.sqrt(3.0) * VOLT * i_c * STEP_SECONDS / 3600.0
     e_sum = float(e_sum)
     if packaged == 0:
