@@ -40,6 +40,7 @@ ASM2 30->24, RWK0 31->25.
 
 import argparse
 import concurrent.futures
+import copy
 import hashlib
 import itertools
 import json
@@ -56,11 +57,13 @@ from src.config import (
     AGV_CAP,
     AGV_DRAIN_GRACE,
     AGV_STEPS,
+    ALLOWED_UNFREEZE_BUFFERS,
     BUFFERS,
     CAL_WIN,
     CODE_VERSION,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
+    FUNNEL_VARIANTS,
     INSPECT_DELAY_STEPS,
     MACHINE_INDEX,
     MACHINES,
@@ -76,6 +79,7 @@ from src.config import (
     TEMP_RANGES,
     TWIN_SCHEMA,
     T,
+    UNFROZEN_BUFFER_CAPS,
     WARMUP_STEPS,
     WEAR,
 )
@@ -958,13 +962,32 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     )
 
 
-def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
+def _agv_dispatcher(
+    env,
+    agv,
+    rng_agv,
+    stores,
+    kit,
+    shared,
+    *,
+    agv_priority: str = "default",
+    seed: int = 0,
+):
     """Drain SBUF (first) then tail buffers to kit intake via AGV xfers.
 
     The AGV queue is bounded (2 in service + 2 queued): beyond that the
     dispatcher holds off spawning, so tail buffers fill and BLOCKED
     backpressure (plus SBUF divert) propagates instead of hiding WIP in an
     unbounded resource queue.
+
+    Priority variants (MINIPRO-25 Todo 6):
+      - 'default': Fixed FIFO order (_TAILS: A9, B9, C7).
+      - 'starvation': Dynamic priority to tails feeding starving ASM0 kit queues
+        (min len(kit[line])), tie-broken by tail store occupancy.
+      - 'seeded': Deterministic rotating priority per step derived from (seed + now),
+        preserving RNG stream budget with zero extra draws.
+      - 'rework': Prioritizes rework intake into kit C when rework is pending,
+        then starvation-guided.
     """
     sbuf = stores["SBUF"]
     # PKG tails are sinks with no tail buffers (nothing to AGV-drain);
@@ -999,7 +1022,31 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
             req = sbuf.get()
             yield req
             _spawn(req.value, "SBUF")
-        for store, name in tails:
+
+        if agv_priority == "default":
+            ordered_tails = tails
+        elif agv_priority == "starvation":
+            def _tail_key(item):
+                store, name = item
+                line = _TAIL_LINE[name]
+                return (len(kit[line]), -len(store.items))
+            ordered_tails = sorted(tails, key=_tail_key)
+        elif agv_priority == "seeded":
+            rot = (seed + int(env.now)) % len(tails)
+            ordered_tails = tails[rot:] + tails[:rot]
+        elif agv_priority == "rework":
+            rwk = stores.get("RWK_RET")
+            rework_pending = len(rwk.items) if rwk is not None else 0
+            def _rework_key(item):
+                store, name = item
+                line = _TAIL_LINE[name]
+                bonus = -10 if (line == "C" and rework_pending > 0) else 0
+                return (len(kit[line]) + bonus, -len(store.items))
+            ordered_tails = sorted(tails, key=_rework_key)
+        else:
+            ordered_tails = tails
+
+        for store, name in ordered_tails:
             if len(store.items) > 0 and _gate_open() and _spawn_ok():
                 req = store.get()
                 yield req
@@ -1488,11 +1535,24 @@ def compute_wear(states: list[list[str]]) -> list[float]:
     return wear
 
 
+def _resolve_variant(variant: str | dict | None) -> dict | None:
+    if variant is None:
+        return None
+    if isinstance(variant, str):
+        if variant not in FUNNEL_VARIANTS:
+            raise ValueError(f"Unknown variant ID: {variant}")
+        return copy.deepcopy(FUNNEL_VARIANTS[variant])
+    if isinstance(variant, dict):
+        return copy.deepcopy(variant)
+    raise TypeError(f"Variant must be str, dict, or None, got {type(variant)}")
+
+
 def run_episode(
     seed: int,
     fault: dict | list | tuple | None = None,
     *,
     enable_natural_breakdown: bool = True,
+    variant: str | dict | None = None,
 ) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
@@ -1504,11 +1564,31 @@ def run_episode(
     fault_list = _validate(seed, fault)
     noise, place, drop, rng_agv, fail = _spawn_streams(seed)
     specs = _materialize(place, fault_list)
+
+    var_dict = _resolve_variant(variant)
+    if var_dict is not None:
+        overrides = var_dict.get("buffer_caps", {})
+        unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
+        if unlisted:
+            raise ValueError(
+                f"Unlisted buffer unfreeze rejected by gate: {sorted(unlisted)}"
+            )
+        effective_caps = dict(BUFFERS)
+        effective_caps.update(overrides)
+        c7_cap = overrides.get("_C7TAIL", MACHINES["C7"]["buffer_cap"])
+        agv_prio = var_dict.get("agv_priority", "default")
+        var_id = var_dict.get("variant_id", "custom")
+    else:
+        effective_caps = BUFFERS
+        c7_cap = MACHINES["C7"]["buffer_cap"]
+        agv_prio = "default"
+        var_id = "baseline"
+
     env = simpy.Environment()
     agv = simpy.Resource(env, capacity=AGV_CAP)
-    stores = {n: simpy.Store(env, capacity=c) for n, c in BUFFERS.items()}
+    stores = {n: simpy.Store(env, capacity=c) for n, c in effective_caps.items() if n != "_C7TAIL"}
     stores["_C7TAIL"] = simpy.Store(
-        env, capacity=MACHINES["C7"]["buffer_cap"]
+        env, capacity=c7_cap
     )  # AGV drains this; dedicated cap-15 tail store (==15), never the C67 gap
     assert len(MACHINES) == N_MACHINES and len(BUFFERS) == N_BUFFERS
     order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
@@ -1597,7 +1677,18 @@ def run_episode(
     env.process(_asm_mid_process(env, "ASM2", stores["INSP02"], None, shared))
     env.process(_rwk0_process(env, shared))
     env.process(_fault_clock(env, shared))
-    env.process(_agv_dispatcher(env, agv, rng_agv, stores, kit, shared))
+    env.process(
+        _agv_dispatcher(
+            env,
+            agv,
+            rng_agv,
+            stores,
+            kit,
+            shared,
+            agv_priority=agv_prio,
+            seed=seed,
+        )
+    )
     buf_order = list(BUFFERS)
     buf_rows = [[0] * T for _ in range(N_BUFFERS)]
     env.process(_monitor(env, stores, buf_order, buf_rows))
@@ -1778,6 +1869,9 @@ def run_episode(
             "plant_state_rollup": plant_state_rollup,
             "plant_rollup": plant_state_rollup,
             "funnel_census": funnel_census,
+            "variant_id": var_id,
+            "buffer_caps": effective_caps,
+            "agv_priority": agv_prio,
         },
     }
 
@@ -1799,12 +1893,13 @@ def duty_cycle(record: dict) -> dict:
     down_of["INSP02"] = "ASM2"
     buf_order = list(BUFFERS)
     violations = []
+    effective_caps = record.get("strat", {}).get("buffer_caps", BUFFERS)
     for b, ds in down_of.items():
         if b not in BUFFERS:
             continue
         row = record["buffers"][buf_order.index(b)]
         srow = states[MACHINE_INDEX[ds]]
-        cap = BUFFERS[b]
+        cap = effective_caps.get(b, BUFFERS[b])
         t = 0
         while t < T_:
             if row[t] >= cap:
@@ -1826,6 +1921,116 @@ def duty_cycle(record: dict) -> dict:
         "xfer_open": record["flow_stats"]["xfer_open"],
         "pileup_violations": violations,
     }
+
+
+def check_variant_gate(
+    variant: str | dict | None = None,
+    seeds: list[int] | None = None,
+    *,
+    strict: bool = False,
+) -> dict:
+    """Gate a configuration variant by buffer roster and duty_cycle pileup_violations.
+
+    Rules:
+    1. Unlisted buffer rule: Buffer cap overrides in the variant MUST be drawn
+       strictly from config.ALLOWED_UNFREEZE_BUFFERS. Any unlisted buffer change
+       fails the gate.
+    2. Pileup violation rule: Run episode(s) and compute duty_cycle(record).
+       If len(pileup_violations) > 0 on ANY episode, the variant fails the gate.
+    3. If strict=True, raises ValueError upon failure. Otherwise returns report
+       dict with 'passed', 'rejected', 'reason', 'variant_id', etc.
+    """
+    if seeds is None:
+        seeds = [777]
+
+    try:
+        var_dict = _resolve_variant(variant)
+    except Exception as exc:
+        if strict:
+            raise
+        return {
+            "passed": False,
+            "rejected": True,
+            "reason": str(exc),
+            "variant_id": str(variant),
+            "pileup_violations": [],
+            "seeds": list(seeds),
+        }
+
+    var_id = var_dict.get("variant_id", "custom") if var_dict else "baseline"
+    overrides = var_dict.get("buffer_caps", {}) if var_dict else {}
+
+    # Check rule 1: Unlisted buffers
+    unlisted = sorted(set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS)
+    if unlisted:
+        msg = f"Variant gate rejected: unlisted buffer modification {unlisted} not permitted (must be in ALLOWED_UNFREEZE_BUFFERS)"
+        if strict:
+            raise ValueError(msg)
+        return {
+            "passed": False,
+            "rejected": True,
+            "reason": msg,
+            "variant_id": var_id,
+            "unlisted_buffers": unlisted,
+            "pileup_violations": [],
+            "seeds": list(seeds),
+        }
+
+    # Check rule 2: Pileup violations across seeds
+    all_violations = []
+    sunks = []
+    for s in seeds:
+        rec = run_episode(s, None, variant=var_dict)
+        dc = duty_cycle(rec)
+        v = dc.get("pileup_violations", [])
+        sunks.append(rec["flow_stats"]["sunk"])
+        if v:
+            all_violations.extend(v)
+            msg = f"Variant gate rejected: pileup violations detected on seed {s}: {v}"
+            if strict:
+                raise ValueError(msg)
+            return {
+                "passed": False,
+                "rejected": True,
+                "reason": msg,
+                "variant_id": var_id,
+                "pileup_violations": all_violations,
+                "failed_seed": s,
+                "seeds": list(seeds),
+            }
+
+    median_sunk = float(np.median(sunks))
+    p10 = float(np.percentile(sunks, 10))
+    p90 = float(np.percentile(sunks, 90))
+
+    return {
+        "passed": True,
+        "rejected": False,
+        "variant_id": var_id,
+        "pileup_violations": [],
+        "median_sunk": median_sunk,
+        "p10": p10,
+        "p90": p90,
+        "seeds": list(seeds),
+    }
+
+
+def check_funnel_gate(
+    seeds: list[int] | None = None,
+    variant: str | dict | None = "baseline",
+) -> dict:
+    """Validate rolling median sunk >= 30 and zero pileup violations over exact seed batch."""
+    if seeds is None:
+        seeds = [
+            7, 11, 13, 42, 777, 1234, 999, 2026, 12345,
+            1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
+        ]
+    report = check_variant_gate(variant=variant, seeds=seeds)
+    if report["passed"] and report.get("median_sunk", 0) < 30:
+        report["passed"] = False
+        report["rejected"] = True
+        report["reason"] = f"Funnel gate failed: median_sunk={report.get('median_sunk')} < 30"
+    return report
 
 
 def run_calibration(seed: int):

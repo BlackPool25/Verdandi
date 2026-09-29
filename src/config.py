@@ -135,7 +135,9 @@ def _row(cls, base, sigma, cycle, mttf, mttr, buffer_cap, transit):
 # delay-paced via INSPECT_DELAY_STEPS, cycle knob is dead), B7S (6:
 # spare, excluded from duty mean; pair asymmetry only in failover
 # windows), RWK0 (8: rework loop, excluded from duty mean).
-# Classes, mttf/mttr, buffer caps, transits, signal coefficients all frozen.
+# Classes, mttf/mttr, transits, signal coefficients all frozen.
+# Under MINIPRO-25 Todo 6, ONLY listed bottleneck buffers (ALLOWED_UNFREEZE_BUFFERS)
+# are eligible for gated unfreeze behind pile-up verification; unlisted buffers stay frozen.
 _MACHINE_ROWS = [
     ("A0", _row("feed", 50.0, 1.0, 5, 2000, 15, 20, 2)),
     ("A1", _row("form", 60.0, 1.2, 5, 1500, 12, 20, 2)),
@@ -270,3 +272,112 @@ if len(MACHINES) != N_MACHINES or len(BUFFERS) != N_BUFFERS:
     raise ValueError("roster size mismatch vs N_MACHINES/N_BUFFERS")
 if set(MACHINE_INDEX) != set(MACHINES):
     raise ValueError("MACHINE_INDEX does not cover MACHINES exactly")
+
+
+# ==============================================================================
+# Funnel Rebalancing: Bottleneck Buffer Unfreeze & AGV Variants (MINIPRO-25 Todo 6)
+# ==============================================================================
+# The TAKT5 line retime froze Table 3.1 buffer caps. Under MINIPRO-25, to safely
+# increase kit completion (sunk) from ~22-24 to >=30 median per episode without
+# causing pileup violations (defined as buffer full >=30 consecutive steps while
+# downstream is STARVED), ONLY listed bottleneck buffers may be unfrozen.
+#
+# Listed bottleneck buffers with explicit old -> new caps:
+#   - GA9:     old 15 -> new 20  (Line A inspect-tail AGV transfer queue)
+#   - GB9:     old 15 -> new 20  (Line B inspect-tail AGV transfer queue)
+#   - _C7TAIL: old 15 -> new 20  (Line C inspect-tail dedicated AGV transfer store)
+#   - C7PKG:   old 15 -> new 20  (Line C packaging branch feed buffer)
+#   - C67:     old 15 -> new 20  (Line C process-to-tail buffer)
+#   - A89:     old 15 -> new 20  (Line A finish-to-tail buffer)
+#   - B89:     old 15 -> new 20  (Line B finish-to-tail buffer)
+#   - A78:     old 15 -> new 20  (Line A process-to-finish buffer)
+#   - B7PB8:   old 25 -> new 30  (Line B primary process-to-finish buffer)
+#   - B7SB8:   old 25 -> new 30  (Line B spare process-to-finish buffer)
+#   - ASM01:   old 25 -> new 30  (Assembly kit-to-join intermediate buffer)
+#   - INSP01:  old 25 -> new 30  (Assembly join-to-inspect intermediate buffer)
+#   - INSP02:  old 25 -> new 30  (Assembly inspect-to-test intermediate buffer)
+#   - RWK_RET: old 10 -> new 15  (Rework loop return queue into kit C intake)
+#
+# All other buffers (A01, A12, A27, B01, B12, B2B7P, B2B7S, C01, C12, C26,
+# PKG01, PKG02, SBUF) REMAIN STRICTLY FROZEN. Any variant attempting to
+# modify an unlisted buffer is rejected by the variant gate.
+
+ALLOWED_UNFREEZE_BUFFERS = frozenset({
+    "GA9",
+    "GB9",
+    "_C7TAIL",
+    "C7PKG",
+    "C67",
+    "A89",
+    "B89",
+    "A78",
+    "B7PB8",
+    "B7SB8",
+    "ASM01",
+    "INSP01",
+    "INSP02",
+    "RWK_RET",
+})
+
+UNFROZEN_BUFFER_CAPS = {
+    "GA9": 20,       # old: 15
+    "GB9": 20,       # old: 15
+    "_C7TAIL": 20,   # old: 15
+    "C7PKG": 20,     # old: 15
+    "C67": 20,       # old: 15
+    "A89": 20,       # old: 15
+    "B89": 20,       # old: 15
+    "A78": 20,       # old: 15
+    "B7PB8": 30,     # old: 25
+    "B7SB8": 30,     # old: 25
+    "ASM01": 30,     # old: 25
+    "INSP01": 30,    # old: 25
+    "INSP02": 30,    # old: 25
+    "RWK_RET": 15,   # old: 10
+}
+
+FUNNEL_VARIANTS = {
+    "baseline": {
+        "variant_id": "baseline",
+        "description": "Baseline frozen buffer caps with default FIFO AGV dispatching",
+        "buffer_caps": {},
+        "agv_priority": "default",
+    },
+    "agv-priority-starvation": {
+        "variant_id": "agv-priority-starvation",
+        "description": "Prioritizes AGV transfers to lines starving ASM0 assembly kitting",
+        "buffer_caps": {},
+        "agv_priority": "starvation",
+    },
+    "agv-priority-seeded": {
+        "variant_id": "agv-priority-seeded",
+        "description": "Seeded rotating AGV transfer priority based on episode seed and step",
+        "buffer_caps": {},
+        "agv_priority": "seeded",
+    },
+    "agv-priority-rework": {
+        "variant_id": "agv-priority-rework",
+        "description": "Priority to rework flow and starving assembly stations",
+        "buffer_caps": {},
+        "agv_priority": "rework",
+    },
+    "bottleneck-unfreeze": {
+        "variant_id": "bottleneck-unfreeze",
+        "description": "Unfrozen listed bottleneck buffer caps with default AGV dispatching",
+        "buffer_caps": dict(UNFROZEN_BUFFER_CAPS),
+        "agv_priority": "default",
+    },
+    "rebalanced-funnel-v1": {
+        "variant_id": "rebalanced-funnel-v1",
+        "description": "Unfrozen bottleneck buffer caps with starvation-prioritized AGV dispatching",
+        "buffer_caps": dict(UNFROZEN_BUFFER_CAPS),
+        "agv_priority": "starvation",
+    },
+    "rebalanced-funnel-seeded": {
+        "variant_id": "rebalanced-funnel-seeded",
+        "description": "Unfrozen bottleneck buffer caps with seeded AGV priority dispatching",
+        "buffer_caps": dict(UNFROZEN_BUFFER_CAPS),
+        "agv_priority": "seeded",
+    },
+}
+

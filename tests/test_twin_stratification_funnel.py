@@ -415,3 +415,149 @@ def test_histogram_plant_rollup_excludes_standby_24_machines():
     assert len(machines) == 24, (
         f"Plant rollup must cover exactly 24 machines, got {len(machines)}"
     )
+
+
+# ==============================================================================
+# Group 6: Gated Buffer Unfreeze and AGV-Priority Variants (Todo 6)
+# ==============================================================================
+
+def test_buffer_unfreeze_listed_bottlenecks_allowed_only():
+    """ONLY listed bottleneck buffers are in ALLOWED_UNFREEZE_BUFFERS with documented caps."""
+    expected_allowed = {
+        "GA9",
+        "GB9",
+        "_C7TAIL",
+        "C7PKG",
+        "C67",
+        "A89",
+        "B89",
+        "A78",
+        "B7PB8",
+        "B7SB8",
+        "ASM01",
+        "INSP01",
+        "INSP02",
+        "RWK_RET",
+    }
+    assert config.ALLOWED_UNFREEZE_BUFFERS == expected_allowed, (
+        f"Mismatch in ALLOWED_UNFREEZE_BUFFERS: {config.ALLOWED_UNFREEZE_BUFFERS ^ expected_allowed}"
+    )
+
+    # Strictly unlisted buffers must NEVER be allowed
+    for unlisted in ("A01", "A12", "A27", "B01", "B12", "B2B7P", "B2B7S", "C01", "C12", "C26", "PKG01", "PKG02", "SBUF"):
+        assert unlisted not in config.ALLOWED_UNFREEZE_BUFFERS, f"Unlisted buffer {unlisted} must be frozen"
+
+    # Verify explicit old -> new caps documented in config
+    assert config.UNFROZEN_BUFFER_CAPS["GA9"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["GB9"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["_C7TAIL"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["C7PKG"] == 20    # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["C67"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["A89"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["B89"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["A78"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["B7PB8"] == 30    # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["B7SB8"] == 30    # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["ASM01"] == 30    # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["INSP01"] == 30   # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["INSP02"] == 30   # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["RWK_RET"] == 15  # old: 10
+
+
+def test_buffer_unfreeze_unlisted_buffer_rejected_by_gate():
+    """Unlisted buffer modifications must be strictly rejected by check_variant_gate."""
+    unlisted_variant = {
+        "variant_id": "bad-unlisted-variant",
+        "buffer_caps": {"A01": 50},  # A01 is frozen, not in ALLOWED_UNFREEZE_BUFFERS
+    }
+    report = twin.check_variant_gate(unlisted_variant, seeds=[777])
+    assert report["passed"] is False, "Unlisted buffer modification must NOT pass gate"
+    assert report["rejected"] is True
+    assert "unlisted" in report["reason"].lower()
+    assert "A01" in report["unlisted_buffers"]
+
+    # In strict mode, an exception must be raised
+    with pytest.raises(ValueError, match="unlisted buffer modification"):
+        twin.check_variant_gate(unlisted_variant, seeds=[777], strict=True)
+
+
+def test_pileup_violations_excessive_buffer_change_rejected_by_gate(monkeypatch):
+    """A variant causing pileup violations must be strictly rejected by the variant gate."""
+    test_variant = {
+        "variant_id": "pileup-reject-test",
+        "buffer_caps": {"GA9": 20},
+    }
+    mock_violation = [{"buffer": "GA9", "downstream": "ASM0", "start": 40, "length": 35}]
+
+    # Mock duty_cycle to simulate a pileup violation
+    real_duty_cycle = twin.duty_cycle
+    def _mock_duty(rec):
+        d = real_duty_cycle(rec)
+        d["pileup_violations"] = mock_violation
+        return d
+
+    monkeypatch.setattr(twin, "duty_cycle", _mock_duty)
+
+    report = twin.check_variant_gate(test_variant, seeds=[777])
+    assert report["passed"] is False, "Variant with pileup violations must NOT pass gate"
+    assert report["rejected"] is True
+    assert "pileup" in report["reason"].lower()
+    assert report["pileup_violations"] == mock_violation
+
+    # In strict mode, ValueError must be raised
+    with pytest.raises(ValueError, match="pileup violations detected"):
+        twin.check_variant_gate(test_variant, seeds=[777], strict=True)
+
+
+def test_agv_priority_variants_registered_and_clean_on_seed_777():
+    """All registered AGV-priority variants must pass gate on seed 777 with zero pileup violations."""
+    variants = [
+        "baseline",
+        "agv-priority-starvation",
+        "agv-priority-seeded",
+        "agv-priority-rework",
+        "bottleneck-unfreeze",
+        "rebalanced-funnel-v1",
+        "rebalanced-funnel-seeded",
+    ]
+    for var_id in variants:
+        assert var_id in config.FUNNEL_VARIANTS, f"Variant {var_id} not registered in FUNNEL_VARIANTS"
+        report = twin.check_variant_gate(var_id, seeds=[777])
+        assert report["passed"] is True, f"Variant {var_id} failed gate: {report}"
+        assert len(report["pileup_violations"]) == 0, f"Variant {var_id} had pileup violations: {report}"
+        assert report["median_sunk"] >= 30, f"Variant {var_id} median sunk < 30: {report['median_sunk']}"
+
+
+def test_seed_777_pileup_clean_and_passes_gate():
+    """Seed 777 must have zero pileup violations in duty_cycle and pass the variant gate."""
+    rec = twin.run_episode(777, None)
+    dc = twin.duty_cycle(rec)
+    assert len(dc["pileup_violations"]) == 0, f"Seed 777 had pileup violations: {dc['pileup_violations']}"
+    assert len(rec.get("pileup_violations", [])) == 0
+    report = twin.check_variant_gate("baseline", seeds=[777])
+    assert report["passed"] is True
+    assert report["pileup_violations"] == []
+
+
+def test_agv_priority_ordering_seeded_and_starvation_execution():
+    """AGV-priority variants must execute deterministically without stream corruption."""
+    rec1 = twin.run_episode(777, None, variant="agv-priority-seeded")
+    rec2 = twin.run_episode(777, None, variant="agv-priority-seeded")
+    assert rec1["flow_stats"]["sunk"] == rec2["flow_stats"]["sunk"]
+    assert rec1["states"] == rec2["states"]
+
+    rec_starve = twin.run_episode(777, None, variant="agv-priority-starvation")
+    assert rec_starve["flow_stats"]["sunk"] >= 30
+    dc = twin.duty_cycle(rec_starve)
+    assert len(dc["pileup_violations"]) == 0
+
+
+def test_buffer_unfreeze_and_agv_priority_20_seeds_gate():
+    """Rebalanced funnel variant must achieve rolling median sunk >= 30 across 20 seeds with 0 pileups."""
+    report = twin.check_variant_gate("rebalanced-funnel-v1", seeds=_EXACT_20_SEEDS)
+    assert report["passed"] is True, f"20-seed gate failed: {report}"
+    assert len(report["pileup_violations"]) == 0, f"20-seed gate had pileup violations: {report}"
+    assert report["median_sunk"] >= 30, f"20-seed median sunk < 30: {report['median_sunk']}"
+    assert report["p10"] > 0
+    assert report["p90"] >= report["median_sunk"]
+
