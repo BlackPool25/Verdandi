@@ -22,6 +22,14 @@ EXIT_P99_FAIL = 13
 EXIT_WALL_FAIL = 14
 EXIT_GROUND_FAIL = 15
 
+# W6 (MINIPRO-22 Todo 6): determinism x5 + wall +2% gate inputs.
+# Seeds are the plan's verification-strategy set; the budget factor default
+# (1.02) is the plan's acceptance value. No Q_DET threshold VALUES live here
+# or in src/twin.py — they stay in MINIPRO-10/17; only the relative factor
+# plumbing (mean * factor, fresh mean re-proven per run) is implemented.
+W6_SEEDS: tuple[int, ...] = (777, 1234, 999, 42, 2026)
+WALL_BUDGET_FACTOR = 1.02
+
 GATE_EXIT_CODES: dict[str, int] = {
     "F1": EXIT_F1_FAIL,
     "AC@1": EXIT_AC1_FAIL,
@@ -403,6 +411,64 @@ def evaluate_gates(
     return failures, failed_gate_names
 
 
+def load_calibration_mean(path: str) -> float:
+    """Read the FRESH calibration mean (never hardcoded, never copied)."""
+    import json
+
+    with open(path, mode="r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    mean = float(payload["mean_per_episode_s"])
+    if mean <= 0:
+        raise ValueError(f"non-positive calibration mean in {path!r}: {mean!r}")
+    return mean
+
+
+def check_wall_vs_mean(
+    fresh_mean: float,
+    walls_by_seed: dict[int, float],
+    factor: float,
+) -> tuple[float, list[tuple[int, float]]]:
+    """Per-seed wall gate: each fresh wall must be <= fresh_mean * factor."""
+    budget = fresh_mean * factor
+    breaches = [
+        (seed, wall) for seed, wall in sorted(walls_by_seed.items()) if wall > budget
+    ]
+    return budget, breaches
+
+
+def run_wall_mean_gate(calibration_path: str, factor: float) -> int:
+    """Time one fresh episode per W6 seed; each must fit mean * factor."""
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(repo_root))
+    from src import twin
+
+    fresh_mean = load_calibration_mean(calibration_path)
+    # Warmup (untimed, discarded): first-episode cold start is ~30% over
+    # steady state and would breach seed 777 systematically; not a regression.
+    twin.run_episode(7, None)
+    walls: dict[int, float] = {}
+    for seed in W6_SEEDS:
+        start = time.perf_counter()
+        twin.run_episode(seed, None)
+        walls[seed] = time.perf_counter() - start
+    budget, breaches = check_wall_vs_mean(fresh_mean, walls, factor)
+    print(f"fresh_mean={fresh_mean:.4f}s budget_factor={factor} budget={budget:.4f}s")
+    for seed in W6_SEEDS:
+        status = "OK" if walls[seed] <= budget else "BREACH"
+        print(f"seed={seed} wall={walls[seed]:.4f}s {status}")
+    if breaches:
+        for seed, wall in breaches:
+            sys.stderr.write(
+                f"GATE FAILURE: wall seed={seed} ({wall:.4f}s > {budget:.4f}s)\n"
+            )
+        sys.stderr.write("FAILED GATES: wall\n")
+        return EXIT_WALL_FAIL
+    print("PASS: wall <= +2% each vs fresh mean")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Builds and returns command-line argument parser."""
     parser = argparse.ArgumentParser(
@@ -410,9 +476,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--csv",
-        required=True,
+        required=False,
+        default=None,
         type=str,
-        help="Path to battery metrics CSV file (required)",
+        help="Path to battery metrics CSV file (required unless --wall-mean is given)",
     )
     parser.add_argument(
         "--f1",
@@ -451,6 +518,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=600.0,
         help="Maximum wall clock time threshold in seconds (default: 600.0)",
     )
+    parser.add_argument(
+        "--wall-mean",
+        dest="wall_mean",
+        type=str,
+        default=None,
+        help="Fresh calibration JSON path (from `python src/twin.py --calibrate <path>`); "
+        "enables the W6 per-seed wall gate instead of the CSV gates",
+    )
+    parser.add_argument(
+        "--budget-factor",
+        dest="budget_factor",
+        type=float,
+        default=WALL_BUDGET_FACTOR,
+        help="Allowed ratio vs fresh mean per seed (default: 1.02)",
+    )
     return parser
 
 
@@ -459,6 +541,18 @@ def main(argv: list[str] | None = None) -> int:
     start_time = time.monotonic()
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.wall_mean is not None:
+        if args.budget_factor is None or args.budget_factor <= 0:
+            parser.error("--budget-factor must be a positive number")
+        try:
+            return run_wall_mean_gate(args.wall_mean, args.budget_factor)
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            sys.stderr.write(f"ERROR: {exc}\n")
+            return EXIT_ERROR
+
+    if not args.csv:
+        parser.error("--csv is required unless --wall-mean is given")
 
     try:
         metrics = parse_csv_file(args.csv)
