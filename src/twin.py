@@ -76,6 +76,7 @@ from src.config import (
     TEMP_RANGES,
     TWIN_SCHEMA,
     T,
+    WEAR,
 )
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
@@ -97,6 +98,7 @@ _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 # (777-clean 652fba4f…, 777 F-21 523b0b9e…). replay_digest scrubs these before
 # hashing; old records without the key hash exactly as before.
 _DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split"})
+_DIGEST_SCRUB_RECORD_KEYS = frozenset({"strat"})
 
 # Coverage matrix axes (TC-006): 5 partition groups x 7 channels x 7
 # classes. The class axis reuses _FAULT_CLASSES (runtime-equal to the
@@ -1340,6 +1342,28 @@ def _monitor(env, stores, order, rows):
         yield env.timeout(1)
 
 
+def compute_wear(states: list[list[str]]) -> list[float]:
+    """Compute minimal C3 wear-lite scalar per machine over episode states.
+
+    Equation: w_m(t+1) = w_m(t) + ALPHA * L_m(t) * (1 + BETA * 1[w_m(t) > KNEE])
+    where ALPHA = 1/240, KNEE = 0.8, BETA = 4.0, L_m(t) = 1.0 if state == 'RUN' else 0.0.
+    Stream budget: deterministic given states, draws ZERO new streams.
+    """
+    alpha = WEAR["ALPHA"]
+    knee = WEAR["KNEE"]
+    beta = WEAR["BETA"]
+    post_mult = 1.0 + beta
+    wear = [0.0] * N_MACHINES
+    for m in range(N_MACHINES):
+        w = 0.0
+        row = states[m]
+        for st in row:
+            if st == "RUN":
+                w += alpha * (post_mult if w > knee else 1.0)
+        wear[m] = float(w)
+    return wear
+
+
 def run_episode(
     seed: int,
     fault: dict | list | None = None,
@@ -1555,6 +1579,11 @@ def run_episode(
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
         "faults": specs,
+        "strat": {
+            "wear_endpoint": float(max(compute_wear(shared["states"]))),
+            "maint_flag": False,
+            "maint_flag_unvalidated": True,
+        },
     }
 
 
@@ -1789,7 +1818,10 @@ def replay_digest(record):
             f"schema v1 non-comparable, rebaseline: got schema_version="
             f"{record.get('schema_version')!r}, want {TWIN_SCHEMA}"
         )
-    scrubbed = {k: v for k, v in record.items() if k not in _WALLCLOCK_KEYS}
+    scrubbed = {
+        k: v for k, v in record.items()
+        if k not in _WALLCLOCK_KEYS and k not in _DIGEST_SCRUB_RECORD_KEYS
+    }
     _fs = scrubbed.get("flow_stats")
     if isinstance(_fs, dict) and any(k in _fs for k in _DIGEST_SCRUB_FLOW_KEYS):
         _fs = {k: v for k, v in _fs.items() if k not in _DIGEST_SCRUB_FLOW_KEYS}

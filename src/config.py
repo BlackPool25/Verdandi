@@ -61,6 +61,15 @@ ENVELOPE_SIGMA = 3.0
 # State offsets in units of σ (SIM_SPEC §4.1: STARVED −2σ, BLOCKED −1σ, DOWN −3σ).
 STATE_OFFSETS = {"RUN": 0.0, "STARVED": -2.0, "BLOCKED": -1.0, "DOWN": -3.0}
 
+# Minimal C3 wear-lite scalar coefficients (SPEC_UP §1 C3).
+# Equation: w_m(t+1) = w_m(t) + ALPHA * L_m(t) * (1 + BETA * 1[w_m(t) > KNEE])
+WEAR = {
+    "ALPHA": 1.0 / 240.0,
+    "KNEE": 0.8,
+    "BETA": 4.0,
+    "GAMMA_SIGMA": 2.0,
+}
+
 # Fault injection ranges (SIM_SPEC §5): mag 4–7σ, dur 8–25, delay d∈[3,6],
 # loss drop 10–30%, breakdown mttr_mult∈[1,3], quality reject 15–40%.
 FAULT_RANGES = {
