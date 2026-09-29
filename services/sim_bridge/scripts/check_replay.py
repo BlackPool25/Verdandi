@@ -89,7 +89,7 @@ def main() -> None:
             f"golden mismatch: file={golden['digest']} live={a['replay_digest']}"
         )
         assert golden["seed"] == 777 and golden["fault"] == "F-21-drift-B2"
-        assert golden["code_version"] == "twin-2.1.0-topology-A"
+        assert golden["code_version"] == "twin-2.2.0-ch8ch9"
         print(f"golden={GOLDEN_PATH.name} digest={golden['digest']} OK")
     else:
         print(f"golden missing: {GOLDEN_PATH} (write via Todo 7 golden step)")

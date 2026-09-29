@@ -1,6 +1,6 @@
 {
   "seed": 777,
   "fault": "F-21-drift-B2",
-  "digest": "523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4",
-  "code_version": "twin-2.1.0-topology-A"
+  "digest": "3936efdeecd2cb55784d24925cf2d98343d0d70f43b7a897c753bd4f99f3af6b",
+  "code_version": "twin-2.2.0-ch8ch9"
 }

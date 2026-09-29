@@ -146,4 +146,4 @@ def test_bridge_digest_matches_twin_and_golden():
     if golden_path.exists():
         golden = json.loads(golden_path.read_text())
         assert golden["digest"] == twin_digest
-        assert golden["code_version"] == "twin-2.1.0-topology-A"
+        assert golden["code_version"] == "twin-2.2.0-ch8ch9"

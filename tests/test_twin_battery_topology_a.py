@@ -39,8 +39,8 @@ _F21_B2 = {
 def test_battery_ids_and_schema_pinned():
     assert BATTERY_ID_FULL == "topology-A-full182"
     assert BATTERY_ID_QUICK == "topology-A-quick16"
-    assert TWIN_SCHEMA == 2
-    assert CODE_VERSION == "twin-2.1.0-topology-A"
+    assert TWIN_SCHEMA == 3
+    assert CODE_VERSION == "twin-2.2.0-ch8ch9"
 
 
 def test_manifest_182_full_coverage():

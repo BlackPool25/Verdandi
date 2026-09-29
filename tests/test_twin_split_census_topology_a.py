@@ -23,9 +23,10 @@ Buckets partition every STARVED cell, hence sum EXACTLY to raw STARVED.
 
 Digest contract: replay_digest scrubs flow_stats sub-dicts in
 twin._DIGEST_SCRUB_FLOW_KEYS — reruns stay identical AND old records
-without the key hash exactly as before. Existing golden pins (777-clean
-652fba4f…, 777 F-21 523b0b9e… == services/sim_bridge/golden/
-replay-777-topology-A.json) MUST NOT move.
+without the key hash exactly as before. W7 re-baselined golden pins
+(777-clean d624b3e3…, 777 F-21 3936efde… == services/sim_bridge/golden/
+replay-777-topology-A.json, schema v3 twin-2.2.0-ch8ch9): CH8 "currents"
+is hashed by design, CH9 "energy" is scrubbed.
 """
 
 import copy
@@ -48,8 +49,8 @@ _F21_B2 = {
     "mag_sigma": 5.2,
 }
 
-_DIGEST_CLEAN777 = "652fba4f5f5f2e92cda0d1d71ee1be081731d1c638cf48f05dec9eac9cb5458b"
-_DIGEST_F21_777 = "523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4"
+_DIGEST_CLEAN777 = "d624b3e37d5194b54cdc61fbda2333bf93fb208cf4a63c9b7429c4179e383cfd"
+_DIGEST_F21_777 = "3936efdeecd2cb55784d24925cf2d98343d0d70f43b7a897c753bd4f99f3af6b"
 
 
 def _raw_starved(rec):
