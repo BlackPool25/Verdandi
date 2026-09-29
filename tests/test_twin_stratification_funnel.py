@@ -97,6 +97,46 @@ def test_strat_wear_endpoint_scalar():
     )
 
 
+def test_strat_wear_endpoint_determinism_5_runs():
+    """5 runs with seed=777 must yield identical wear_endpoint values."""
+    endpoints = []
+    for _ in range(5):
+        rec = twin.run_episode(777, None)
+        assert "strat" in rec
+        endpoints.append(rec["strat"]["wear_endpoint"])
+    assert len(set(endpoints)) == 1, f"wear_endpoint non-deterministic across 5 runs: {endpoints}"
+
+
+def test_strat_wear_knee_acceleration_formula():
+    """Minimal C3 wear equation w(t+1)=w+ALPHA*L*(1+4*1[w>0.8]) accelerates 5x post-knee."""
+    # Machine with 192 RUN steps: wear reaches exactly 192/240 = 0.8 (pre-knee)
+    states_192 = [["RUN"] * 192 + ["STARVED"] * (config.T - 192)]
+    # Machine with 193 RUN steps: wear reaches 192/240 + 1/240 = 193/240 = 0.804167...
+    states_193 = [["RUN"] * 193 + ["STARVED"] * (config.T - 193)]
+    # Machine with 194 RUN steps: wear reaches 193/240 + 5/240
+    states_194 = [["RUN"] * 194 + ["STARVED"] * (config.T - 194)]
+
+    pad = [["STARVED"] * config.T] * (config.N_MACHINES - 1)
+    w_192 = twin.compute_wear(states_192 + pad)[0]
+    w_193 = twin.compute_wear(states_193 + pad)[0]
+    w_194 = twin.compute_wear(states_194 + pad)[0]
+
+    np.testing.assert_allclose(w_192, 0.8)
+    np.testing.assert_allclose(w_193, 193.0 / 240.0)
+    # The step from 193 to 194 happens when w > 0.8, so rate is 5 * ALPHA = 5/240
+    np.testing.assert_allclose(w_194, 193.0 / 240.0 + 5.0 / 240.0)
+
+
+def test_strat_wear_stream_budget_zero_new_streams():
+    """Minimal C3 wear must draw from existing streams with ZERO new RNG streams."""
+    assert config.N_STREAMS == 36
+    streams = twin._spawn_streams(777)
+    noise, place, drop, agv, fail = streams
+    assert len(noise) == 26
+    # No stream index >= 36
+    assert all(idx < 36 for idx in config.MACHINE_INDEX.values())
+
+
 def test_strat_maint_flag_unvalidated_constant():
     """Stratification export must contain False constant 'maint_flag' marked unvalidated."""
     rec = twin.run_episode(777, _PROBE_FAULT)
