@@ -13,6 +13,7 @@ buffer_cap (buffer after machine; None = sink + rework tap), transit
 # Episode / calibration scalars (SIM_SPEC Table 3.1 header + §2.3).
 T = 300
 CAL_WIN = 120
+WARMUP_STEPS = 15
 N_MACHINES = 26
 N_BUFFERS = 26
 N_STREAMS = 36
