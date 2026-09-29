@@ -54,6 +54,7 @@ def test_record_keys():
         "agv_waits",
         "parts",
         "faults",
+        "strat",
     }
 
 
