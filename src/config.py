@@ -87,6 +87,61 @@ TEMP_RANGES = {
     "rework": (20.0, 60.0),
 }
 
+# Nominal motor-current ratings in A by machine class (CH8, MINIPRO-22).
+# ASSUMPTIONS (not normative spec claims): example amps A2/C2 15A and
+# RWK0 3.5A pin QA; remaining class values are placeholders pending
+# owner amps sign-off, which gates merge (plan G4). Keyed by the same 9
+# classes as TEMP_RANGES above.
+I_RATED_BY_CLASS = {
+    "feed": 8.0,
+    "form": 10.0,
+    "process": 15.0,
+    "finish": 12.0,
+    "inspect-tail": 5.0,
+    "assembly-kit": 9.0,
+    "assembly-join": 9.5,
+    "test": 4.0,
+    "rework": 3.5,
+}
+
+# Load-factor group k by machine-name prefix (CH8 L_m scaling):
+# A/B 1.0, C 0.7, ASM/PKG/INSP 0.5, RWK 0.3 (PKG/INSP pending confirm).
+K_BY_GROUP = {
+    "A": 1.0,
+    "B": 1.0,
+    "C": 0.7,
+    "ASM": 0.5,
+    "PKG": 0.5,
+    "INSP": 0.5,
+    "RWK": 0.3,
+}
+
+# Idle draw ratio: I_idle = I_IDLE_RATIO * I_rated (RULE-OF-THUMB per G4).
+I_IDLE_RATIO = 0.15
+
+# CH8/CH9 discretization + mains (G2/G5): 1 tick = 1 s at 400 V.
+STEP_SECONDS = 1
+VOLT = 400
+
+
+def _group_for_machine(name):
+    """Map machine name to K_BY_GROUP key; unknown prefix raises."""
+    for prefix in ("RWK", "ASM", "PKG", "INSP"):
+        if name.startswith(prefix):
+            return prefix
+    if name[:1] in ("A", "B", "C"):
+        return name[:1]
+    raise ValueError(f"unknown current group for machine {name!r}")
+
+
+def resolve_current(name, **overrides):
+    """Resolve (I_rated, k) for a machine name; v1 has no per-machine override."""
+    if overrides:
+        raise ValueError("per-machine CURRENT override not supported in v1")
+    cls = MACHINES[name]["class"]
+    return (float(I_RATED_BY_CLASS[cls]), float(K_BY_GROUP[_group_for_machine(name)]))
+
+
 # A SIM "STUCK" event (part wedged, zero throughput at origin) classifies as
 # the breakdown fault class: forced DOWN for the window (SIM_SPEC §5).
 STUCK_IS_BREAKDOWN = {"STUCK": "breakdown"}
