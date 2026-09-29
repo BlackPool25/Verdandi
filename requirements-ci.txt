@@ -6,3 +6,7 @@ ruff
 mypy
 bandit
 pip-audit
+pandas
+pyarrow
+scikit-learn
+

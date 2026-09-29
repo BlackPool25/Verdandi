@@ -34,8 +34,8 @@ from typing import Any
 
 from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
 
-SCHEMA_VERSION = 2  # topology-A v2-only; must equal src.config.TWIN_SCHEMA
-assert SCHEMA_VERSION == TWIN_SCHEMA == 2
+SCHEMA_VERSION = 3  # topology-A v3; must equal src.config.TWIN_SCHEMA
+assert SCHEMA_VERSION == TWIN_SCHEMA == 3
 
 V1_REJECT_MSG = "schema v1 non-comparable, rebaseline"
 
