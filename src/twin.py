@@ -61,6 +61,7 @@ from src.config import (
     CODE_VERSION,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
+    I_IDLE_RATIO,
     INSPECT_DELAY_STEPS,
     MACHINE_INDEX,
     MACHINES,
@@ -77,6 +78,7 @@ from src.config import (
     TWIN_SCHEMA,
     T,
 )
+from src.config import resolve_current
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
 _CLAMP_SIGMA = 2.0 * ENVELOPE_SIGMA
@@ -474,6 +476,22 @@ def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
     return min(hi, max(lo, val)), float(rng.uniform(tlo, thi)), ar
 
 
+def _record_current(shared, name, idx, st, held, tput, t):
+    """CH8 in-step current hook (Todo W3).
+
+    I = I_idle + k*L*(I_rated-I_idle) + eta[idx][t], clamped at 0.0.
+    L=1 iff RUN-cycling a part this step (held, or the tput==1 release
+    step); BLOCKED-holding, STARVED, and DOWN all draw idle (G4
+    DOWN==I_idle lock, I_idle>0 standby). Never derived from the obs
+    val, so currents stay non-collinear with obs by construction.
+    """
+    i_rated, k = resolve_current(name)
+    i_idle = I_IDLE_RATIO * i_rated
+    lm = 1 if (st == "RUN" and (held or tput == 1)) else 0
+    i = i_idle + k * lm * (i_rated - i_idle) + float(shared["eta"][idx][t])
+    shared["currents"][idx][t] = i if i > 0.0 else 0.0
+
+
 def _emit(shared, event, t, machine, detail):
     """Append one channel-7 event dict (SIM_SPEC §8: t/machine/event/detail).
 
@@ -795,6 +813,7 @@ def _line_process(env, spec, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -891,6 +910,7 @@ def _insp0_process(env, up, down, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -1075,6 +1095,7 @@ def _asm0_process(env, asm01, kit, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         _kit_log.append(miss_now)
         yield env.timeout(1)
 
@@ -1204,6 +1225,7 @@ def _asm_mid_process(env, name, up, down, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -1322,6 +1344,7 @@ def _rwk0_process(env, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -1390,6 +1413,7 @@ def run_episode(
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
         "tput": [[0] * T for _ in range(N_MACHINES)],
+        "currents": [[0.0] * T for _ in range(N_MACHINES)],  # W3 in-step hook
         "events": [],
         "agv_waits": [],
         "parts": [],
@@ -1559,6 +1583,7 @@ def run_episode(
         "machines": {name: dict(cfg) for name, cfg in MACHINES.items()},
         "obs": shared["obs"],
         "states": shared["states"],
+        "currents": shared["currents"],
         "buffers": buf_rows,
         "throughput": shared["tput"],
         "events": shared["events"],
