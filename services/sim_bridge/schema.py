@@ -1,12 +1,17 @@
-"""T3 frozen tick schema v2 (contract lock, cross-team reuse) — topology-A only.
+"""T3 frozen tick schema v3 (contract lock, cross-team reuse) — topology-A only.
 
 Twin-mirror verbatim; bridge-strict labeled. Locks the tick JSON the
 bridge replays (T2) and the frontend consumes (T4+):
 
-- v2-only: N_MACHINES=26 / N_BUFFERS=26 (topology-A roster). Any v1
-  32-machine tick (states/obs/throughput len 32, buffers len 31) is
+- v3-only: N_MACHINES=26 / N_BUFFERS=26 (topology-A roster) + TICK
+  `currents` row (CH8 motor-current index, twin _record_current) +
+  header `energy` dict (CH9 apparent-energy index, twin _energy_header,
+  header-only, never per-tick). Any v1 32-machine tick
+  (states/obs/throughput len 32, buffers len 31) is
   strict-rejected with 'schema v1 non-comparable, rebaseline' — the v1
-  code path is DELETED except this error.
+  code path is DELETED except this error. Any v2 record (no
+  currents/energy keys) is likewise rejected non-comparable via the
+  missing-keys path.
 - V1_NON_COMPARABLE digests (never asserted equal): flow 962b9c54d022,
   demo d2b4fb23… (32-machine schema v1 baselines, retired).
 - NO `temperature` key: src/twin.py discards `_temp` from
@@ -30,6 +35,7 @@ bridge replays (T2) and the frontend consumes (T4+):
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
@@ -52,9 +58,10 @@ TICK_KEYS = (
     "events_at_k",
     "faults",
     "quality",
+    "currents",
 )
 
-HEADER_KEYS = ("seed", "T", "sbuf_stats", "flow_stats", "c7tail_final")
+HEADER_KEYS = ("seed", "T", "sbuf_stats", "flow_stats", "c7tail_final", "energy")
 
 FLAG_SOURCES = ("parts-last",)
 FLAG_VALUES = ("OK", "DEGRADE", "REJECT")
@@ -164,6 +171,7 @@ def build_tick(record: dict[str, Any], k: int) -> dict[str, Any]:
     bufs = [record["buffers"][j][k] for j in range(len(BUFFERS))]
     events = [e for e in record["events"] if e.get("t") == k]
     quality = {m: quality_for_machine(record["parts"], m) for m in order}
+    currents = [record["currents"][idx[m]][k] for m in order]
     return {
         "step": k,
         "states": states,
@@ -174,6 +182,7 @@ def build_tick(record: dict[str, Any], k: int) -> dict[str, Any]:
         "events_at_k": events,
         "faults": record["faults"],
         "quality": quality,
+        "currents": currents,
     }
 
 
@@ -185,6 +194,7 @@ def build_header(record: dict[str, Any]) -> dict[str, Any]:
         "sbuf_stats": record["sbuf_stats"],
         "flow_stats": record["flow_stats"],
         "c7tail_final": record["flow_stats"]["c7tail"],
+        "energy": record["flow_stats"]["energy"],
     }
 
 
@@ -242,6 +252,20 @@ def validate_tick(tick: dict[str, Any]) -> None:
                 f"throughput value {v!r} outside domain "
                 f"{sorted(THROUGHPUT_DOMAIN)} ({TPUT_WAIVER})"
             )
+    currents = tick.get("currents", None)
+    if not isinstance(currents, list) or len(currents) != N_MACHINES:
+        got = len(currents) if isinstance(currents, list) else type(currents).__name__
+        raise SchemaViolation(
+            f"tick currents must be a {N_MACHINES}-row list, got {got!r}"
+        )
+    for i, v in enumerate(currents):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise SchemaViolation(f"currents[{i}] must be a number: {v!r}")
+        if not math.isfinite(v) or v < 0.0:
+            raise SchemaViolation(
+                f"currents[{i}] value {v!r} outside range [0, inf) "
+                "(CH8 hook clamps at 0.0)"
+            )
     sbuf_idx = list(BUFFERS).index("SBUF")
     if tick["sbuf_level"] != tick["buffers"][sbuf_idx]:
         raise SchemaViolation("sbuf_level must equal buffers[SBUF]")
@@ -273,6 +297,9 @@ def validate_tick(tick: dict[str, Any]) -> None:
 
 def validate_header(header: dict[str, Any]) -> None:
     """Validate the episode header (c7tail final-only lives here)."""
+    extra = set(header) - set(HEADER_KEYS)
+    if extra:
+        raise SchemaViolation(f"header has unknown keys: {sorted(extra)}")
     missing = set(HEADER_KEYS) - set(header)
     if missing:
         raise SchemaViolation(f"header missing keys: {sorted(missing)}")
@@ -281,6 +308,24 @@ def validate_header(header: dict[str, Any]) -> None:
     if not isinstance(header["c7tail_final"], int):
         raise SchemaViolation(
             f"c7tail_final must be an int final count: {header['c7tail_final']!r}"
+        )
+    energy = header["energy"]
+    if not isinstance(energy, dict):
+        raise SchemaViolation(f"header energy must be a dict: {energy!r}")
+    if "sum_kVAh" not in energy or "unit" not in energy:
+        raise SchemaViolation(
+            f"header energy missing sum_kVAh/unit: {sorted(energy)}"
+        )
+    if energy["unit"] != "kVAh-apparent":
+        raise SchemaViolation(
+            f"header energy unit must be 'kVAh-apparent': {energy['unit']!r}"
+        )
+    e_sum = energy["sum_kVAh"]
+    if isinstance(e_sum, bool) or not isinstance(e_sum, (int, float)):
+        raise SchemaViolation(f"header energy sum_kVAh must be a number: {e_sum!r}")
+    if not math.isfinite(e_sum) or e_sum < 0.0:
+        raise SchemaViolation(
+            f"header energy sum_kVAh {e_sum!r} outside range [0, inf)"
         )
 
 
@@ -302,6 +347,16 @@ FROZEN_SCHEMA: dict[str, Any] = {
         "mode": "episode-final only",
         "key": "c7tail_final",
         "waiver": C7TAIL_SERIES_WAIVER,
+    },
+    "currents": {
+        "mode": "per-tick row, 26 machines, same order as states",
+        "key": "currents",
+        "range": "[0, inf) per machine, clamped at 0.0 by the CH8 hook",
+    },
+    "energy": {
+        "mode": "header-only dict, verbatim from flow_stats",
+        "key": "energy",
+        "unit": "kVAh-apparent",
     },
     "throughput_domain": sorted(THROUGHPUT_DOMAIN),
     "throughput_waiver": TPUT_WAIVER,
