@@ -118,3 +118,16 @@ To enforce this coordination contract continuously in CI:
 - The test scans the entire `src/` hierarchy to identify all dictionary keys, assignments, and updates written to simulation/dataset outputs.
 - Any attempt by an unauthorized module to write M0.2e owned fields, or any attempt by M0.2e to implement M0.2f aggregates, fails the CI build.
 - Negative control fixtures verify that unauthorized or conflicting writers immediately trip the guard.
+
+---
+
+## 6. Filed Linear Follow-Up Issues (Deferred Glue)
+
+The following 6 follow-up issues have been filed in Linear under project Verdandi (`38cd5eac-067e-40f9-a984-30de300b69b3`) and team Mini-Project (`fd0cdf45-0a98-4b45-9844-c401e3ba7bc9`) for tracking post-M0.2e integration:
+
+1. **[MINIPRO-54](https://linear.app/mcp-workspace/issue/MINIPRO-54/twin-full-c3-wear-physics-and-maint-event-system)**: Twin: full C3 wear physics and MAINT_EVENT system
+2. **[MINIPRO-55](https://linear.app/mcp-workspace/issue/MINIPRO-55/twin-ch8ch10-parity-channels-and-real-sensor-vs-process-taxonomy)**: Twin: CH8/CH10 parity channels and real Sensor-vs-Process taxonomy
+3. **[MINIPRO-56](https://linear.app/mcp-workspace/issue/MINIPRO-56/twin-m1-graph-walk-root-cause-resolution)**: Twin: M1 graph-walk root cause resolution
+4. **[MINIPRO-57](https://linear.app/mcp-workspace/issue/MINIPRO-57/twin-real-minipro-19-train-pipeline-integration)**: Twin: real MINIPRO-19 train pipeline integration
+5. **[MINIPRO-58](https://linear.app/mcp-workspace/issue/MINIPRO-58/twin-digest-golden-migration-and-historical-v2-cache-cleanup)**: Twin: digest golden migration and historical v2 cache cleanup
+6. **[MINIPRO-59](https://linear.app/mcp-workspace/issue/MINIPRO-59/twin-m02f-multi-scale-aggregates-integration)**: Twin: M0.2f multi-scale aggregates integration
