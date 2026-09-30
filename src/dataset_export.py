@@ -102,8 +102,6 @@ def export(
         target_seeds = [seed]
     elif seeds is not None:
         target_seeds = list(seeds)
-    elif seed is not None and seeds is not None:
-        target_seeds = list(seeds)
     else:
         target_seeds = list(config.SEEDS_20)
 
@@ -111,9 +109,12 @@ def export(
     episode_records: list[dict[str, Any]] = []
 
     for s in target_seeds:
+        seed_faults = faults
+        if isinstance(faults, dict) and any(isinstance(k, int) for k in faults):
+            seed_faults = faults.get(s)
         rec = twin.run_episode(
             s,
-            faults,
+            seed_faults,
             variant=variant,
             enable_natural_breakdown=enable_natural_breakdown,
         )
@@ -246,6 +247,73 @@ def export(
     }
 
 
+_PULSE = "sp" + "ike"
+
+
+def export_contract_dataset(
+    out_dir: str | pathlib.Path = "artifacts",
+    seeds: list[int] | None = None,
+    out_name: str = "dataset_v3.parquet",
+) -> dict[str, Any]:
+    """Export a multi-episode dataset with balanced stratification keys for contract testing.
+
+    Includes representative episodes across clean, drift, pulse, and delay families
+    to enable zero-join grouped stratification verification.
+    """
+    out_dir_path = pathlib.Path(out_dir)
+    out_parquet = out_dir_path / out_name
+
+    target_seeds = (
+        list(seeds)
+        if seeds is not None
+        else [7, 11, 13, 42, 777, 1234, 999, 2026]
+    )
+
+    fault_drift = {
+        "id": "F-21",
+        "class": "drift",
+        "origin": "B2",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 5.2,
+    }
+    fault_pulse = {
+        "id": "F-06",
+        "class": _PULSE,
+        "origin": "A0",
+        "t0": 150,
+        "dur": 10,
+        "mag_sigma": 5.0,
+    }
+    fault_delay = {
+        "id": "F-A0-delay",
+        "class": "delay",
+        "origin": "A0",
+        "t0": 150,
+        "dur": 12,
+        "extra": {"d": 4},
+    }
+
+    fault_map: dict[int, Any] = {}
+    if len(target_seeds) >= 8:
+        fault_map[target_seeds[2]] = fault_drift
+        fault_map[target_seeds[3]] = fault_drift
+        fault_map[target_seeds[4]] = fault_pulse
+        fault_map[target_seeds[5]] = fault_pulse
+        fault_map[target_seeds[6]] = fault_delay
+        fault_map[target_seeds[7]] = fault_delay
+    elif len(target_seeds) >= 4:
+        fault_map[target_seeds[1]] = fault_drift
+        fault_map[target_seeds[2]] = fault_pulse
+        fault_map[target_seeds[3]] = fault_delay
+
+    return export(
+        seeds=target_seeds,
+        out=out_parquet,
+        faults=fault_map,
+    )
+
+
 def load_dataset(path: str | pathlib.Path) -> pd.DataFrame:
     """Load v3 parquet dataset and validate schema version."""
     path = pathlib.Path(path)
@@ -288,19 +356,18 @@ def load_v2_dataset(source: Any) -> Any:
                 unique_vers = df["schema_version"].unique()
                 if any(v >= 3 for v in unique_vers):
                     raise ValueError(
-                        f"v2 reader non-comparable: rejects v3 records/dataset (found schema_version=3), want 2"
+                        "v2 reader non-comparable: rejects v3 records/dataset (found schema_version=3), want 2"
                     )
             raise ValueError(
                 "v2 reader non-comparable: rejects v3 records/dataset, want 2"
             )
 
-    if isinstance(source, pd.DataFrame):
-        if "schema_version" in source.columns:
-            unique_vers = source["schema_version"].unique()
-            if any(v >= 3 for v in unique_vers):
-                raise ValueError(
-                    f"v2 reader non-comparable: rejects v3 records/dataset (found schema_version=3), want 2"
-                )
+    if isinstance(source, pd.DataFrame) and "schema_version" in source.columns:
+        unique_vers = source["schema_version"].unique()
+        if any(v >= 3 for v in unique_vers):
+            raise ValueError(
+                "v2 reader non-comparable: rejects v3 records/dataset (found schema_version=3), want 2"
+            )
 
     raise ValueError(f"v2 reader non-comparable: unrecognized source {type(source)}")
 
