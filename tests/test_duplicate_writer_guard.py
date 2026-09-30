@@ -18,10 +18,9 @@ Normative requirements:
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
-import os
 import pathlib
 import textwrap
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -221,8 +220,11 @@ class StructuralWriterVisitor(ast.NodeVisitor):
                     )
             if node.func.attr == "setdefault" and node.args:
                 arg0 = node.args[0]
-                if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str):
-                    if arg0.value in self.checked_fields:
+                if (
+                    isinstance(arg0, ast.Constant)
+                    and isinstance(arg0.value, str)
+                    and arg0.value in self.checked_fields
+                ):
                         self.writes.append(
                             FieldWrite(
                                 field=arg0.value,
@@ -323,7 +325,7 @@ def validate_duplicate_and_unauthorized_writers(
             for w in m0_2f_boundary_violations
         ]
         errors.append(
-            f"M0.2f Boundary Violation: M0.2e MUST NOT implement M0.2f aggregates or envelopes!\n"
+            "M0.2f Boundary Violation: M0.2e MUST NOT implement M0.2f aggregates or envelopes!\n"
             + "\n".join(lines)
         )
 
@@ -333,7 +335,7 @@ def validate_duplicate_and_unauthorized_writers(
             for w in unauthorized_writes
         ]
         errors.append(
-            f"Unauthorized Writer Violation: only designated owners may write M0.2e fields.\n"
+            "Unauthorized Writer Violation: only designated owners may write M0.2e fields.\n"
             + f"Allowed owners: {allowed_owners}\n"
             + "\n".join(lines)
         )
@@ -364,7 +366,7 @@ def validate_duplicate_and_unauthorized_writers(
     return {
         "total_writes": len(writes),
         "writes": writes,
-        "m0_2e_fields_found": sorted(set(w.field for w in writes)),
+        "m0_2e_fields_found": sorted({w.field for w in writes}),
     }
 
 

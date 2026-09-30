@@ -13,6 +13,7 @@ Covers:
 import hashlib
 import json
 import pathlib
+
 import pytest
 
 from src import config, dataset_export
@@ -72,7 +73,7 @@ def test_export_5x_same_seed_bit_identical(tmp_path):
 
     for i in range(5):
         run_file = tmp_path / f"test_run_{i}.parquet"
-        res = dataset_export.export(seed=777, out=run_file)
+        _ = dataset_export.export(seed=777, out=run_file)
         with open(run_file, "rb") as f:
             hashes_parquet.append(hashlib.sha256(f.read()).hexdigest())
 
