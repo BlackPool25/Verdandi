@@ -79,11 +79,10 @@ from src.config import (
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
-    T,
-    UNFROZEN_BUFFER_CAPS,
     WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
     WEAR,
+    T,
 )
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
@@ -283,9 +282,7 @@ def _validate(seed, fault):
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
     if fault is None:
         return []
-    if isinstance(fault, tuple) and fault and isinstance(fault[0], str):
-        raw_list = [fault]
-    elif isinstance(fault, dict):
+    if isinstance(fault, tuple) and fault and isinstance(fault[0], str) or isinstance(fault, dict):
         raw_list = [fault]
     elif isinstance(fault, (list, tuple)):
         raw_list = list(fault)
@@ -1039,10 +1036,10 @@ def _agv_dispatcher(
         elif agv_priority == "rework":
             rwk = stores.get("RWK_RET")
             rework_pending = len(rwk.items) if rwk is not None else 0
-            def _rework_key(item):
+            def _rework_key(item, pending=rework_pending):
                 store, name = item
                 line = _TAIL_LINE[name]
-                bonus = -10 if (line == "C" and rework_pending > 0) else 0
+                bonus = -10 if (line == "C" and pending > 0) else 0
                 return (len(kit[line]) + bonus, -len(store.items))
             ordered_tails = sorted(tails, key=_rework_key)
         else:

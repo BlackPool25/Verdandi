@@ -20,6 +20,7 @@ the missing key or failed gate.
 
 import copy
 import json
+
 import numpy as np
 import pytest
 
@@ -131,7 +132,7 @@ def test_strat_wear_stream_budget_zero_new_streams():
     """Minimal C3 wear must draw from existing streams with ZERO new RNG streams."""
     assert config.N_STREAMS == 36
     streams = twin._spawn_streams(777)
-    noise, place, drop, agv, fail = streams
+    noise, _place, _drop, _agv, _fail = streams
     assert len(noise) == 26
     # No stream index >= 36
     assert all(idx < 36 for idx in config.MACHINE_INDEX.values())
