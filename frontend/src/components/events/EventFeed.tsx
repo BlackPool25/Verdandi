@@ -76,12 +76,18 @@ const FeedRow = memo(function FeedRow({ ev }: { readonly ev: TwinEvent }): React
   const kind = downKindOf(ev);
   const rowClass =
     kind === "injected" ? "evt-row row-down-injected" : kind === "natural" ? "evt-row row-down-natural" : "evt-row";
+  let familyAttr: string;
+  try {
+    familyAttr = classifyEvent(ev);
+  } catch {
+    familyAttr = "UNKNOWN";
+  }
   return (
     <li
       data-testid="event-row"
       data-event={ev.event}
       data-machine={ev.machine}
-      data-family={classifyEvent(ev)}
+      data-family={familyAttr}
       data-down-kind={kind ?? ""}
       className={rowClass}
     >

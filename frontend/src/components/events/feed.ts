@@ -10,7 +10,13 @@ export interface FeedFilter {
 export function filterEvents(events: readonly TwinEvent[], filter: FeedFilter): TwinEvent[] {
   return events.filter((ev) => {
     if (filter.machine !== undefined && ev.machine !== filter.machine) return false;
-    if (filter.family !== undefined && classifyEvent(ev) !== filter.family) return false;
+    if (filter.family !== undefined) {
+      try {
+        if (classifyEvent(ev) !== filter.family) return false;
+      } catch {
+        return false;
+      }
+    }
     return true;
   });
 }

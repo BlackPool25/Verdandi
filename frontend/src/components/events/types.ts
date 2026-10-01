@@ -14,6 +14,9 @@ export const EVENT_NAMES = [
   "DIVERT_SBUF",
   "AGV_WAIT",
   "REJECT_ROUTE",
+  "FAILOVER",
+  "PACK_FORK",
+  "LATE_VERDICT",
 ] as const;
 
 export type EventName = (typeof EVENT_NAMES)[number];
@@ -26,6 +29,9 @@ export const EVENT_FAMILIES = [
   "AGV_WAIT",
   "REJECT_ROUTE",
   "DIVERT_SBUF",
+  "FAILOVER",
+  "PACK_FORK",
+  "LATE_VERDICT",
 ] as const;
 
 export type EventFamily = (typeof EVENT_FAMILIES)[number];
@@ -42,6 +48,9 @@ const EVENT_TO_FAMILY: Record<EventName, EventFamily> = {
   AGV_WAIT: "AGV_WAIT",
   REJECT_ROUTE: "REJECT_ROUTE",
   DIVERT_SBUF: "DIVERT_SBUF",
+  FAILOVER: "FAILOVER",
+  PACK_FORK: "PACK_FORK",
+  LATE_VERDICT: "LATE_VERDICT",
 };
 
 /** Base channel-7 shape {event, t, machine, detail} for every variant. */
