@@ -219,7 +219,7 @@ def export_evidence(
 
             # Raw channels only: obs, state, buffer, tput, currents
             columns_data: dict[str, list[Any]] = {
-                "episode_id": [],
+                "seed": [],
                 "step": [],
             }
             for m in part_machines:
@@ -230,9 +230,9 @@ def export_evidence(
                 columns_data[f"current_{m}"] = []
 
             for rec in episode_records:
-                ep_id = int(rec["seed"])
+                seed_val = int(rec["seed"])
                 for t_step in step_range:
-                    columns_data["episode_id"].append(ep_id)
+                    columns_data["seed"].append(seed_val)
                     columns_data["step"].append(int(t_step))
                     for m in part_machines:
                         m_idx = config.MACHINE_INDEX[m]
@@ -252,7 +252,7 @@ def export_evidence(
                             float(rec["currents"][m_idx][t_step])
                         )
 
-            n_rows = len(columns_data["episode_id"])
+            n_rows = len(columns_data["seed"])
             validate_evidence_floor(n_rows)
 
             # Deterministic sorted column order
