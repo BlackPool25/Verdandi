@@ -6,23 +6,16 @@ import { MachineNode } from "../../topology/MachineNode";
 import { anomalyFor, toFaultSpec } from "./anomaly";
 import { EventFeed } from "./EventFeed";
 import { MachineEventFeed } from "./MachineEventFeed";
+import { MACHINE_IDS } from "../../store/tick";
 import type { FaultSpec, TwinEvent } from "./types";
 import "./events.css";
 
 // T9-owned dev harness (mirrors the T7 controls.html pattern): posts an
 // episode, replays /stream ticks, and drives the feed + overlay preview.
 // Production wiring (SimPage mount) belongs to T8/T10; this file is dev-only.
-const ROSTER: readonly string[] = [
-  ...Array.from({ length: 10 }, (_, i) => `A${i}`),
-  ...Array.from({ length: 10 }, (_, i) => `B${i}`),
-  ...Array.from({ length: 8 }, (_, i) => `C${i}`),
-  "ASM0",
-  "ASM1",
-  "ASM2",
-  "RWK0",
-].sort();
+const ROSTER: readonly string[] = [...MACHINE_IDS].sort();
 
-const PROBE_MACHINES = ["B4", "B5", "B6", "B7"] as const;
+const PROBE_MACHINES = ["B1", "B2", "B7P", "B7S"] as const;
 
 interface TickRow {
   readonly step: number;
@@ -31,8 +24,8 @@ interface TickRow {
 }
 
 const STYLE_PROBE: readonly TwinEvent[] = [
-  { event: "DOWN", t: 150, machine: "B5", detail: {}, natural: false, gt_excluded: false, fault_id: "F-22" } as TwinEvent,
-  { event: "DOWN", t: 40, machine: "A3", detail: {}, natural: true, gt_excluded: true, fault_id: null } as TwinEvent,
+  { event: "DOWN", t: 150, machine: "B2", detail: {}, natural: false, gt_excluded: false, fault_id: "F-22" } as TwinEvent,
+  { event: "DOWN", t: 40, machine: "A2", detail: {}, natural: true, gt_excluded: true, fault_id: null } as TwinEvent,
 ];
 
 function stateMap(row: TickRow | null): Record<string, string> {
@@ -51,7 +44,7 @@ function Harness(): React.JSX.Element {
   const [faults, setFaults] = useState<readonly FaultSpec[]>([]);
   const [ticks, setTicks] = useState<readonly TickRow[]>([]);
   const [cursor, setCursor] = useState(0);
-  const [machine, setMachine] = useState("B5");
+  const [machine, setMachine] = useState("B2");
   const [error, setError] = useState("");
   const sourceRef = useRef<EventSource | null>(null);
 
@@ -113,22 +106,22 @@ function Harness(): React.JSX.Element {
           onClick={() =>
             startEpisode({
               seed: Number(seed),
-              faults: [{ class: "drift", origin: "B5", t0: 150, dur: 12, mag_sigma: 5.2 }],
+              faults: [{ class: "drift", origin: "B2", t0: 150, dur: 12, mag_sigma: 5.2 }],
             })
           }
         >
-          F-21 drift@B5
+          F-21 drift@B2
         </button>
         <button
           data-testid="new-breakdown"
           onClick={() =>
             startEpisode({
               seed: Number(seed),
-              faults: [{ class: "breakdown", origin: "B5", t0: 150, dur: 12, extra: { mttr_mult: 2.0 } }],
+              faults: [{ class: "breakdown", origin: "B2", t0: 150, dur: 12, extra: { mttr_mult: 2.0 } }],
             })
           }
         >
-          Breakdown@B5 x2
+          Breakdown@B2 x2
         </button>
       </div>
       <div data-testid="episode-id">{episodeId}</div>
@@ -206,7 +199,7 @@ function PreviewFlow({
   const step = cursor;
   const nodes = useMemo(
     () =>
-      ["B4", "B5", "B6"].map((id, i) => ({
+      ["B1", "B2", "B7P"].map((id, i) => ({
         id,
         type: "machine",
         position: { x: i * 160, y: 60 },

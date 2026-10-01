@@ -19,6 +19,7 @@ interface FixtureTick {
   readonly buffers: readonly number[];
   readonly sbuf_level: number;
   readonly quality: Readonly<Record<string, unknown>>;
+  readonly currents: readonly number[];
 }
 
 interface FixtureShape {
@@ -41,6 +42,7 @@ function panelTickAt(step: number): PanelTick {
     buffers: t.buffers,
     sbuf_level: t.sbuf_level,
     quality: t.quality,
+    currents: t.currents,
     machineOrder: F.machine_order,
     bufferOrder: F.buffer_order,
     c7tailFinal: F.c7tail_final,
@@ -65,9 +67,10 @@ describe("LineHeader: honest KPIs, missing -> —", () => {
         tick={tick}
         episodeHeader={FULL_HEADER}
         episodeId="ep-777"
+        energy={{ sumKVAh: 10774.5, perUnit: 250.6 }}
         speed={2}
         playing={true}
-        selectedId="B5"
+        selectedId="B2"
         store={store}
       />,
     );
@@ -83,8 +86,11 @@ describe("LineHeader: honest KPIs, missing -> —", () => {
     expect(html).toContain("scrapped 3");
     expect(html).toContain("reworked 4");
     expect(html).toContain("c7tail_final 0");
+    // Then: CH9 energy header passes through verbatim
+    expect(html).toContain("kVAh 10774.5");
+    expect(html).toContain("kVAh/unit 250.6");
     // Then: chrome (breadcrumb / episode / step / speed / playing)
-    expect(html).toContain("Line › B5");
+    expect(html).toContain("Line › B2");
     expect(html).toContain("ep ep-777");
     expect(html).toContain("step 150");
     expect(html).toContain("2x");
@@ -107,6 +113,7 @@ describe("LineHeader: honest KPIs, missing -> —", () => {
       <LineHeader
         tick={null}
         episodeHeader={null}
+        energy={null}
         episodeId={null}
         speed={1}
         playing={false}
@@ -136,6 +143,7 @@ describe("LineHeader: honest KPIs, missing -> —", () => {
       <LineHeader
         tick={tick}
         episodeHeader={null}
+        energy={null}
         episodeId="ep-777"
         speed={1}
         playing={true}

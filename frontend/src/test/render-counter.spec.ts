@@ -81,10 +81,10 @@ describe("render-counter: graph chrome stays at 0 renders per tick", () => {
     // Then: cursor intact, backpressure counted, rings hold the tail
     expect(store.cursor()).toBe(119);
     expect(store.backpressure()).toBeGreaterThan(0);
-    const tail = store.series("A5");
+    const tail = store.series("A2");
     expect(tail.length).toBeGreaterThan(0);
     const last = tail[tail.length - 1];
-    if (last === undefined) throw new Error("empty A5 tail");
+    if (last === undefined) throw new Error("empty A2 tail");
     expect(Number.isFinite(last)).toBe(true);
   });
 
@@ -95,10 +95,10 @@ describe("render-counter: graph chrome stays at 0 renders per tick", () => {
       first.ingest(t);
       nowMs += 250;
     }
-    const snapA = Array.from(first.series("B5"));
+    const snapA = Array.from(first.series("B2"));
     const second = createTwinStore({ now: () => nowMs });
     for (const t of buildBurst(300)) second.ingest(t);
-    expect(Array.from(second.series("B5"))).toEqual(snapA);
+    expect(Array.from(second.series("B2"))).toEqual(snapA);
   });
 
   it("stopping a burst mid-way leaves rings consistent", () => {
@@ -111,13 +111,13 @@ describe("render-counter: graph chrome stays at 0 renders per tick", () => {
     }
     // cancel/resume probe: stop at 150, then resume the rest
     expect(store.cursor()).toBe(149);
-    expect(store.series("C3").length).toBe(150);
+    expect(store.series("C2").length).toBe(150);
     for (const t of ticks.slice(150)) {
       store.ingest(t);
       nowMs += 250;
     }
     expect(store.cursor()).toBe(299);
-    expect(store.series("C3").length).toBe(300);
+    expect(store.series("C2").length).toBe(300);
   });
 
   it("badges throttle to 4-10Hz under continuous ingest", () => {

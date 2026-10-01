@@ -88,18 +88,17 @@ async function scrub(page: Page, step: number): Promise<void> {
   await expect(page.getByTestId("cursor")).toContainText(`Step ${step} / 300`);
 }
 
-test("F-21 GT outline on B5 for t in [150,162), nowhere else", async ({ page }) => {
+test("F-21 GT outline on B2 for t in [150,162), nowhere else", async ({ page }) => {
   await startF21(page);
   await scrub(page, 155);
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-gt", "true");
-  await expect(page.getByTestId("gt-probe-B6")).toHaveAttribute("data-gt", "false");
-  await expect(page.getByTestId("gt-probe-B7")).toHaveAttribute("data-gt", "false");
-  await expect(page.getByTestId("gt-probe-B4")).toHaveAttribute("data-gt", "false");
-  // Depth-1 only, live: B7 is two hops from B5 so never highlighted; B4/B6
-  // highlight exactly when their live same-step state is BLOCKED/STARVED
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "true");
+  await expect(page.getByTestId("gt-probe-B7SP")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("gt-probe-B7S")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("gt-probe-B1")).toHaveAttribute("data-gt", "false");
+  // Depth-1 only, live: B1/B7P/B7S share a buffer edge with B2, so each
+  // highlights exactly when its live same-step state is BLOCKED/STARVED
   // (natural line rhythm, never promised as demo congestion per ruling A).
-  await expect(page.getByTestId("gt-probe-B7")).toHaveAttribute("data-neighbor", "false");
-  for (const id of ["B4", "B6"]) {
+  for (const id of ["B1", "B7P", "B7S"]) {
     const probe = page.getByTestId(`gt-probe-${id}`);
     const state = await probe.getAttribute("data-state");
     const congested = state === "BLOCKED" || state === "STARVED";
@@ -107,40 +106,40 @@ test("F-21 GT outline on B5 for t in [150,162), nowhere else", async ({ page }) 
   }
   // Window edges: 149 off, 162 off.
   await scrub(page, 149);
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "false");
   await scrub(page, 162);
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "false");
   await scrub(page, 155);
 });
 
 test("real MachineNode shows outline + ! glyph at GT step", async ({ page }) => {
   await startF21(page);
   await scrub(page, 155);
-  const node = page.getByTestId("node-B5");
+  const node = page.getByTestId("node-B2");
   await expect(node).toHaveAttribute("data-gt", "true");
   await expect(node).toHaveClass(/gt-outline/);
-  await expect(page.getByTestId("node-glyph-B5")).toHaveText("!");
-  await expect(page.getByTestId("node-B6")).toHaveAttribute("data-gt", "false");
-  await expect(page.getByTestId("node-B6")).not.toHaveClass(/gt-outline/);
+  await expect(page.getByTestId("node-glyph-B2")).toHaveText("!");
+  await expect(page.getByTestId("node-B7P")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("node-B7P")).not.toHaveClass(/gt-outline/);
 });
 
-test("global feed carries FAULT_START B5; per-machine feed filters", async ({ page }) => {
+test("global feed carries FAULT_START B2; per-machine feed filters", async ({ page }) => {
   await startF21(page);
   await scrub(page, 160);
   const feed = page.getByTestId("event-feed");
   await feed.getByTestId("feed-family-filter").selectOption("FAULT");
   await expect(
-    feed.locator('[data-testid="event-row"][data-event="FAULT_START"][data-machine="B5"]'),
+    feed.locator('[data-testid="event-row"][data-event="FAULT_START"][data-machine="B2"]'),
   ).toHaveCount(1);
   await scrub(page, 299);
-  await expect(feed.locator('[data-testid="event-row"][data-event="FAULT_END"][data-machine="B5"]')).toHaveCount(1);
+  await expect(feed.locator('[data-testid="event-row"][data-event="FAULT_END"][data-machine="B2"]')).toHaveCount(1);
   await feed.getByTestId("feed-family-filter").selectOption("ALL");
-  await page.getByTestId("machine-select").selectOption("B5");
+  await page.getByTestId("machine-select").selectOption("B2");
   const mfeed = page.getByTestId("machine-event-feed");
   const rows = mfeed.locator('[data-testid="event-row"]');
   expect(await rows.count()).toBeGreaterThan(0);
   for (const m of await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-machine")))) {
-    expect(m).toBe("B5");
+    expect(m).toBe("B2");
   }
 });
 
@@ -164,28 +163,28 @@ test("breakdown: GT ends at t1 but injected DOWN outlives it", async ({ page }) 
   await page.getByTestId("new-breakdown").click();
   await expect(page.getByTestId("cursor")).toContainText("/ 300", { timeout: 60_000 });
   await scrub(page, 155);
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-gt", "true");
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-down", "injected");
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "true");
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-down", "injected");
   await scrub(page, 165);
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-gt", "false");
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-down", "injected");
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-down", "injected");
 });
 
 test("re-stream same episode reproduces the same outline (no stale state)", async ({ page }) => {
   await startF21(page);
   await scrub(page, 155);
-  const before = await page.getByTestId("gt-probe-B5").textContent();
+  const before = await page.getByTestId("gt-probe-B2").textContent();
   await page.reload();
   await startF21(page);
   await scrub(page, 155);
-  expect(await page.getByTestId("gt-probe-B5").textContent()).toBe(before);
-  await expect(page.getByTestId("gt-probe-B5")).toHaveAttribute("data-gt", "true");
+  expect(await page.getByTestId("gt-probe-B2").textContent()).toBe(before);
+  await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "true");
 });
 
 test("evidence screenshot at GT step", async ({ page }) => {
   await startF21(page);
   await scrub(page, 155);
-  await expect(page.getByTestId("node-B5")).toHaveClass(/gt-outline/);
+  await expect(page.getByTestId("node-B2")).toHaveClass(/gt-outline/);
   await page.screenshot({ path: resolve(REPO, ".omo", "evidence", "task-9-verdandi-pixel-twin-frontend.png"), fullPage: true });
 });
 
@@ -198,7 +197,7 @@ test("reduced-motion pins a static outline (no blink)", async ({ browser }) => {
     await expect(page.getByTestId("cursor")).toContainText("/ 300", { timeout: 60_000 });
     await page.getByTestId("step-scrub").fill("155");
     await expect(page.getByTestId("cursor")).toContainText("Step 155 / 300");
-    const outline = page.getByTestId("node-B5");
+    const outline = page.getByTestId("node-B2");
     await expect(outline).toHaveClass(/gt-outline/);
     expect(await outline.evaluate((e) => getComputedStyle(e).animationName)).toBe("none");
     expect(await outline.evaluate((e) => getComputedStyle(e).outlineStyle)).not.toBe("none");

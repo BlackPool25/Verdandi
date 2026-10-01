@@ -1,3 +1,5 @@
+import { MACHINE_IDS } from "../../store/tick";
+
 export const T_TOTAL = 300;
 export const MAX_STEP = T_TOTAL - 1;
 export const CAL_WIN = 120;
@@ -5,12 +7,7 @@ export const STEPS_PER_SEC_AT_1X = 4;
 export const SPEEDS: readonly number[] = [1, 2, 4];
 export const QUALITY_HOME = "ASM2";
 
-export const MACHINES: readonly string[] = [
-  "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9",
-  "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9",
-  "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7",
-  "ASM0", "ASM1", "ASM2", "RWK0",
-];
+export const MACHINES: readonly string[] = [...MACHINE_IDS];
 
 export const FAULT_CLASSES: readonly string[] = [
   "drift",

@@ -19,6 +19,7 @@ interface FixtureTick {
   readonly buffers: readonly number[];
   readonly sbuf_level: number;
   readonly quality: Readonly<Record<string, unknown>>;
+  readonly currents: readonly number[];
 }
 
 interface FixtureShape {
@@ -42,6 +43,7 @@ function panelTickAt(step: number): PanelTick {
     buffers: t.buffers,
     sbuf_level: t.sbuf_level,
     quality: t.quality,
+    currents: t.currents,
     machineOrder: F.machine_order,
     bufferOrder: F.buffer_order,
     c7tailFinal: F.c7tail_final,
@@ -50,19 +52,19 @@ function panelTickAt(step: number): PanelTick {
 
 describe("lineStatsFor: honest per-tick aggregates", () => {
   for (const step of PROBED) {
-    it(`step ${step}: tput sum bounded, state counts sum 32, mean/sbuf honest`, () => {
+    it(`step ${step}: tput sum bounded, state counts sum 26, mean/sbuf honest`, () => {
       // Given: the live tick row at this step
       const tick = panelTickAt(step);
       const raw = F.ticks[String(step)] as FixtureTick;
       // When: aggregating the line
       const s = lineStatsFor(tick);
-      // Then: throughput sum equals payload sum within 0..32
+      // Then: throughput sum equals payload sum within 0..26
       const expectedTput = raw.throughput.reduce((a, b) => a + b, 0);
       expect(s.tputSum).toBe(expectedTput);
       expect(s.tputSum).toBeGreaterThanOrEqual(0);
-      expect(s.tputSum).toBeLessThanOrEqual(32);
-      // Then: state counts partition the 32-machine roster
-      expect(s.run + s.blocked + s.starved + s.down).toBe(32);
+      expect(s.tputSum).toBeLessThanOrEqual(26);
+      // Then: state counts partition the 26-machine roster
+      expect(s.run + s.blocked + s.starved + s.down).toBe(26);
       expect(s.run).toBe(raw.states.filter((x) => x === "RUN").length);
       expect(s.blocked).toBe(raw.states.filter((x) => x === "BLOCKED").length);
       expect(s.starved).toBe(raw.states.filter((x) => x === "STARVED").length);
@@ -79,17 +81,17 @@ describe("lineStatsFor: honest per-tick aggregates", () => {
     expect(SBUF_HIGH).toBeGreaterThanOrEqual(24);
   });
 
-  it("synthetic all-RUN tick: run=32, rest 0", () => {
+  it("synthetic all-RUN tick: run=26, rest 0", () => {
     const tick = panelTickAt(0);
     const all: PanelTick = {
       ...tick,
-      states: Array.from({ length: 32 }, () => "RUN"),
-      throughput: Array.from({ length: 32 }, () => 1),
+      states: Array.from({ length: 26 }, () => "RUN"),
+      throughput: Array.from({ length: 26 }, () => 1),
     };
     const s = lineStatsFor(all);
-    expect(s.run).toBe(32);
+    expect(s.run).toBe(26);
     expect(s.blocked + s.starved + s.down).toBe(0);
-    expect(s.tputSum).toBe(32);
+    expect(s.tputSum).toBe(26);
   });
 });
 
@@ -148,6 +150,7 @@ describe("TickPatch optional buffers (edge width)", () => {
       step: 1,
       states: Array.from({ length: STREAM_MACHINE_ORDER.length }, () => "RUN"),
       throughput: Array.from({ length: STREAM_MACHINE_ORDER.length }, () => 0),
+      currents: Array.from({ length: STREAM_MACHINE_ORDER.length }, () => 7.5),
     };
     const patch = toPatch(row);
     expect(patch.step).toBe(1);

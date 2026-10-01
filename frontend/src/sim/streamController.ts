@@ -12,6 +12,23 @@ export interface ControllerOptions {
   readonly onLog?: (msg: string) => void;
 }
 
+export interface EnergyHeader {
+  readonly sumKVAh: number;
+  readonly perUnit: number | null;
+}
+
+function parseEnergyHeader(body: unknown): EnergyHeader | null {
+  if (typeof body !== "object" || body === null || !("energy" in body)) return null;
+  const e = (body as { readonly energy?: unknown }).energy;
+  if (typeof e !== "object" || e === null) return null;
+  const rec = e as Record<string, unknown>;
+  const sum = rec["sum_kVAh"];
+  const per = rec["per_unit"];
+  if (typeof sum !== "number" || !Number.isFinite(sum) || sum < 0) return null;
+  if (per !== null && per !== undefined && (typeof per !== "number" || !Number.isFinite(per))) return null;
+  return { sumKVAh: sum, perUnit: per == null ? null : (per as number) };
+}
+
 // Framework-free lifecycle controller (unit-tested via injected OpenStream).
 // Single-stream invariant: connect() always closes the previous handle first.
 // Speed is cursor-only: setSpeed never reconnects, never moves the cursor.
@@ -26,6 +43,7 @@ export class TickStreamController {
   private episode: string | null = null;
   private readonly rows = new Map<number, string>();
   private c7tail: number | null = null;
+  private energy: EnergyHeader | null = null;
   private lastStep = -1;
   private bytes = 0;
   private speedVal = 1;
@@ -70,6 +88,7 @@ export class TickStreamController {
       this.episode = episodeId;
       this.rows.clear();
       this.c7tail = null;
+      this.energy = null;
       this.lastStep = -1;
       this.bytes = 0;
       this.reconnectFlag = false;
@@ -110,6 +129,8 @@ export class TickStreamController {
           const v = (body as { readonly c7tail_final?: unknown }).c7tail_final;
           if (typeof v === "number" && Number.isFinite(v)) this.c7tail = v;
         }
+        const e = parseEnergyHeader(body);
+        if (e !== null) this.energy = e;
       } catch {
         /* header without finals: panels show the no-episode state */
       }
@@ -183,6 +204,10 @@ export class TickStreamController {
 
   c7tailFinal(): number | null {
     return this.c7tail;
+  }
+
+  energyHeader(): EnergyHeader | null {
+    return this.energy;
   }
 
   totalBytes(): number {

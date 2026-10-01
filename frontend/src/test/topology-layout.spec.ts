@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { EXPECTED_EDGE_COUNT, PINNED_EDGES } from "../topology/edges";
 import { NODE_HEIGHT, NODE_WIDTH, computeLayout, hasOverlap } from "../topology/layout";
 import { EXPECTED_NODE_COUNT, PINNED_NODES, assertTopologyCounts } from "../topology/nodes";
-import oldFixture from "./fixtures/ticks-777.json";
 
 // Topology-A: 28 nodes (26 machines in MACHINE_INDEX order + SBUF + _C7TAIL),
 // 31 edges (line-gap 16 + tail-stage 4 + agv-drain 4 + assembly 3 + rework 2 + packaging 2).
@@ -54,9 +53,8 @@ describe("topology contract", () => {
     }
   });
 
-  it("old 34-node fixture fails the count gate with the exact mismatch error", () => {
-    const f = oldFixture as unknown as { readonly machine_order: readonly string[] };
-    const oldNodes = f.machine_order.length + 2; // +SBUF +_C7TAIL
+  it("old 34-node roster fails the count gate with the exact mismatch error", () => {
+    const oldNodes = 32 + 2; // retired v1 roster (32 machines) + SBUF + _C7TAIL
     expect(oldNodes).toBe(34);
     expect(() => assertTopologyCounts(oldNodes, 36)).toThrow(
       "topology count mismatch: expected 28/31",

@@ -110,16 +110,30 @@ export function MachinePanel(props: MachinePanelProps): React.JSX.Element {
   const nav =
     onSelect === undefined ? null : <FaceplateNav selectedId={selectedId} onSelect={onSelect} />;
   // Rail invariant: exactly one sparkline mounted whenever the store is
-  // wired (storms e2e asserts strip-B5 visible with nothing selected).
+  // wired (storms e2e asserts strip-B2 visible with nothing selected), plus
+  // the CH8 motor-current strip for the same machine.
+  const faceId =
+    selectedId !== null && MACHINE_META[selectedId] !== undefined ? selectedId : "B2";
   const sparkline =
     store === undefined || store === null ? null : (
       <div className="machine-panel__sparkline">
         <div className="sparkline-title">OBSERVATION TELEMETRY (RING BUFFER)</div>
         <StripChart
           store={store}
-          machineId={selectedId !== null && MACHINE_META[selectedId] !== undefined ? selectedId : "B5"}
+          machineId={faceId}
           width={328}
           height={64}
+        />
+        <div className="sparkline-title">MOTOR CURRENT, A (CH8)</div>
+        <StripChart
+          store={store}
+          machineId={faceId}
+          width={328}
+          height={64}
+          min={0}
+          max={20}
+          source="current"
+          testidSuffix="-current"
         />
       </div>
     );

@@ -115,6 +115,7 @@ export function SimPage(): React.JSX.Element {
       events_at_k: [],
       faults: [],
       quality: p.quality,
+      currents: p.currents,
     };
     chartStore.ingest(row);
   }, [source.panelTick, chartStore]);
@@ -160,6 +161,7 @@ export function SimPage(): React.JSX.Element {
           tick={source.panelTick}
           episodeHeader={null}
           episodeId={source.episodeId}
+          energy={source.energy}
           speed={source.speed}
           playing={source.playing}
           selectedId={selectedId}

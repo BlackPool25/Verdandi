@@ -20,6 +20,7 @@ interface FixtureShape {
     readonly buffers: readonly number[];
     readonly sbuf_level: number;
     readonly quality: Readonly<Record<string, unknown>>;
+    readonly currents: readonly number[];
   }>;
 }
 
@@ -43,6 +44,7 @@ function panelTickAt(step: number): PanelTick {
     buffers: t.buffers,
     sbuf_level: t.sbuf_level,
     quality: t.quality,
+    currents: t.currents,
     machineOrder: MACHINE_ORDER,
     bufferOrder: BUFFER_ORDER,
     c7tailFinal: F.header.c7tail_final,

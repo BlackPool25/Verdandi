@@ -2,8 +2,8 @@
  * T9 failing-first overlay spec. Written BEFORE feed/overlay implementation;
  * first run must be red (missing ./anomaly + ./feed modules), then green.
  *
- * Covers the plan acceptance: F-21@seed777 GT outline on origin B5 for
- * t in [150,162) ONLY (ruling A: zero non-RUN states at B5/B6/B7, so no
+ * Covers the plan acceptance: F-21@seed777 GT outline on origin B2 for
+ * t in [150,162) ONLY (ruling A: zero non-RUN states at B2/B7P/B7S, so no
  * BLOCKED/STARVED congestion promised there), natural-vs-injected DOWN
  * styling, reduced-motion static outline, and forbidden-token absence.
  */
@@ -26,11 +26,11 @@ import { classifyEvent, downKindOf, type FaultSpec, type TwinEvent } from "./typ
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-// F-21: drift, B5, t0=150, dur=12 -> GT window exact (150,162).
+// F-21: drift, B2, t0=150, dur=12 -> GT window exact (150,162).
 const F21: FaultSpec = {
   id: "F-21",
   class: "drift",
-  origin: "B5",
+  origin: "B2",
   t0: 150,
   dur: 12,
   t1: 162,
@@ -42,7 +42,7 @@ const F21: FaultSpec = {
 const BREAKDOWN: FaultSpec = {
   id: "F-22",
   class: "breakdown",
-  origin: "B5",
+  origin: "B2",
   t0: 150,
   dur: 12,
   t1: 162,
@@ -50,33 +50,33 @@ const BREAKDOWN: FaultSpec = {
 };
 
 const RUN_STATES: Readonly<Record<string, string>> = {
-  B4: "RUN",
-  B5: "RUN",
-  B6: "RUN",
-  B7: "RUN",
+  B1: "RUN",
+  B2: "RUN",
+  B7P: "RUN",
+  B7S: "RUN",
 };
 
 describe("GT outline (F-21 ruling A)", () => {
-  it("outlines origin B5 for t in [150,162) only", () => {
-    expect(isGtOutline("B5", 149, [F21])).toBe(false);
-    expect(isGtOutline("B5", 150, [F21])).toBe(true);
-    expect(isGtOutline("B5", 155, [F21])).toBe(true);
-    expect(isGtOutline("B5", 161, [F21])).toBe(true);
-    expect(isGtOutline("B5", 162, [F21])).toBe(false);
-    expect(isGtOutline("B5", 200, [F21])).toBe(false);
+  it("outlines origin B2 for t in [150,162) only", () => {
+    expect(isGtOutline("B2", 149, [F21])).toBe(false);
+    expect(isGtOutline("B2", 150, [F21])).toBe(true);
+    expect(isGtOutline("B2", 155, [F21])).toBe(true);
+    expect(isGtOutline("B2", 161, [F21])).toBe(true);
+    expect(isGtOutline("B2", 162, [F21])).toBe(false);
+    expect(isGtOutline("B2", 200, [F21])).toBe(false);
   });
 
   it("never outlines non-origin machines, even inside the window", () => {
-    expect(isGtOutline("B6", 155, [F21])).toBe(false);
-    expect(isGtOutline("B4", 155, [F21])).toBe(false);
+    expect(isGtOutline("B7P", 155, [F21])).toBe(false);
+    expect(isGtOutline("B1", 155, [F21])).toBe(false);
     expect(isGtOutline("A0", 155, [F21])).toBe(false);
   });
 
-  it("seed777 ruling A: no BLOCKED/STARVED highlight at B5/B6/B7", () => {
-    for (const m of ["B5", "B6", "B7"]) {
+  it("seed777 ruling A: no BLOCKED/STARVED highlight at B2/B7P/B7S", () => {
+    for (const m of ["B2", "B7P", "B7S"]) {
       expect(neighborHighlightFor(m, 155, [F21], RUN_STATES)).toBe(false);
     }
-    expect(anomalyFor("B5", 155, [F21], RUN_STATES)).toEqual({
+    expect(anomalyFor("B2", 155, [F21], RUN_STATES)).toEqual({
       gt: true,
       neighbor: false,
       down: null,
@@ -89,21 +89,21 @@ describe("bridge fault normalization", () => {
     const spec = toFaultSpec({
       id: "F-EP0",
       class: "breakdown",
-      origin: "B5",
+      origin: "B2",
       t0: 150,
       dur: 12,
       extra: { mttr_mult: 2.0 },
     });
     expect(spec.t1).toBe(162);
     expect(downWindowOf(spec)).toEqual({ t0: 150, t1: 174 });
-    expect(isGtOutline("B5", 155, [spec])).toBe(true);
+    expect(isGtOutline("B2", 155, [spec])).toBe(true);
   });
 
   it("materialized tick shape (t1 + top-level mult) passes through", () => {
     const spec = toFaultSpec({
       id: "F-22",
       class: "breakdown",
-      origin: "B5",
+      origin: "B2",
       t0: 150,
       dur: 12,
       t1: 162,
@@ -154,11 +154,11 @@ describe("breakdown GT vs DOWN duration split", () => {
   });
 
   it("DOWN state outlives the GT outline for mult>1", () => {
-    expect(isDownState("B5", 161, [BREAKDOWN], "DOWN")).toBe(true);
-    expect(isGtOutline("B5", 165, [BREAKDOWN])).toBe(false);
-    expect(isDownState("B5", 165, [BREAKDOWN], "DOWN")).toBe(true);
-    expect(isDownState("B5", 174, [BREAKDOWN], "RUN")).toBe(false);
-    expect(downKindFor("B5", 165, [BREAKDOWN], "DOWN")).toBe("injected");
+    expect(isDownState("B2", 161, [BREAKDOWN], "DOWN")).toBe(true);
+    expect(isGtOutline("B2", 165, [BREAKDOWN])).toBe(false);
+    expect(isDownState("B2", 165, [BREAKDOWN], "DOWN")).toBe(true);
+    expect(isDownState("B2", 174, [BREAKDOWN], "RUN")).toBe(false);
+    expect(downKindFor("B2", 165, [BREAKDOWN], "DOWN")).toBe("injected");
   });
 
   it("natural DOWN during a clean window never gets the fault outline", () => {

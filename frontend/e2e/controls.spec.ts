@@ -125,19 +125,19 @@ test("step ±1 is deterministic (step k twice identical)", async ({ page }) => {
   expect(await page.getByTestId("tick-json").textContent()).toBe(first);
 });
 
-test("fault@B5 POSTs a new episode", async ({ page }) => {
+test("fault@B2 POSTs a new episode", async ({ page }) => {
   await startEpisode(page, "777");
   const before = await page.getByTestId("episode-id").textContent();
   await page.getByTestId("fault-class").selectOption("drift");
-  await page.getByTestId("fault-origin").selectOption("B5");
+  await page.getByTestId("fault-origin").selectOption("B2");
   await page.getByTestId("fault-t0").fill("150");
   await page.getByTestId("fault-dur").fill("12");
   await page.getByTestId("fault-add").click();
-  await expect(page.getByTestId("fault-list")).toContainText("B5");
+  await expect(page.getByTestId("fault-list")).toContainText("B2");
   await page.getByTestId("new-episode").click();
   await expect(page.getByTestId("episode-id")).not.toHaveText(before ?? "none", { timeout: 60_000 });
   await expect(page.getByTestId("form-error")).toBeEmpty({ timeout: 60_000 });
-  await expect(page.getByTestId("episode-faults")).toContainText("B5");
+  await expect(page.getByTestId("episode-faults")).toContainText("B2");
 });
 
 test("quality@B9 warns noop, STUCK maps to breakdown", async ({ page }) => {
@@ -150,7 +150,7 @@ test("quality@B9 warns noop, STUCK maps to breakdown", async ({ page }) => {
   await page.getByTestId("fault-dur").fill("12");
   await page.getByTestId("fault-add").click();
   await page.getByTestId("fault-class").selectOption("STUCK");
-  await page.getByTestId("fault-origin").selectOption("B5");
+  await page.getByTestId("fault-origin").selectOption("B2");
   await page.getByTestId("fault-t0").fill("200");
   await page.getByTestId("fault-dur").fill("10");
   await page.getByTestId("fault-add").click();
@@ -174,12 +174,12 @@ test("full control tour (evidence)", async ({ page }) => {
   await page.getByTestId("play-pause").click();
   await page.getByTestId("speed-select").selectOption("1");
   await page.getByTestId("fault-class").selectOption("drift");
-  await page.getByTestId("fault-origin").selectOption("B5");
+  await page.getByTestId("fault-origin").selectOption("B2");
   await page.getByTestId("fault-t0").fill("150");
   await page.getByTestId("fault-dur").fill("12");
   await page.getByTestId("fault-add").click();
   await page.getByTestId("new-episode").click();
-  await expect(page.getByTestId("episode-faults")).toContainText("B5", { timeout: 60_000 });
+  await expect(page.getByTestId("episode-faults")).toContainText("B2", { timeout: 60_000 });
   await page.getByTestId("fault-class").selectOption("quality");
   await page.getByTestId("fault-origin").selectOption("B9");
   await page.getByTestId("fault-t0").fill("200");
@@ -188,7 +188,7 @@ test("full control tour (evidence)", async ({ page }) => {
   await page.getByTestId("new-episode").click();
   await expect(page.getByTestId("noop-warning")).toContainText("noop", { timeout: 60_000 });
   await page.getByTestId("fault-class").selectOption("bias");
-  await page.getByTestId("fault-origin").selectOption("C3");
+  await page.getByTestId("fault-origin").selectOption("C2");
   await page.getByTestId("fault-t0").fill("119");
   await page.getByTestId("fault-dur").fill("12");
   await page.getByTestId("fault-add").click();
@@ -200,7 +200,7 @@ test("full control tour (evidence)", async ({ page }) => {
 test("t0=119 shows inline 422 twin text, no crash", async ({ page }) => {
   const firstId = await startEpisode(page, "777");
   await page.getByTestId("fault-class").selectOption("drift");
-  await page.getByTestId("fault-origin").selectOption("B5");
+  await page.getByTestId("fault-origin").selectOption("B2");
   await page.getByTestId("fault-t0").fill("119");
   await page.getByTestId("fault-dur").fill("12");
   await page.getByTestId("fault-add").click();

@@ -28,6 +28,7 @@ export function buildBurst(n: number, seed = 777): Tick[] {
     });
     const states = MACHINE_IDS.map((_, i) => (k % 97 === (i * 7) % 97 ? "DOWN" : "RUN"));
     const throughput = MACHINE_IDS.map((_, i) => ((k + i) % 11 === 0 ? 0 : 1));
+    const currents = MACHINE_IDS.map((_, i) => 6 + ((k + i * 3) % 5) + rand() * 0.4);
     const buffers = BUFFER_IDS.map((id, i) =>
       id === "SBUF" ? 8 + ((k * 3 + i) % 20) : (k * 2 + i * 5) % 25,
     );
@@ -48,6 +49,7 @@ export function buildBurst(n: number, seed = 777): Tick[] {
       events_at_k: [],
       faults: [],
       quality,
+      currents,
     });
   }
   return out;

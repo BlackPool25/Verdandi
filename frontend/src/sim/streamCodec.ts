@@ -14,6 +14,7 @@ export interface LiveTick {
   readonly step: number;
   readonly states: readonly string[];
   readonly throughput: readonly number[];
+  readonly currents: readonly number[];
   readonly raw?: string;
 }
 
@@ -38,10 +39,14 @@ export function parseLiveTick(data: unknown): LiveTick | null {
   const step = data["step"];
   const states = data["states"];
   const throughput = data["throughput"];
+  const currents = data["currents"];
   if (typeof step !== "number" || !Number.isInteger(step) || step < 0 || step >= T_TOTAL) return null;
   if (!Array.isArray(states) || states.length !== STREAM_MACHINE_ORDER.length) return null;
   if (!Array.isArray(throughput) || throughput.length !== STREAM_MACHINE_ORDER.length) return null;
-  return { step, states: states.map(String), throughput: throughput.map(Number), raw: "" };
+  if (!Array.isArray(currents) || currents.length !== STREAM_MACHINE_ORDER.length) return null;
+  const amps = currents.map(Number);
+  if (amps.some((v) => !Number.isFinite(v) || v < 0)) return null;
+  return { step, states: states.map(String), throughput: throughput.map(Number), currents: amps, raw: "" };
 }
 
 export function toPatch(row: LiveTick, order: readonly string[] = STREAM_MACHINE_ORDER): TickPatch {  const states: Record<string, string> = {};
