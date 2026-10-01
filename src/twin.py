@@ -81,11 +81,11 @@ from src.config import (
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
+    VOLT,
     WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
     WEAR,
     T,
-    VOLT,
     resolve_current,
 )
 
