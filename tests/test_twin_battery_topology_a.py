@@ -39,8 +39,8 @@ _F21_B2 = {
 def test_battery_ids_and_schema_pinned():
     assert BATTERY_ID_FULL == "topology-A-full182"
     assert BATTERY_ID_QUICK == "topology-A-quick16"
-    assert TWIN_SCHEMA == 2
-    assert CODE_VERSION == "twin-2.1.0-topology-A"
+    assert TWIN_SCHEMA == 3
+    assert CODE_VERSION == "twin-2.2.0-topology-A"
 
 
 def test_manifest_182_full_coverage():
@@ -91,8 +91,8 @@ def test_full182_evidence_json_landed():
     """RED until Todo 9 runs the full battery and writes the evidence JSON."""
     payload = json.loads(EVIDENCE_JSON.read_text())
     assert payload["battery_id"] == BATTERY_ID_FULL
-    assert payload["schema_version"] == 2
-    assert payload["code_version"] == "twin-2.1.0-topology-A"
+    assert payload["schema_version"] == 3
+    assert payload["code_version"] == "twin-2.2.0-topology-A"
     assert payload["manifest_rows"] == 182
     assert payload["wall_report"]["wall_total_s"] < 600.0
     assert payload["verdict"] == "PASS"

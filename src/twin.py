@@ -40,6 +40,7 @@ ASM2 30->24, RWK0 31->25.
 
 import argparse
 import concurrent.futures
+import copy
 import hashlib
 import itertools
 import json
@@ -56,11 +57,13 @@ from src.config import (
     AGV_CAP,
     AGV_DRAIN_GRACE,
     AGV_STEPS,
+    ALLOWED_UNFREEZE_BUFFERS,
     BUFFERS,
     CAL_WIN,
     CODE_VERSION,
     ENVELOPE_SIGMA,
     FAULT_RANGES,
+    FUNNEL_VARIANTS,
     INSPECT_DELAY_STEPS,
     MACHINE_INDEX,
     MACHINES,
@@ -70,11 +73,15 @@ from src.config import (
     REWORK_MAX_PASSES,
     SBUF_CAP,
     SBUF_DIVERT_CLASSES,
+    SEEDS_20,
     STANDBY_EXCLUDED,
     STATE_OFFSETS,
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
+    WALL_REPORT_SCHEMA,
+    WARMUP_STEPS,
+    WEAR,
     T,
 )
 
@@ -97,6 +104,7 @@ _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 # (777-clean 652fba4f…, 777 F-21 523b0b9e…). replay_digest scrubs these before
 # hashing; old records without the key hash exactly as before.
 _DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split"})
+_DIGEST_SCRUB_RECORD_KEYS = frozenset({"strat"})
 
 # Coverage matrix axes (TC-006): 5 partition groups x 7 channels x 7
 # classes. The class axis reuses _FAULT_CLASSES (runtime-equal to the
@@ -243,10 +251,28 @@ def _line_edges():
     }
 
 
+def _tuple_to_fault_dict(tup: tuple) -> dict:
+    if len(tup) < 4:
+        raise ValueError(
+            f"fault tuple must have at least 4 elements (class, origin, t0, dur), got {tup!r}"
+        )
+    d = {
+        "class": tup[0],
+        "origin": tup[1],
+        "t0": tup[2],
+        "dur": tup[3],
+    }
+    if len(tup) > 4:
+        d["mag_sigma"] = tup[4]
+    if len(tup) > 5:
+        d["extra"] = tup[5]
+    return d
+
+
 def _validate(seed, fault):
     """Validate seed + fault(s); return a list of normalized fault dicts.
 
-    fault may be None, one dict, or a list of dicts (multi-fault
+    fault may be None, one dict, a tuple, or a list of dicts/tuples (multi-fault
     episodes). Bad seed / unknown origin or class / out-of-range window
     -> ValueError. Same-machine windows closer than 5 steps -> ValueError;
     single-fault episodes are exempt from the gap check (vacuous) — see
@@ -256,7 +282,20 @@ def _validate(seed, fault):
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
     if fault is None:
         return []
-    flist = [fault] if isinstance(fault, dict) else list(fault)
+    if isinstance(fault, tuple) and fault and isinstance(fault[0], str) or isinstance(fault, dict):
+        raw_list = [fault]
+    elif isinstance(fault, (list, tuple)):
+        raw_list = list(fault)
+    else:
+        raise ValueError("fault must be a dict, a list of dicts, or None")
+
+    flist = []
+    for f in raw_list:
+        if isinstance(f, tuple) and f and isinstance(f[0], str):
+            flist.append(_tuple_to_fault_dict(f))
+        else:
+            flist.append(f)
+
     if not all(isinstance(f, dict) for f in flist):
         raise ValueError("fault must be a dict, a list of dicts, or None")
     allowed = set(_FAULT_CLASSES) | set(STUCK_IS_BREAKDOWN)
@@ -922,13 +961,32 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     )
 
 
-def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
+def _agv_dispatcher(
+    env,
+    agv,
+    rng_agv,
+    stores,
+    kit,
+    shared,
+    *,
+    agv_priority: str = "default",
+    seed: int = 0,
+):
     """Drain SBUF (first) then tail buffers to kit intake via AGV xfers.
 
     The AGV queue is bounded (2 in service + 2 queued): beyond that the
     dispatcher holds off spawning, so tail buffers fill and BLOCKED
     backpressure (plus SBUF divert) propagates instead of hiding WIP in an
     unbounded resource queue.
+
+    Priority variants (MINIPRO-25 Todo 6):
+      - 'default': Fixed FIFO order (_TAILS: A9, B9, C7).
+      - 'starvation': Dynamic priority to tails feeding starving ASM0 kit queues
+        (min len(kit[line])), tie-broken by tail store occupancy.
+      - 'seeded': Deterministic rotating priority per step derived from (seed + now),
+        preserving RNG stream budget with zero extra draws.
+      - 'rework': Prioritizes rework intake into kit C when rework is pending,
+        then starvation-guided.
     """
     sbuf = stores["SBUF"]
     # PKG tails are sinks with no tail buffers (nothing to AGV-drain);
@@ -963,7 +1021,31 @@ def _agv_dispatcher(env, agv, rng_agv, stores, kit, shared):
             req = sbuf.get()
             yield req
             _spawn(req.value, "SBUF")
-        for store, name in tails:
+
+        if agv_priority == "default":
+            ordered_tails = tails
+        elif agv_priority == "starvation":
+            def _tail_key(item):
+                store, name = item
+                line = _TAIL_LINE[name]
+                return (len(kit[line]), -len(store.items))
+            ordered_tails = sorted(tails, key=_tail_key)
+        elif agv_priority == "seeded":
+            rot = (seed + int(env.now)) % len(tails)
+            ordered_tails = tails[rot:] + tails[:rot]
+        elif agv_priority == "rework":
+            rwk = stores.get("RWK_RET")
+            rework_pending = len(rwk.items) if rwk is not None else 0
+            def _rework_key(item, pending=rework_pending):
+                store, name = item
+                line = _TAIL_LINE[name]
+                bonus = -10 if (line == "C" and pending > 0) else 0
+                return (len(kit[line]) + bonus, -len(store.items))
+            ordered_tails = sorted(tails, key=_rework_key)
+        else:
+            ordered_tails = tails
+
+        for store, name in ordered_tails:
             if len(store.items) > 0 and _gate_open() and _spawn_ok():
                 req = store.get()
                 yield req
@@ -1340,15 +1422,145 @@ def _monitor(env, stores, order, rows):
         yield env.timeout(1)
 
 
+_FAULT_MODE_OBSERVATION = "observation-only"
+_FAULT_MODE_PHYSICAL = "physical-propagation"
+_OBSERVATION_CLASSES = frozenset({"drift", "bias", "loss", _PULSE})
+_PHYSICAL_CLASSES = frozenset(
+    {"delay", "breakdown", "quality", "wear_drift", "wear-drift", "wear"}
+)
+
+
+def classify_fault_mode(fault_class: str) -> str:
+    """Return fault mode: 'observation-only' vs 'physical-propagation' (SPEC_UP §4)."""
+    cls = STUCK_IS_BREAKDOWN.get(fault_class, fault_class)
+    if cls in _OBSERVATION_CLASSES:
+        return _FAULT_MODE_OBSERVATION
+    if cls in _PHYSICAL_CLASSES:
+        return _FAULT_MODE_PHYSICAL
+    return _FAULT_MODE_OBSERVATION if "sensor" in cls else _FAULT_MODE_PHYSICAL
+
+
+# Downstream and upstream topology adjacency for propagation derivation (depth <= 3)
+_DOWNSTREAM_MACHINES = {
+    "A0": ["A1"], "A1": ["A2"], "A2": ["A7"], "A7": ["A8"], "A8": ["A9"],
+    "A9": ["ASM0"],
+    "B0": ["B1"], "B1": ["B2"], "B2": ["B7P", "B7S"],
+    "B7P": ["B8"], "B7S": ["B8"], "B8": ["B9"], "B9": ["ASM0"],
+    "C0": ["C1"], "C1": ["C2"], "C2": ["C6"], "C6": ["C7"],
+    "C7": ["PKG0", "ASM0"],
+    "PKG0": ["PKG1", "PKG2"],
+    "PKG1": [], "PKG2": [],
+    "ASM0": ["ASM1"], "ASM1": ["INSP0"], "INSP0": ["ASM2"],
+    "ASM2": ["RWK0"], "RWK0": ["C0"],
+}
+_UPSTREAM_MACHINES = {
+    "A0": [], "A1": ["A0"], "A2": ["A1"], "A7": ["A2"], "A8": ["A7"], "A9": ["A8"],
+    "B0": [], "B1": ["B0"], "B2": ["B1"], "B7P": ["B2"], "B7S": ["B2"],
+    "B8": ["B7P", "B7S"], "B9": ["B8"],
+    "C0": ["RWK0"], "C1": ["C0"], "C2": ["C1"], "C6": ["C2"], "C7": ["C6"],
+    "PKG0": ["C7"], "PKG1": ["PKG0"], "PKG2": ["PKG0"],
+    "ASM0": ["A9", "B9", "C7"], "ASM1": ["ASM0"], "INSP0": ["ASM1"],
+    "ASM2": ["INSP0"], "RWK0": ["ASM2"],
+}
+
+
+def compute_hop(
+    root_id: str | None, target_machine: str | None, max_depth: int = 3
+) -> int | None:
+    """Compute shortest propagation hop distance between root_id and target_machine (depth <= max_depth).
+
+    Returns 0 if target_machine == root_id, 1..max_depth if within max_depth hops along
+    downstream (starvation/routing) or upstream (blockage) paths, or None if beyond max_depth or disconnected.
+    """
+    if not root_id or not target_machine:
+        return None
+    if root_id == target_machine:
+        return 0
+
+    visited = {root_id: 0}
+    queue = [(root_id, 0)]
+    while queue:
+        curr, d = queue.pop(0)
+        if d >= max_depth:
+            continue
+        neighbors = _DOWNSTREAM_MACHINES.get(curr, []) + _UPSTREAM_MACHINES.get(curr, [])
+        for n in neighbors:
+            if n not in visited:
+                visited[n] = d + 1
+                if n == target_machine:
+                    return d + 1
+                queue.append((n, d + 1))
+    return visited.get(target_machine, None)
+
+
+def derive_roots_and_hops(
+    specs: list[dict], events: list[dict] | None = None
+) -> tuple[str | None, int | None, list[str]]:
+    """Derive primary root_id, hop, and root_ids list from specs and propagation events.
+
+    For single-fault: root_id is origin, hop is 0, root_ids = [root_id].
+    For multi-fault: root_id is primary origin, hop is 0, root_ids is list of distinct origins.
+    For clean runs: root_id is None, hop is None, root_ids = [].
+    """
+    if not specs:
+        return None, None, []
+    root_ids = list(dict.fromkeys(s["origin"] for s in specs if "origin" in s))
+    if not root_ids:
+        return None, None, []
+    root_id = root_ids[0]
+    hop = 0
+    return root_id, hop, root_ids
+
+
+def compute_wear(states: list[list[str]]) -> list[float]:
+    """Compute minimal C3 wear-lite scalar per machine over episode states.
+
+    Equation: w_m(t+1) = w_m(t) + ALPHA * L_m(t) * (1 + BETA * 1[w_m(t) > KNEE])
+    where ALPHA = 1/240, KNEE = 0.8, BETA = 4.0, L_m(t) = 1.0 if state == 'RUN' else 0.0.
+    Stream budget: deterministic given states, draws ZERO new streams.
+    """
+    alpha = WEAR["ALPHA"]
+    knee = WEAR["KNEE"]
+    beta = WEAR["BETA"]
+    post_mult = 1.0 + beta
+    wear = [0.0] * N_MACHINES
+    for m in range(N_MACHINES):
+        w = 0.0
+        row = states[m]
+        for st in row:
+            if st == "RUN":
+                w += alpha * (post_mult if w > knee else 1.0)
+        wear[m] = float(w)
+    return wear
+
+
+def compute_kits_completed(flow_stats: dict) -> int:
+    """Kits completed = sunk minus scrapped; excludes kit_A/B/C leftovers and xfer_open."""
+    return int(flow_stats["sunk"] - flow_stats.get("scrapped", 0))
+
+
+def _resolve_variant(variant: str | dict | None) -> dict | None:
+    if variant is None:
+        return None
+    if isinstance(variant, str):
+        if variant not in FUNNEL_VARIANTS:
+            raise ValueError(f"Unknown variant ID: {variant}")
+        return copy.deepcopy(FUNNEL_VARIANTS[variant])
+    if isinstance(variant, dict):
+        return copy.deepcopy(variant)
+    raise TypeError(f"Variant must be str, dict, or None, got {type(variant)}")
+
+
 def run_episode(
     seed: int,
-    fault: dict | list | None = None,
+    fault: dict | list | tuple | None = None,
     *,
     enable_natural_breakdown: bool = True,
+    variant: str | dict | None = None,
 ) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
-    fault is None, one fault dict, or a list of fault dicts (multi-fault
+    fault is None, one fault dict, a tuple, or a list of fault dicts (multi-fault
     episodes: same-machine windows need a ≥5-step gap). Returns the full
     episode record (seed, T, cal_win, obs, states, buffers, throughput,
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
@@ -1356,11 +1568,31 @@ def run_episode(
     fault_list = _validate(seed, fault)
     noise, place, drop, rng_agv, fail = _spawn_streams(seed)
     specs = _materialize(place, fault_list)
+
+    var_dict = _resolve_variant(variant)
+    if var_dict is not None:
+        overrides = var_dict.get("buffer_caps", {})
+        unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
+        if unlisted:
+            raise ValueError(
+                f"Unlisted buffer unfreeze rejected by gate: {sorted(unlisted)}"
+            )
+        effective_caps = dict(BUFFERS)
+        effective_caps.update(overrides)
+        c7_cap = overrides.get("_C7TAIL", MACHINES["C7"]["buffer_cap"])
+        agv_prio = var_dict.get("agv_priority", "default")
+        var_id = var_dict.get("variant_id", "custom")
+    else:
+        effective_caps = BUFFERS
+        c7_cap = MACHINES["C7"]["buffer_cap"]
+        agv_prio = "default"
+        var_id = "baseline"
+
     env = simpy.Environment()
     agv = simpy.Resource(env, capacity=AGV_CAP)
-    stores = {n: simpy.Store(env, capacity=c) for n, c in BUFFERS.items()}
+    stores = {n: simpy.Store(env, capacity=c) for n, c in effective_caps.items() if n != "_C7TAIL"}
     stores["_C7TAIL"] = simpy.Store(
-        env, capacity=MACHINES["C7"]["buffer_cap"]
+        env, capacity=c7_cap
     )  # AGV drains this; dedicated cap-15 tail store (==15), never the C67 gap
     assert len(MACHINES) == N_MACHINES and len(BUFFERS) == N_BUFFERS
     order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
@@ -1449,7 +1681,18 @@ def run_episode(
     env.process(_asm_mid_process(env, "ASM2", stores["INSP02"], None, shared))
     env.process(_rwk0_process(env, shared))
     env.process(_fault_clock(env, shared))
-    env.process(_agv_dispatcher(env, agv, rng_agv, stores, kit, shared))
+    env.process(
+        _agv_dispatcher(
+            env,
+            agv,
+            rng_agv,
+            stores,
+            kit,
+            shared,
+            agv_priority=agv_prio,
+            seed=seed,
+        )
+    )
     buf_order = list(BUFFERS)
     buf_rows = [[0] * T for _ in range(N_BUFFERS)]
     env.process(_monitor(env, stores, buf_order, buf_rows))
@@ -1533,6 +1776,55 @@ def run_episode(
         "rwk_idle": _rwk_idle,
         "raw_starved": _raw_st,
     }
+    root_id, hop, root_ids = derive_roots_and_hops(specs, shared["events"])
+    if specs:
+        family = specs[0]["class"]
+        mode = (
+            _FAULT_MODE_PHYSICAL
+            if any(classify_fault_mode(s["class"]) == _FAULT_MODE_PHYSICAL for s in specs)
+            else _FAULT_MODE_OBSERVATION
+        )
+    else:
+        family = None
+        mode = None
+
+    # Per-machine state histograms (sums to 1.0 +- 0.01 over 26 machines)
+    state_histograms = {}
+    for m_name, m_idx in MACHINE_INDEX.items():
+        st_row = _st[m_idx]
+        state_histograms[m_name] = {
+            st: sum(1 for s in st_row if s == st) / T
+            for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+        }
+
+    # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
+    active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
+    total_active_steps = len(active_machines) * T
+    active_indices = [MACHINE_INDEX[m] for m in active_machines]
+    plant_shares = {
+        st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
+        for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+    }
+    plant_state_rollup = {
+        "shares": plant_shares,
+        "machines": active_machines,
+        **plant_shares,
+    }
+
+    # Warm-up tracking: steps 0..WARMUP_STEPS-1 (transient-inclusive pool)
+    warmup_pool = np.asarray(shared["obs"], dtype=float)[:, :WARMUP_STEPS].T.tolist()
+
+    # Funnel census counts
+    funnel_census = {
+        "sunk": shared["flow"]["sunk"],
+        "scrapped": shared["flow"]["scrapped"],
+        "packaged": shared["flow"]["packaged"],
+        "kits_completed": compute_kits_completed(shared["flow"]),
+        "kit_A": len(kit["A"]),
+        "kit_B": len(kit["B"]),
+        "kit_C": len(kit["C"]),
+    }
+
     return {
         "seed": seed,
         "T": T,
@@ -1555,6 +1847,36 @@ def run_episode(
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
         "faults": specs,
+        "strat": {
+            "episode_id": seed,
+            "wear_endpoint": float(max(compute_wear(shared["states"]))),
+            "maint_flag": False,
+            "maint_flag_unvalidated": True,
+            "family": family,
+            "mode": mode,
+            "root_id": root_id,
+            "hop": hop,
+            "root_ids": root_ids,
+            "sensor_vs_process": "unknown",
+            "sensor_vs_process_unvalidated": True,
+            "warmup_flag": True,
+            "warmup_steps": WARMUP_STEPS,
+            "warmup_window": (0, WARMUP_STEPS - 1),
+            "warmup_mask": [t < WARMUP_STEPS for t in range(T)],
+            "warmup_pool": warmup_pool,
+            "transient_pool": warmup_pool,
+            "is_warmup": True,
+            "state_histogram": state_histograms,
+            "state_histograms": state_histograms,
+            "machine_histograms": state_histograms,
+            "per_machine_histogram": state_histograms,
+            "plant_state_rollup": plant_state_rollup,
+            "plant_rollup": plant_state_rollup,
+            "funnel_census": funnel_census,
+            "variant_id": var_id,
+            "buffer_caps": effective_caps,
+            "agv_priority": agv_prio,
+        },
     }
 
 
@@ -1575,12 +1897,13 @@ def duty_cycle(record: dict) -> dict:
     down_of["INSP02"] = "ASM2"
     buf_order = list(BUFFERS)
     violations = []
+    effective_caps = record.get("strat", {}).get("buffer_caps", BUFFERS)
     for b, ds in down_of.items():
         if b not in BUFFERS:
             continue
         row = record["buffers"][buf_order.index(b)]
         srow = states[MACHINE_INDEX[ds]]
-        cap = BUFFERS[b]
+        cap = effective_caps.get(b, BUFFERS[b])
         t = 0
         while t < T_:
             if row[t] >= cap:
@@ -1604,10 +1927,133 @@ def duty_cycle(record: dict) -> dict:
     }
 
 
+def check_variant_gate(
+    variant: str | dict | None = None,
+    seeds: list[int] | None = None,
+    *,
+    strict: bool = False,
+    jobs: int = 1,
+) -> dict:
+    """Gate a configuration variant by buffer roster and duty_cycle pileup_violations.
+
+    Rules:
+    1. Unlisted buffer rule: Buffer cap overrides in the variant MUST be drawn
+       strictly from config.ALLOWED_UNFREEZE_BUFFERS. Any unlisted buffer change
+       fails the gate.
+    2. Pileup violation rule: Run episode(s) and compute duty_cycle(record).
+       If len(pileup_violations) > 0 on ANY episode, the variant fails the gate.
+    3. If strict=True, raises ValueError upon failure. Otherwise returns report
+       dict with 'passed', 'rejected', 'reason', 'variant_id', etc.
+    """
+    if seeds is None:
+        seeds = [777]
+
+    try:
+        var_dict = _resolve_variant(variant)
+    except Exception as exc:
+        if strict:
+            raise
+        return {
+            "passed": False,
+            "rejected": True,
+            "reason": str(exc),
+            "variant_id": str(variant),
+            "pileup_violations": [],
+            "seeds": list(seeds),
+            "jobs": jobs,
+        }
+
+    var_id = var_dict.get("variant_id", "custom") if var_dict else "baseline"
+    overrides = var_dict.get("buffer_caps", {}) if var_dict else {}
+
+    # Check rule 1: Unlisted buffers
+    unlisted = sorted(set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS)
+    if unlisted:
+        msg = f"Variant gate rejected: unlisted buffer modification {unlisted} not permitted (must be in ALLOWED_UNFREEZE_BUFFERS)"
+        if strict:
+            raise ValueError(msg)
+        return {
+            "passed": False,
+            "rejected": True,
+            "reason": msg,
+            "variant_id": var_id,
+            "unlisted_buffers": unlisted,
+            "pileup_violations": [],
+            "seeds": list(seeds),
+            "jobs": jobs,
+        }
+
+    # Check rule 2: Pileup violations across seeds
+    all_violations = []
+    sunks = []
+    for s in seeds:
+        rec = run_episode(s, None, variant=var_dict)
+        dc = duty_cycle(rec)
+        v = dc.get("pileup_violations", [])
+        kits_c = compute_kits_completed(rec["flow_stats"])
+        sunks.append(kits_c)
+        if v:
+            all_violations.extend(v)
+            msg = f"Variant gate rejected: pileup violations detected on seed {s}: {v}"
+            if strict:
+                raise ValueError(msg)
+            return {
+                "passed": False,
+                "rejected": True,
+                "reason": msg,
+                "variant_id": var_id,
+                "pileup_violations": all_violations,
+                "failed_seed": s,
+                "seeds": list(seeds),
+                "jobs": jobs,
+            }
+
+    median_sunk = float(np.median(sunks))
+    p10 = float(np.percentile(sunks, 10))
+    p90 = float(np.percentile(sunks, 90))
+
+    return {
+        "passed": True,
+        "rejected": False,
+        "variant_id": var_id,
+        "pileup_violations": [],
+        "median_sunk": median_sunk,
+        "p10": p10,
+        "p90": p90,
+        "seeds": list(seeds),
+        "jobs": jobs,
+    }
+
+
+def check_funnel_gate(
+    seeds: list[int] | None = None,
+    variant: str | dict | None = "baseline",
+    jobs: int = 1,
+) -> dict:
+    """Validate rolling median sunk >= 30 and zero pileup violations over exact seed batch."""
+    if seeds is None:
+        seeds = list(SEEDS_20)
+    report = check_variant_gate(variant=variant, seeds=seeds, jobs=jobs)
+    median_sunk = float(report.get("median_sunk", 0.0))
+    passed = bool(report.get("passed", False) and (median_sunk >= 30))
+    if report.get("passed", False) and median_sunk < 30:
+        report["passed"] = False
+        report["rejected"] = True
+        report["reason"] = f"Funnel gate failed: median_sunk={median_sunk} < 30"
+    report["passed"] = passed
+    report["gate_passed"] = passed
+    report["jobs"] = jobs
+    report["env"] = {
+        "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+        "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+    }
+    return report
+
+
 def run_calibration(seed: int):
-    """Return (CAL_WIN, 32) clean window: breakdowns off, first CAL_WIN steps."""
+    """Return clean window excluding warm-up: steps WARMUP_STEPS to CAL_WIN (105 steps)."""
     rec = run_episode(seed, None, enable_natural_breakdown=False)
-    return np.asarray(rec["obs"], dtype=float)[:, :CAL_WIN].T
+    return np.asarray(rec["obs"], dtype=float)[:, WARMUP_STEPS:CAL_WIN].T
 
 
 def _try_place(rng, taken, durs, tries=50):
@@ -1789,7 +2235,10 @@ def replay_digest(record):
             f"schema v1 non-comparable, rebaseline: got schema_version="
             f"{record.get('schema_version')!r}, want {TWIN_SCHEMA}"
         )
-    scrubbed = {k: v for k, v in record.items() if k not in _WALLCLOCK_KEYS}
+    scrubbed = {
+        k: v for k, v in record.items()
+        if k not in _WALLCLOCK_KEYS and k not in _DIGEST_SCRUB_RECORD_KEYS
+    }
     _fs = scrubbed.get("flow_stats")
     if isinstance(_fs, dict) and any(k in _fs for k in _DIGEST_SCRUB_FLOW_KEYS):
         _fs = {k: v for k, v in _fs.items() if k not in _DIGEST_SCRUB_FLOW_KEYS}
@@ -2077,6 +2526,11 @@ def _battery_parser():
         default=None,
         help="legacy T5 entry: time clean+F-21 episodes to PATH and exit",
     )
+    parser.add_argument(
+        "--check-funnel-gate",
+        action="store_true",
+        help="evaluate hermetic 20-seed funnel gate and print report",
+    )
     return parser
 
 
@@ -2091,6 +2545,10 @@ def main(argv=None):
     if args.calibrate is not None:
         _calibrate(args.calibrate)
         return 0
+    if getattr(args, "check_funnel_gate", False):
+        res = check_funnel_gate(jobs=args.jobs)
+        print(json.dumps(res, indent=2))
+        return 0 if res["passed"] else 1
     if args.jobs is None or args.jobs < 1:
         parser.error("--jobs must be an integer >= 1")
     if args.seed is None or args.seed < 0:
@@ -2173,9 +2631,25 @@ def main(argv=None):
 
         evdir = pathlib.Path(args.evidence_dir)
         evdir.mkdir(parents=True, exist_ok=True)
+        funnel_res = check_funnel_gate(jobs=args.jobs)
+        funnel_obj = {
+            "median_sunk": funnel_res["median_sunk"],
+            "p10": funnel_res["p10"],
+            "p90": funnel_res["p90"],
+            "gate_passed": funnel_res["passed"],
+            "passed": funnel_res["passed"],
+            "variant_id": funnel_res["variant_id"],
+            "seeds": list(funnel_res["seeds"]),
+            "jobs": args.jobs,
+            "env": funnel_res.get("env", {
+                "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+                "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+            }),
+        }
         _write_json(
             evdir / "wall_report.json",
             {
+                "schema_version": WALL_REPORT_SCHEMA,
                 "per_episode_s": walls,
                 "calibration_mean_s": cal_mean,
                 "calibration_path": args.calibration,
@@ -2200,6 +2674,7 @@ def main(argv=None):
                 "joined_digest": joined,
                 "anomalies_over_120s": anomalies,
                 "verdict": verdict,
+                "funnel": funnel_obj,
             },
         )
         _write_json(
@@ -2253,18 +2728,36 @@ def _write_partial(args, manifest, rows, master, cal_mean, budget_cap):
     evdir = pathlib.Path(args.evidence_dir)
     evdir.mkdir(parents=True, exist_ok=True)
     walls = [r["wall_s"] for r in rows]
+    jobs_val = getattr(args, "jobs", 1)
+    funnel_res = check_funnel_gate(jobs=jobs_val)
+    funnel_obj = {
+        "median_sunk": funnel_res["median_sunk"],
+        "p10": funnel_res["p10"],
+        "p90": funnel_res["p90"],
+        "gate_passed": funnel_res["passed"],
+        "passed": funnel_res["passed"],
+        "variant_id": funnel_res["variant_id"],
+        "seeds": list(funnel_res["seeds"]),
+        "jobs": jobs_val,
+        "env": funnel_res.get("env", {
+            "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+            "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+        }),
+    }
     _write_json(
         evdir / "wall_report.json",
         {
+            "schema_version": WALL_REPORT_SCHEMA,
             "partial": True,
             "per_episode_s": walls,
             "calibration_mean_s": cal_mean,
             "wall_total_s": sum(walls),
-            "jobs": args.jobs,
+            "jobs": jobs_val,
             "n_episodes": len(manifest),
             "n_finished": len(rows),
             "budget_cap_s": budget_cap,
             "verdict": "PARTIAL",
+            "funnel": funnel_obj,
         },
     )
 

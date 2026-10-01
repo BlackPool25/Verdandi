@@ -9,6 +9,8 @@ factorysimpy==0.1.0b3 installs but REJECTED (no trace/fault/RNG API → hand-rol
 ## Config constants (single table — code MUST import these, never hardcode twice)
 | Name | Value | Why | Gate |
 |---|---|---|---|
+| TWIN_SCHEMA | 3 | flag-day schema v3 migration | battery asserts |
+| CODE_VERSION | 'twin-2.2.0-topology-A' | version pin for replay digest | 0-diverge asserts |
 | CAL_WIN | 120 steps | clean calibration | battery asserts |
 | Q_DET | max(q0.99, Q3+1.5·IQR) per machine | K2: fixed thresholds killed | F1 raw |
 | VETO_ASM2 | 2× margin over runner-up, ASM2-only (ex-VETO_M5, identical semantics) | ASM2 known-noisy tail | AC@1 |
@@ -22,7 +24,7 @@ factorysimpy==0.1.0b3 installs but REJECTED (no trace/fault/RNG API → hand-rol
 | SEED | SeedSequence everywhere, zero bare default_rng | 0-diverge 5×5 | K4 |
 
 ## Module map (spike → build; spike/ stays quarantine — rewrite, don't merge)
-32-plant modules: `twin.py` (from battery_rq1_rq2.py: SimPy 32-machine plant Lines A/B/C 10/10/8 + ASM0–2 + RWK0 + AGV/SBUF, seeded faults) · `acquire.py` · `calibrate.py` (CAL_WIN=120) · `detect.py` (quantile/IQR per machine/channel) · `veto.py` (VETO_ASM2 fixed mask) · `walk.py` (depth≤3+top-k+fan-out cap 8) · `pcmci_job.py` (per-partition tau-2 evidence jobs) ·
+32-plant modules: `twin.py` (from battery_rq1_rq2.py: SimPy 32-machine plant Lines A/B/C 10/10/8 + ASM0–2 + RWK0 + AGV/SBUF, seeded faults) · `dataset_export.py` (v3 deterministic Parquet + window_config export, 0 scaler.pkl) · `acquire.py` · `calibrate.py` (CAL_WIN=120) · `detect.py` (quantile/IQR per machine/channel) · `veto.py` (VETO_ASM2 fixed mask) · `walk.py` (depth≤3+top-k+fan-out cap 8) · `pcmci_job.py` (per-partition tau-2 evidence jobs) ·
 `narrate.py` + `verify.py` (from rq3_spike.py: template, triple gate, caps) · `chaincards.py` (fallback) ·
 `replay.py` (partition-scoped subgraph-only, pinned RNG) · `regress.py` (battery gates) · `trail.py` (SPEC export schema) · `ui/` (waterfall patterns).
 
@@ -53,3 +55,20 @@ RSS>5% → KILL · harness-green-on-corrupt → vacuous-reject.
 ## Regression procedure (every milestone ends here)
 `python spike/battery_rq1_rq2.py && python spike/closeout.py` → PASS iff F1≥0.85(M0b target; disclose
 until then) + AC@1≥70% + flip<40% per partition per class + p99≤30s + total<600s + vectors green. Log JSONL as run id.
+
+## Schema v3 & Stratification Keys (M0.2e)
+- `TWIN_SCHEMA = 3`, `CODE_VERSION = 'twin-2.2.0-topology-A'`.
+- 9 Owned Stratification Keys (`rec["strat"]` and Parquet columns):
+  1. `wear_endpoint`: End-of-episode max machine wear scalar via C3 wear-lite equation on active run/degraded steps without adding RNG streams.
+  2. `maint_flag`: Boolean maintenance intervention indicator (unvalidated deferral).
+  3. `family`: Fault family classification (`clean`, `drift`, `delay`, `loss`, `spike`, `breakdown`, `quality`).
+  4. `mode`: Operational degradation mode (`normal`, `observation_only`, `physical_propagation`).
+  5. `root_id`: Primary injection root machine identifier resolved from event graph (depth <= 3).
+  6. `root_ids`: Canonical collection of distinct root origins for multi-fault injections.
+  7. `hop`: Shortest causal graph distance from root to detection (0 at root, -1 if clean).
+  8. `sensor_vs_process`: Honest deferral to `'unknown'` with `sensor_vs_process_unvalidated=True`.
+  9. `state_histogram`: Per-machine operational state time proportions obeying strict denominator rule.
+  - Auxiliary context: `warmup_flag` (masks first 15 steps) and `funnel_census`.
+- Kit Funnel Rebalancing: Downstream assembly rebalanced to >=30 median sunk kits (achieving 36.5 median, p10=28.0, p90=39.0 on 20 seeds) with 0 pile-up violations.
+- Dataset Export: Deterministic Parquet export with sorted column keys, `window_config.json`, `metadata.json`, and strictly zero `scaler.pkl` (TF1 leakage law).
+- Hermetic Funnel Gate & Wall Report v2: `wall_report.json` schema_version=2 carries funnel gate status (`median_sunk >= 30`).

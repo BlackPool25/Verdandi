@@ -32,20 +32,20 @@ Branch: `shreyasjoshi2511/minipro-33-m01b-topology-a-reshape-shortbranchy-22-mac
    Evidence: `.omo/evidence/duty-report-topology-A-todo6.json` (status GREEN)
    + battery JSON `duty` block (same numbers, battery_id tagged).
 5. Seed-777 re-baselined numbers, schema v2 + battery ID, v1 non-comparable:
-   F-21 drift-on-B2 digest `523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4`,
-   joined digest `64af2d24a538d2c7c217b8c244835fe230ec902dccbc8632f0e2b1aa8ddf6cb6`,
-   quick16 digest `5835f0aef69769c00c59829095dd117be98535141c9cb6bfd4f4ad11e7810616`,
-   every number tagged (schema_version=2, battery_id).
+   F-21 drift-on-B2 digest `523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4` (schema v2) / `f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5` (schema v3),
+   joined digest `64af2d24a538d2c7c217b8c244835fe230ec902dccbc8632f0e2b1aa8ddf6cb6` (schema v2) / `d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5` (schema v3),
+   quick16 digest `5835f0aef69769c00c59829095dd117be98535141c9cb6bfd4f4ad11e7810616` (schema v2) / `44c43483d596b6b3e64f55750151964679c6d5d41623a77d97dabc2615f1b26b` (schema v3),
+   every number tagged (schema_version=3, battery_id).
    v1 32-machine baselines `962b9c54d022` (flow) and `d2b4fb23` (demo) are
    V1_NON_COMPARABLE, never asserted equal.
    Evidence: `docs-battery-topology-A-full182.json`, golden
    `services/sim_bridge/golden/replay-777-topology-A.json`
-   (code_version `twin-2.1.0-topology-A`), fixture
+   (code_version `twin-2.2.0-topology-A`), fixture
    `frontend/src/test/fixtures/ticks-A-777.json`.
 6. Twin FROZEN: no twin tuning after the freeze commit. Any further twin change
    (src/config.py, src/twin.py, goldens, fixtures, battery numbers) needs a
    schema bump (TWIN_SCHEMA 2 -> 3 + new CODE_VERSION + full re-baseline).
-   Pin: TWIN_SCHEMA=2, CODE_VERSION=`twin-2.1.0-topology-A`.
+   Pin: TWIN_SCHEMA=3, CODE_VERSION=`twin-2.2.0-topology-A` (MINIPRO-25 stratification & funnel rebalance).
    Evidence: this file + freeze commit SHA in the task-11 evidence file +
    ledger; freeze-check `git diff --name-only <freeze-SHA> -- src/ services/
    frontend/ docs-battery-topology-A-full182.json` must stay empty of product

@@ -48,8 +48,8 @@ _F21_B2 = {
     "mag_sigma": 5.2,
 }
 
-_DIGEST_CLEAN777 = "652fba4f5f5f2e92cda0d1d71ee1be081731d1c638cf48f05dec9eac9cb5458b"
-_DIGEST_F21_777 = "523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4"
+_DIGEST_CLEAN777 = "033b0d89dd8b3f88913220bb37c1ec76e9fcd024982b40b4f2b6f1e8cc650d5a"
+_DIGEST_F21_777 = "f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5"
 
 
 def _raw_starved(rec):

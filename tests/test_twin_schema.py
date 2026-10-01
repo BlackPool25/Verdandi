@@ -54,6 +54,7 @@ def test_record_keys():
         "agv_waits",
         "parts",
         "faults",
+        "strat",
     }
 
 
@@ -159,7 +160,7 @@ def test_cal_win_t0_spread_uniform():
 
 def test_calibration_window_shape():
     clean = twin.run_calibration(777)  # raises first (red)
-    assert clean.shape == (120, 26)
+    assert clean.shape == (105, 26)
 
 
 def test_omitted_mag_materializes_in_fault_range():
