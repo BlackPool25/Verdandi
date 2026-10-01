@@ -355,6 +355,19 @@ def test_rework_quality_scoped_to_origin():
     assert not [p for p in rec["parts"] if p.get("via") == "RWK0"]
 
 
+def test_rework_quality_alias_origins_route_to_asm2_path():
+    shared = {
+        "qwin": [
+            (120, 140, 0.15, "A9"),
+            (120, 140, 0.30, "RWK0"),
+            (120, 140, 0.25, "B9"),
+        ]
+    }
+    assert twin._quality_rate(shared, 130, "ASM2") == pytest.approx(0.30)
+    assert twin._quality_rate(shared, 130, "RWK0") == pytest.approx(0.30)
+    assert twin._quality_rate(shared, 130, "B2") == 0.0
+
+
 def test_rework_asm2_holds_reject_when_rwk_full():
     # ASM2 full-buffer hold (Wave-1 T-A8, depends on T-A7): a REJECT part
     # facing a full RWK_RET holds ASM2 BLOCKED with flag/passes preserved

@@ -464,9 +464,12 @@ def _gw_at(shared, t):
 
 def _quality_rate(shared, t, origin):
     """Max active quality reject rate at step t for this origin (0.0 none)."""
+    routed_origins = (
+        {"ASM2", "RWK0", "A9", "B9"} if origin in {"ASM2", "RWK0"} else {origin}
+    )
     rate = 0.0
     for a, b, r, o in shared["qwin"]:
-        if o == origin and a <= t < b and r > rate:
+        if o in routed_origins and a <= t < b and r > rate:
             rate = r
     return rate
 
@@ -1642,7 +1645,7 @@ def run_episode(
 
     fault is None, one fault dict, a tuple, or a list of fault dicts (multi-fault
     episodes: same-machine windows need a ≥5-step gap). Returns the full
-    episode record (seed, T, cal_win, obs, states, buffers, throughput,
+    episode record (seed, T, cal_win, machines, obs, states, buffers, throughput,
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
     """
     fault_list = _validate(seed, fault)
@@ -2456,6 +2459,10 @@ def validate_manifest(manifest, oracle=None):
     check_wall_tripwire lives with the runner below). Returns the gap list
     ([] == pass); the CLI fails LOUD naming the gap, never ships a gap.
     """
+    try:
+        _validate(0, manifest)
+    except (TypeError, ValueError) as exc:
+        return [f"invalid fault row: {exc}"]
     if oracle is None:
         oracle = list(_ORACLE_REP)
     gaps = validate_coverage(manifest_coverage_rows(manifest), oracle)

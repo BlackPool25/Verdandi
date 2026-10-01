@@ -1,5 +1,6 @@
 """CI-fast battery runner smoke test: calibration + entry point."""
 
+import copy
 import json
 
 import pytest
@@ -117,3 +118,12 @@ def test_quick_hole_in_truncated_region_fails():
     exec_slice = holey[: twin._BATTERY_QUICK_ROWS]
     assert len(exec_slice) == 16
     assert twin.validate_manifest(holey) != []
+
+
+def test_validate_manifest_checks_fault_row_contract_before_run():
+    bad = copy.deepcopy(twin.build_faults())
+    bad[0]["t0"] = twin.CAL_WIN - 1
+    gaps = twin.validate_manifest(bad)
+    assert gaps
+    assert "invalid fault row:" in gaps[0]
+    assert "fault window out of range" in gaps[0]
