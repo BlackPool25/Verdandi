@@ -15,15 +15,16 @@ Bars restated, never softened (§11).
 > commit lands on main. Detector thresholds (§7.1–§7.2) and MINIPRO-34/35
 > sections are untouched by this amendment.
 
-Topology-A lineage (normative pins): TWIN_SCHEMA=2,
-CODE_VERSION='twin-2.1.0-topology-A' (exact literal, never '2.x'),
+Topology-A lineage (normative pins): TWIN_SCHEMA=3,
+CODE_VERSION='twin-2.2.0-topology-A' (exact literal, never '2.x'),
 INSPECT_DELAY_STEPS=3. Battery IDs 'topology-A-quick16' (16-row smoke) +
 'topology-A-full182' (full manifest); F-21-on-B2 seed-777 digest
-`523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4`;
+`f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5`;
 joined battery digest
-`64af2d24a538d2c7c217b8c244835fe230ec902dccbc8632f0e2b1aa8ddf6cb6`.
-v1 32-machine baselines (flow digest `962b9c54d022`, demo digest `d2b4fb23…`)
-are V1_NON_COMPARABLE (schema v1), never asserted equal.
+`d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5`;
+quick16 digest
+`44c43483d596b6b3e64f55750151964679c6d5d41623a77d97dabc2615f1b26b`.
+v1 and v2 baselines are legacy non-comparable schemas, never asserted equal.
 Retime (owner-approved option C, bounded MINIPRO-24): AGV_CAP 3, TAKT5
 single-takt line balance (cycles below), AGV drain grace 8
 (`AGV_DRAIN_GRACE`), duty plant-mean over 24 machines with standby scope
@@ -156,9 +157,9 @@ Every coefficient below is traceable to `src/config.py` (`_MACHINE_ROWS` /
 | ASM2 | test | 45.0 | 2.0 | 5 | 1200 | 10 | — (sink + rework tap) | — |
 | RWK0 | rework | 62.0 | 1.6 | 8 | 900 | 18 | return 10 | 5 |
 
-TWIN_SCHEMA=2, CODE_VERSION='twin-2.1.0-topology-A' (exact literal),
+TWIN_SCHEMA=3, CODE_VERSION='twin-2.2.0-topology-A' (exact literal),
 INSPECT_DELAY_STEPS=3 — all in `src/config.py`; every battery number is
-logged with (schema_version=2, battery_id).
+logged with (schema_version=3, battery_id).
 
 TAKT5 retime note (owner-approved option C, bounded MINIPRO-24): single-takt
 line balance at takt=5 (the form/kit cadence). Feed 4→5, process 6→5,
@@ -238,16 +239,38 @@ real plant historian provides.
 overlap across episodes, never within one episode on the same machine
 (≥5-step gap between windows on the same machine). B2 hosting F-21 (drift
 [150,162)) + F-25 (breakdown [190,202)) satisfies the gap rule.
-4.4. Episode record: `{seed, T: 300, cal_win: 120, schema_version: 2,
-code_version: 'twin-2.1.0-topology-A', machines: Table 3.1,
+4.4. Episode record: `{seed, T: 300, cal_win: 120, schema_version: 3,
+code_version: 'twin-2.2.0-topology-A', machines: Table 3.1,
 obs[26][300], states[26][300], buffers[26][300], agv_waits[], parts[],
-faults[]}`. `faults[]` is free ground truth: `{fault_id, class, origin,
+faults[], strat: {wear_endpoint, maint_flag, family, mode, root_id, hop,
+root_ids, sensor_vs_process, warmup_flag, state_histogram, funnel_census}}`.
+`faults[]` is free ground truth: `{fault_id, class, origin,
 t0, dur, mag_sigma, extra:{d | drop_rate | mttr_mult | reject_rate}}`.
 The replay digest canonical payload INCLUDES schema_version + code_version
 alongside the partition subgraph obs (sorted keys, existing wall-clock
 exclusions kept), so version tampering mismatches the digest by
-construction. The twin bridge runs v2-only with an explicit v1-reject
-error ('schema v1 non-comparable, rebaseline').
+construction. The twin bridge runs v3-only with an explicit legacy-reject
+error ('legacy schema non-comparable, rebaseline').
+
+4.5. Stratification keys & zero-join dataset export (M0.2e contract):
+The twin emits 9 owned stratification keys in `rec["strat"]` enabling downstream
+zero-join stratified training split creation (StratifiedGroupKFold on `episode_id`):
+1. `wear_endpoint`: End-of-episode max machine wear scalar via C3 wear-lite equation.
+2. `maint_flag`: Boolean maintenance intervention indicator (unvalidated deferral).
+3. `family`: Primary fault family (`clean`, `drift`, `delay`, `loss`, `spike`, `breakdown`, `quality`).
+4. `mode`: Operational degradation mode (`normal`, `observation_only`, `physical_propagation`).
+5. `root_id`: Primary injection root machine identifier resolved from event graph (depth <= 3).
+6. `root_ids`: Canonical collection of distinct injection root origins.
+7. `hop`: Shortest causal graph distance from root to detection (0 at root, -1 if clean).
+8. `sensor_vs_process`: Honest deferral to `'unknown'` with `sensor_vs_process_unvalidated=True`.
+9. `state_histogram`: Per-machine operational state time proportions obeying strict denominator rule.
+Auxiliary keys include `warmup_flag` (masks first 15 steps) and `funnel_census`.
+Dataset export (`src/dataset_export.py`) exports deterministic Parquet datasets with sorted
+column keys, `window_config.json`, and ingestion metadata. Export-time fitting or emission of
+`scaler.pkl` is strictly prohibited by TF1 leakage law.
+Downstream kit funnel is rebalanced from starve state to >= 30 median sunk kits (achieving 36.5
+rolling 20-seed median, p10=28.0, p90=39.0) with zero pile-up violations. Hermetic evaluation
+is tracked in `wall_report.json` under schema_version=2.
 
 ## 5. Fault-injection taxonomy (normative, 7 classes × representative machines)
 
@@ -392,14 +415,14 @@ edge, buffer/AGV hops named e.g. `"A9~AGV~ASM0"`, rework `"ASM2~RWK0~ASM0"`,
 fork/join `"B2->B7P"`, `"B7P->B8"`, packaging `"PKG0->PKG1"`).
 One running example: fault `F-21` (drift, B2, t0=150, dur=12, mag=5.2σ).
 
-Re-baselined pin (topology-A schema v2, battery `topology-A-full182`):
+Re-baselined pin (topology-A schema v3, battery `topology-A-full182`):
 seed 777 F-21-on-B2 digest
-`523b0b9e71f47d355cf4e4f4b7f73d29c333747d253d3b016c1edf2957bbd8c4`
-(`code_version` 'twin-2.1.0-topology-A', `schema_version` 2, GT window
+`f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5`
+(`code_version` 'twin-2.2.0-topology-A', `schema_version` 3, GT window
 exact (150,162)). Detector peak/threshold figures in the examples below
 are illustrative of the triple and contract format, not measured twin
 output; the digest, GT window, schema, and code version are measured.
-v1 32-machine digests are V1_NON_COMPARABLE, never asserted equal.
+Legacy v1 and v2 digests are NON_COMPARABLE, never asserted equal.
 
 ### 9.1. Alarm
 
@@ -490,9 +513,9 @@ NARR_DEADLINE ≤8s. `sentence.triple` is `object|null`.
   "partition": "line-B",
   "diverge_bool": false,
   "runs": 5,
-  "schema_version": 2,
-  "code_version": "twin-2.1.0-topology-A",
-  "replay_hash": "sha256:523b0b9e71f47d…"
+  "schema_version": 3,
+  "code_version": "twin-2.2.0-topology-A",
+  "replay_hash": "sha256:f5c976bfe67986…"
 }
 ```
 
@@ -529,10 +552,10 @@ byte-identical obs on the partition subgraph → `diverge_bool: false`
   },
   "replay": {"seed": 777, "fault": "F-21-drift-B2",
              "subgraph": {"nodes": ["B2", "B7P", "B8"], "edges": ["B2->B7P", "B7P->B8"]},
-             "diverge": false, "runs": 5, "replay_hash": "sha256:523b0b9e71f47d…",
-             "schema_version": 2, "code_version": "twin-2.1.0-topology-A"},
-  "evidence": {"battery": {"battery_id": "topology-A-full182", "schema_version": 2,
-                           "joined_digest": "64af2d24a538d2c7c217b8c244835fe230ec902dccbc8632f0e2b1aa8ddf6cb6",
+             "diverge": false, "runs": 5, "replay_hash": "sha256:f5c976bfe67986…",
+             "schema_version": 3, "code_version": "twin-2.2.0-topology-A"},
+  "evidence": {"battery": {"battery_id": "topology-A-full182", "schema_version": 3,
+                           "joined_digest": "d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5",
                            "manifest_rows": 182, "F1": 0.725, "AC@1": 0.8125,
                            "flip_tau2": 0.144, "p99_s": 0.0026},
                "spike_ids": ["battery_rq1_rq2", "closeout"],
@@ -607,10 +630,10 @@ replay), CAPS ($0.005 / 2.5k tok / iter cap per run).
       share ≥80%, STARVED share ≤15% (24-machine mean, standby scope
       {B7S,RWK0} excluded), BLOCKED reported, xfer_open==0 at T via drain
       accounting (grace 8), pile-up bound held.
-- [x] Versioned schema: every battery number carries schema_version=2 +
+- [x] Versioned schema: every battery number carries schema_version=3 +
       battery_id; episode record + replay digest bind schema_version +
-      code_version 'twin-2.1.0-topology-A'; v1 32-machine baselines marked
-      V1_NON_COMPARABLE, never asserted equal.
+      code_version 'twin-2.2.0-topology-A'; legacy v1 and v2 baselines marked
+      NON_COMPARABLE, never asserted equal.
 - [ ] No `0.45^lag` signal copy anywhere; propagation via WIP/buffers/
       states/part flags only (§4.2 audit note addressed).
 - [ ] Data taxonomy §8 fully emitted (channels 1–7 with types/ranges/rates,
