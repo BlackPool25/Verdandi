@@ -25,6 +25,8 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.k1
+
 # M0.2e owned stratification fields (Todo 10 contract lock).
 M0_2E_OWNED_FIELDS = frozenset(
     {

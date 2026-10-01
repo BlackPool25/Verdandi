@@ -18,6 +18,8 @@ import pytest
 
 from src import config, dataset_export
 
+pytestmark = pytest.mark.k1
+
 
 def test_export_single_seed_happy_path(tmp_path):
     out_parquet = tmp_path / "artifacts" / "dataset_v3.parquet"
