@@ -18,7 +18,7 @@ Normative specifications & constraints:
    seeds hash, schema, pyarrow version.
 8. Parquet writer hardening: version="2.6", coerce_timestamps="us", use_dictionary=False.
 9. Guardrails: raw channels only (obs, state, buffer, tput, currents - NO aggregates like
-   mean/RMS/envelope), zero dependency on tigramite, and frozen twin physics preserved.
+   mean/RMS/envelope), zero external causal library dependency, and frozen twin physics preserved.
 10. CLI execution contract: python -m src.evidence --out <dir> supports argparse and exits 0 on --help.
 """
 
