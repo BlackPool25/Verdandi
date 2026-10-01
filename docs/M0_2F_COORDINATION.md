@@ -131,3 +131,24 @@ The following 6 follow-up issues have been filed in Linear under project Verdand
 4. **[MINIPRO-57](https://linear.app/mcp-workspace/issue/MINIPRO-57/twin-real-minipro-19-train-pipeline-integration)**: Twin: real MINIPRO-19 train pipeline integration
 5. **[MINIPRO-58](https://linear.app/mcp-workspace/issue/MINIPRO-58/twin-digest-golden-migration-and-historical-v2-cache-cleanup)**: Twin: digest golden migration and historical v2 cache cleanup
 6. **[MINIPRO-59](https://linear.app/mcp-workspace/issue/MINIPRO-59/twin-m02f-multi-scale-aggregates-integration)**: Twin: M0.2f multi-scale aggregates integration
+
+---
+
+## 7. Schema Version Coordination with MINIPRO-22 (CH8/CH9)
+
+### 7.1 Sequence Context
+Both MINIPRO-22 (PR #7 / PR #8 by Athmabhiram: CH8 motor currents + CH9 energy-per-unit) and MINIPRO-25 (PR #10 by Shreyas: M0.2e stratification keys, funnel rebalancing, and dataset v3 export) independently proposed bumping `TWIN_SCHEMA` from 2 to 3.
+- PR #7 / PR #8 remain in draft status with outstanding merge-blockers (WALL budget gate noise breach and owner electrical assumption sign-offs pending).
+- PR #10 (M0.2e) lands first onto `origin/main`, establishing `TWIN_SCHEMA = 3` and `CODE_VERSION = "twin-2.2.0-topology-A"`.
+- As part of PR #10, the CI channel-schema assertion in `.github/workflows/ci.yml` is updated to require `config.TWIN_SCHEMA == 3` (subsuming PR #9).
+
+### 7.2 Rebase & Schema Resolution Path for MINIPRO-22
+When MINIPRO-22 is ready to merge, it must rebase on top of `main` (which includes PR #10). The team has two coordination options depending on digest stability:
+
+1. **Option A: Advance to `TWIN_SCHEMA = 4` (Recommended)**:
+   - Because CH8 in-step motor currents (`record["currents"]`) and CH9 energy metrics affect observation serialization and replay hash digests, introducing them on top of M0.2e's v3 golden digests constitutes a breaking simulation schema modification.
+   - MINIPRO-22 bumps `TWIN_SCHEMA = 4` and `CODE_VERSION = "twin-2.3.0-topology-A"` (or `twin-2.3.0-ch8ch9`), re-baselines the replay goldens once, and updates the CI schema check to `TWIN_SCHEMA == 4`.
+   - This cleanly preserves M0.2e's v3 parquet dataset and digest history without ambiguous "v3-before-CH8" vs "v3-after-CH8" state.
+
+2. **Option B: Adopt `TWIN_SCHEMA = 3` as Additive In-Place Bump**:
+   - If CH9 is scrubbed from the digest and CH8 currents are partitioned into an auxiliary non-breaking channel that preserves existing `record["obs"]` and `record["strat"]` layout, MINIPRO-22 retains `TWIN_SCHEMA = 3`, updating the code version suffix and re-baselining only the affected replay fixtures.
