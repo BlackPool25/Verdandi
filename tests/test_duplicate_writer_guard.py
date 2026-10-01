@@ -26,50 +26,56 @@ from typing import Any
 import pytest
 
 # M0.2e owned stratification fields (Todo 10 contract lock).
-M0_2E_OWNED_FIELDS = frozenset({
-    "episode_id",
-    "wear_endpoint",
-    "maint_flag",
-    "family",
-    "mode",
-    "root_id",
-    "hop",
-    "root_ids",
-    "sensor_vs_process",
-    "warmup_steps",
-    "state_histograms",
-    "funnel_census",
-})
+M0_2E_OWNED_FIELDS = frozenset(
+    {
+        "episode_id",
+        "wear_endpoint",
+        "maint_flag",
+        "family",
+        "mode",
+        "root_id",
+        "hop",
+        "root_ids",
+        "sensor_vs_process",
+        "warmup_steps",
+        "state_histograms",
+        "funnel_census",
+    }
+)
 
 # Structural aliases/variants recognized under M0.2e ownership.
-M0_2E_ALIAS_FIELDS = frozenset({
-    "state_histogram",
-    "machine_histograms",
-    "per_machine_histogram",
-    "plant_state_rollup",
-    "plant_rollup",
-    "warmup_flag",
-})
+M0_2E_ALIAS_FIELDS = frozenset(
+    {
+        "state_histogram",
+        "machine_histograms",
+        "per_machine_histogram",
+        "plant_state_rollup",
+        "plant_rollup",
+        "warmup_flag",
+    }
+)
 
 M0_2E_ALL_FIELDS = frozenset(M0_2E_OWNED_FIELDS | M0_2E_ALIAS_FIELDS)
 
 # M0.2f owned fields (MINIPRO-29, Gowtham) - M0.2e MUST NOT implement these!
-M0_2F_OWNED_FIELDS = frozenset({
-    "envelope_max",
-    "envelope_min",
-    "envelope_mean",
-    "envelope_std",
-    "rollup_0_5s",
-    "rollup_1_0s",
-    "rollup_2_0s",
-    "window_0_5s",
-    "window_1_0s",
-    "window_2_0s",
-    "agg_0_5s",
-    "agg_1_0s",
-    "agg_2_0s",
-    "multiscale_aggregates",
-})
+M0_2F_OWNED_FIELDS = frozenset(
+    {
+        "envelope_max",
+        "envelope_min",
+        "envelope_mean",
+        "envelope_std",
+        "rollup_0_5s",
+        "rollup_1_0s",
+        "rollup_2_0s",
+        "window_0_5s",
+        "window_1_0s",
+        "window_2_0s",
+        "agg_0_5s",
+        "agg_1_0s",
+        "agg_2_0s",
+        "multiscale_aggregates",
+    }
+)
 
 # Designated canonical writers for M0.2e fields in production code.
 DESIGNATED_OWNERS: dict[str, set[str]] = {
@@ -98,7 +104,9 @@ class FieldWrite:
 class StructuralWriterVisitor(ast.NodeVisitor):
     """AST visitor extracting structural dictionary writes, assignments, and updates."""
 
-    def __init__(self, rel_path: str, checked_fields: set[str] | frozenset[str]) -> None:
+    def __init__(
+        self, rel_path: str, checked_fields: set[str] | frozenset[str]
+    ) -> None:
         self.rel_path = rel_path
         self.checked_fields = checked_fields
         self.scope_stack: list[str] = ["<module>"]
@@ -154,7 +162,9 @@ class StructuralWriterVisitor(ast.NodeVisitor):
         current_scope = self.scope_stack[-1]
         line = getattr(node, "lineno", 0)
         for target in node.targets:
-            if isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant):
+            if isinstance(target, ast.Subscript) and isinstance(
+                target.slice, ast.Constant
+            ):
                 key = target.slice.value
                 if isinstance(key, str) and key in self.checked_fields:
                     self.writes.append(
@@ -172,7 +182,9 @@ class StructuralWriterVisitor(ast.NodeVisitor):
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         current_scope = self.scope_stack[-1]
         line = getattr(node, "lineno", 0)
-        if isinstance(node.target, ast.Subscript) and isinstance(node.target.slice, ast.Constant):
+        if isinstance(node.target, ast.Subscript) and isinstance(
+            node.target.slice, ast.Constant
+        ):
             key = node.target.slice.value
             if isinstance(key, str) and key in self.checked_fields:
                 self.writes.append(
@@ -205,7 +217,10 @@ class StructuralWriterVisitor(ast.NodeVisitor):
                         )
                     )
         # Check rec.update(key=val) or rec.setdefault("key", val)
-        elif isinstance(node.func, ast.Attribute) and node.func.attr in {"update", "setdefault"}:
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in {
+            "update",
+            "setdefault",
+        }:
             for kw in node.keywords:
                 if kw.arg and kw.arg in self.checked_fields:
                     self.writes.append(
@@ -225,16 +240,16 @@ class StructuralWriterVisitor(ast.NodeVisitor):
                     and isinstance(arg0.value, str)
                     and arg0.value in self.checked_fields
                 ):
-                        self.writes.append(
-                            FieldWrite(
-                                field=arg0.value,
-                                file_path=self.rel_path,
-                                lineno=line,
-                                col_offset=getattr(arg0, "col_offset", 0),
-                                scope=current_scope,
-                                kind="call_kwarg",
-                            )
+                    self.writes.append(
+                        FieldWrite(
+                            field=arg0.value,
+                            file_path=self.rel_path,
+                            lineno=line,
+                            col_offset=getattr(arg0, "col_offset", 0),
+                            scope=current_scope,
+                            kind="call_kwarg",
                         )
+                    )
         self.generic_visit(node)
 
 
@@ -248,10 +263,16 @@ def scan_writers(
 
     for py_path in sorted(root_dir.rglob("*.py")):
         # Skip pycache or hidden directories
-        if "__pycache__" in py_path.parts or any(p.startswith(".") for p in py_path.parts):
+        if "__pycache__" in py_path.parts or any(
+            p.startswith(".") for p in py_path.parts
+        ):
             continue
         try:
-            rel_str = str(py_path.relative_to(root_dir.parent if root_dir.name == "src" else root_dir))
+            rel_str = str(
+                py_path.relative_to(
+                    root_dir.parent if root_dir.name == "src" else root_dir
+                )
+            )
         except ValueError:
             rel_str = str(py_path)
         content = py_path.read_text(encoding="utf-8")
@@ -386,11 +407,15 @@ def test_clean_tree_designated_owners_only() -> None:
     # Verify that all 12 canonical M0.2e fields are present and accounted for
     found_fields = set(result["m0_2e_fields_found"])
     missing_canonical = M0_2E_OWNED_FIELDS - found_fields
-    assert not missing_canonical, f"Canonical M0.2e fields missing from writers: {missing_canonical}"
+    assert not missing_canonical, (
+        f"Canonical M0.2e fields missing from writers: {missing_canonical}"
+    )
 
     # Verify that writes were performed ONLY by twin.py (run_episode) and dataset_export.py (export/build_window_config)
     for w in result["writes"]:
-        assert w.file_path in DESIGNATED_OWNERS, f"Unexpected writer file: {w.file_path}"
+        assert w.file_path in DESIGNATED_OWNERS, (
+            f"Unexpected writer file: {w.file_path}"
+        )
         assert w.scope in DESIGNATED_OWNERS[w.file_path], (
             f"Unexpected writer scope in {w.file_path}: {w.scope}"
         )
@@ -460,7 +485,9 @@ def test_negative_control_unauthorized_scope_in_owner(tmp_path: pathlib.Path) ->
     assert "helper_scratchpad" in str(exc_info.value)
 
 
-def test_negative_control_duplicate_writers_in_same_scope(tmp_path: pathlib.Path) -> None:
+def test_negative_control_duplicate_writers_in_same_scope(
+    tmp_path: pathlib.Path,
+) -> None:
     """Negative control: multiple writes to the same owned field in the same function MUST fail."""
     test_src = tmp_path / "src"
     test_src.mkdir()
@@ -574,7 +601,9 @@ def test_structural_ast_vs_naive_grep(tmp_path: pathlib.Path) -> None:
 
     # 1. Structural check passes cleanly with zero violations!
     result = validate_duplicate_and_unauthorized_writers(test_src, allowed_owners={})
-    assert result["total_writes"] == 0, "Comments/docstrings must not count as AST writes"
+    assert result["total_writes"] == 0, (
+        "Comments/docstrings must not count as AST writes"
+    )
 
     # 2. Add an actual AST write -> immediately caught
     doc_file.write_text(

@@ -202,7 +202,9 @@ def export(
         "p90": p90,
         "total_episodes": len(target_seeds),
         "total_sunk": sum(int(r["flow_stats"]["sunk"]) for r in episode_records),
-        "total_scrapped": sum(int(r["flow_stats"]["scrapped"]) for r in episode_records),
+        "total_scrapped": sum(
+            int(r["flow_stats"]["scrapped"]) for r in episode_records
+        ),
         "total_kits_completed": sum(sunk_list),
         "variant_id": variant,
     }
@@ -264,9 +266,7 @@ def export_contract_dataset(
     out_parquet = out_dir_path / out_name
 
     target_seeds = (
-        list(seeds)
-        if seeds is not None
-        else [7, 11, 13, 42, 777, 1234, 999, 2026]
+        list(seeds) if seeds is not None else [7, 11, 13, 42, 777, 1234, 999, 2026]
     )
 
     fault_drift = {
@@ -374,15 +374,28 @@ def load_v2_dataset(source: Any) -> Any:
 
 def main() -> None:
     """CLI entrypoint for dataset export."""
-    parser = argparse.ArgumentParser(description="Export deterministic v3 Parquet dataset.")
+    parser = argparse.ArgumentParser(
+        description="Export deterministic v3 Parquet dataset."
+    )
     parser.add_argument("--seed", type=int, default=None, help="Single seed to export")
-    parser.add_argument("--seeds", type=int, nargs="+", default=None, help="List of seeds")
-    parser.add_argument("--out", type=str, default="artifacts/dataset_v3.parquet", help="Output parquet path")
-    parser.add_argument("--variant", type=str, default="baseline", help="Variant identifier")
+    parser.add_argument(
+        "--seeds", type=int, nargs="+", default=None, help="List of seeds"
+    )
+    parser.add_argument(
+        "--out",
+        type=str,
+        default="artifacts/dataset_v3.parquet",
+        help="Output parquet path",
+    )
+    parser.add_argument(
+        "--variant", type=str, default="baseline", help="Variant identifier"
+    )
     args = parser.parse_args()
 
     res = export(seed=args.seed, seeds=args.seeds, out=args.out, variant=args.variant)
-    print(f"Exported {res['row_count']} rows to {res['out']} (hash: {res['dataset_hash'][:16]}...)")
+    print(
+        f"Exported {res['row_count']} rows to {res['out']} (hash: {res['dataset_hash'][:16]}...)"
+    )
 
 
 if __name__ == "__main__":
