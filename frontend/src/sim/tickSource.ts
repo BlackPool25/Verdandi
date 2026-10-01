@@ -13,6 +13,7 @@ import {
   type StreamHandle,
 } from "./streamCodec";
 import { TickStreamController } from "./streamController";
+import type { EnergyHeader } from "./streamController";
 
 // T10 stream lifecycle: single EventSource, ?from_step=k resume, cursor-only
 // speed, episode switch closes the old stream, byte budget, 300/300 ticks.
@@ -35,6 +36,7 @@ export type {
   OpenStream,
   StreamHandle,
 } from "./streamCodec";
+export type { EnergyHeader } from "./streamController";
 export type { ControllerOptions } from "./streamController";
 
 // Panels consume the same buffered rows as the topology cursor: parse one
@@ -61,6 +63,7 @@ export function toPanelTick(raw: string, c7tailFinal: number | null): PanelTick 
     buffers: tick.buffers,
     sbuf_level: tick.sbuf_level,
     quality: tick.quality,
+    currents: tick.currents,
     machineOrder: STREAM_MACHINE_ORDER,
     bufferOrder: BUFFER_IDS,
     c7tailFinal,
@@ -79,6 +82,7 @@ export interface TickSource {
   readonly complete: boolean;
   readonly reconnecting: boolean;
   readonly episodeId: string | null;
+  readonly energy: EnergyHeader | null;
   readonly speed: number;
   readonly setSpeed: (s: number) => void;
   readonly setPlaying: (p: boolean) => void;
@@ -238,6 +242,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     complete: ctrl.complete(),
     reconnecting: ctrl.reconnecting(),
     episodeId: ctrl.episodeId(),
+    energy: ctrl.energyHeader(),
     speed: ctrl.speed(),
     setSpeed: (s: number) => ctrl.setSpeed(s),
     setPlaying,

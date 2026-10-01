@@ -25,7 +25,7 @@ function parseExtra(text: string): { ok: true; value: Record<string, number> } |
 
 export function FaultForm({ faults, onAdd, onRemove }: FaultFormProps): React.JSX.Element {
   const [faultClass, setFaultClass] = useState<string>("drift");
-  const [origin, setOrigin] = useState<string>("B5");
+  const [origin, setOrigin] = useState<string>("B2");
   const [t0, setT0] = useState<string>("150");
   const [dur, setDur] = useState<string>("12");
   const [extra, setExtra] = useState<string>("{}");

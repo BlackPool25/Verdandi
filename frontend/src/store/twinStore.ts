@@ -38,6 +38,7 @@ export interface TwinStore {
   paintCount(): number;
   badges(): BadgeSnapshot;
   series(id: MachineId | string): Float32Array;
+  currentSeries(id: MachineId | string): Float32Array;
   bufferSeries(id: BufferId | string): Float32Array;
   reset(): void;
 }
@@ -52,8 +53,12 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
   const bOrder = opts.bufferOrder ?? BUFFER_IDS;
 
   const obsRings = new Map<string, Ring>();
+  const curRings = new Map<string, Ring>();
   const bufRings = new Map<string, Ring>();
-  for (const id of mOrder) obsRings.set(id, new Ring(cap));
+  for (const id of mOrder) {
+    obsRings.set(id, new Ring(cap));
+    curRings.set(id, new Ring(cap));
+  }
   for (const id of bOrder) bufRings.set(id, new Ring(cap));
 
   // T12: the React-observed badge snapshot lives in a zustand/vanilla store
@@ -91,6 +96,16 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
         if (ring === undefined) continue;
         ring.push(v);
         dirty.add(id);
+      }
+      const c = Math.min(tick.currents.length, mOrder.length);
+      for (let i = 0; i < c; i += 1) {
+        const id = mOrder[i];
+        const v = tick.currents[i];
+        if (id === undefined || v === undefined) continue;
+        const ring = curRings.get(id);
+        if (ring === undefined) continue;
+        ring.push(v);
+        dirty.add(`cur:${id}`);
       }
       const m = Math.min(tick.buffers.length, bOrder.length);
       for (let i = 0; i < m; i += 1) {
@@ -155,12 +170,20 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
       return obsRings.get(id)?.snapshot() ?? new Float32Array(0);
     },
 
+    currentSeries(id: MachineId | string): Float32Array {
+      return curRings.get(id)?.snapshot() ?? new Float32Array(0);
+    },
+
     bufferSeries(id: BufferId | string): Float32Array {
       return bufRings.get(id)?.snapshot() ?? new Float32Array(0);
     },
 
     reset(): void {
       for (const r of obsRings.values()) {
+        r.head = 0;
+        r.count = 0;
+      }
+      for (const r of curRings.values()) {
         r.head = 0;
         r.count = 0;
       }

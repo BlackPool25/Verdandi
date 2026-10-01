@@ -34,8 +34,8 @@ const STORMS = {
   A: {
     seed: 4242,
     faults: [
-      { id: "S-A1", class: "breakdown", origin: "B5", t0: 150, dur: 12, extra: { mttr_mult: 2 } },
-      { id: "S-A2", class: "delay", origin: "C3", t0: 170, dur: 10, extra: { d: 5 } },
+      { id: "S-A1", class: "breakdown", origin: "B2", t0: 150, dur: 12, extra: { mttr_mult: 2 } },
+      { id: "S-A2", class: "delay", origin: "C2", t0: 170, dur: 10, extra: { d: 5 } },
       { id: "S-A3", class: "drift", origin: "A2", t0: 200, dur: 10, extra: { mag_sigma: 5.5 } },
     ] as WireFault[],
   },
@@ -48,16 +48,16 @@ const STORMS = {
   C: {
     seed: 95,
     faults: [
-      { id: "S-C1", class: "delay", origin: "B4", t0: 140, dur: 15, extra: { d: 6 } },
-      { id: "S-C2", class: "delay", origin: "B5", t0: 150, dur: 15, extra: { d: 6 } },
-      { id: "S-C3", class: "delay", origin: "B6", t0: 160, dur: 15, extra: { d: 6 } },
+      { id: "S-C1", class: "delay", origin: "B1", t0: 140, dur: 15, extra: { d: 6 } },
+      { id: "S-C2", class: "delay", origin: "B2", t0: 150, dur: 15, extra: { d: 6 } },
+      { id: "S-C3", class: "delay", origin: "B7P", t0: 160, dur: 15, extra: { d: 6 } },
     ] as WireFault[],
   },
 } as const;
 
 // Pinned: storm C seed 95 first BLOCKED tick (digest-stable, natural ON).
 const BLOCKED_STEP = 271;
-const BLOCKED_MACHINE = "C4";
+const BLOCKED_MACHINE = "C6";
 
 let bridge: ChildProcess | null = null;
 let web: ChildProcess | null = null;
@@ -152,7 +152,7 @@ test("storm A multi-fault renders with capped feed + working filter", async ({ p
   const errs = pageErrors(page);
   const storm = await createStorm("A");
   await openStorm(page, storm.episode_id);
-  // Storm identity on-page: FAULT_START rows from the injected B5 breakdown
+  // Storm identity on-page: FAULT_START rows from the injected B2 breakdown
   // (the clean auto-seed episode carries none). Digest equality is proven at
   // the API level by createStorm's double POST.
   const badge = page.getByTestId("feed-overflow");
@@ -169,10 +169,10 @@ test("storm A multi-fault renders with capped feed + working filter", async ({ p
   await page.getByTestId("feed-family-filter").selectOption("FAULT");
   const faultRows = page.getByTestId("event-row");
   await expect(faultRows).toHaveCount(6, { timeout: 30_000 });
-  await expect(faultRows.first()).toHaveAttribute("data-machine", "B5");
+  await expect(faultRows.first()).toHaveAttribute("data-machine", "B2");
   // Telemetry chart stays mounted and legible under the storm (Canvas paints
   // via the transient store; unit-level p95 proof lives in render-counter).
-  await expect(page.getByTestId("strip-B5")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("strip-B2")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("feed-family-filter").selectOption("ALL");
   await page.getByTestId("event-feed").scrollIntoViewIfNeeded();
   await page.screenshot({ path: resolve(EVIDENCE, "task-13-storm-A.png") });

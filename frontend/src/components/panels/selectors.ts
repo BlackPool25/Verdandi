@@ -17,6 +17,7 @@ export interface PanelTick {
   readonly buffers: readonly number[];
   readonly sbuf_level: number;
   readonly quality: Readonly<Record<string, unknown>>;
+  readonly currents: readonly number[];
   readonly machineOrder: readonly string[];
   readonly bufferOrder: readonly string[];
   readonly c7tailFinal?: number | null;

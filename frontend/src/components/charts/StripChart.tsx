@@ -11,6 +11,8 @@ export interface StripChartProps {
   readonly height?: number;
   readonly min?: number;
   readonly max?: number;
+  readonly source?: "obs" | "current";
+  readonly testidSuffix?: string;
 }
 
 export function StripChart({
@@ -20,6 +22,8 @@ export function StripChart({
   height = 64,
   min = 0,
   max = 100,
+  source = "obs",
+  testidSuffix = "",
 }: StripChartProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dirtyRef = useRef(false);
@@ -60,7 +64,7 @@ export function StripChart({
         canvas.height = backingH;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const data = store.series(machineId);
+      const data = source === "current" ? store.currentSeries(machineId) : store.series(machineId);
       const pairs = decimateMinMax(data, Math.max(1, Math.floor(width)));
       paintMinMax(ctx, { pairs, min, max, w: width, h: height });
       store.paintDirty();
@@ -69,10 +73,10 @@ export function StripChart({
     return () => {
       cancelAnimationFrame(raf);
     };
-  }, [store, machineId, width, height, min, max]);
+  }, [store, machineId, width, height, min, max, source]);
 
   return (
-    <figure data-testid={`strip-${machineId}`} aria-label={`${machineId} strip chart`}>
+    <figure data-testid={`strip-${machineId}${testidSuffix}`} aria-label={`${machineId} strip chart`}>
       <canvas
         ref={canvasRef}
         width={width}

@@ -8,30 +8,28 @@ export const TICK_KEYS = [
   "events_at_k",
   "faults",
   "quality",
+  "currents",
 ] as const;
 
+// 26-machine topology-A roster in MACHINE_INDEX order (mirrors
+// src/config.py + topology/nodes.ts). The 32-machine v1 roster is retired.
 export const MACHINE_IDS = [
-  ...Array.from({ length: 10 }, (_, i) => `A${i}`),
-  ...Array.from({ length: 10 }, (_, i) => `B${i}`),
-  ...Array.from({ length: 8 }, (_, i) => `C${i}`),
-  "ASM0",
-  "ASM1",
-  "ASM2",
-  "RWK0",
+  "A0", "A1", "A2", "A7", "A8", "A9",
+  "B0", "B1", "B2", "B7P", "B7S", "B8", "B9",
+  "C0", "C1", "C2", "C6", "C7",
+  "PKG0", "PKG1", "PKG2",
+  "ASM0", "ASM1", "INSP0", "ASM2", "RWK0",
 ] as const;
 
 export type MachineId = (typeof MACHINE_IDS)[number];
 
 export const BUFFER_IDS = [
-  ...Array.from({ length: 9 }, (_, i) => `A${i}${i + 1}`),
-  ...Array.from({ length: 9 }, (_, i) => `B${i}${i + 1}`),
-  ...Array.from({ length: 7 }, (_, i) => `C${i}${i + 1}`),
-  "ASM01",
-  "ASM12",
-  "GA9",
-  "GB9",
-  "RWK_RET",
-  "SBUF",
+  "A01", "A12", "A27", "A78", "A89",
+  "B01", "B12", "B2B7P", "B2B7S", "B7PB8", "B7SB8", "B89",
+  "C01", "C12", "C26", "C67",
+  "ASM01", "INSP01", "INSP02", "GA9", "GB9",
+  "C7PKG", "PKG01", "PKG02",
+  "RWK_RET", "SBUF",
 ] as const;
 
 export type BufferId = (typeof BUFFER_IDS)[number];
@@ -46,6 +44,7 @@ export interface Tick {
   readonly events_at_k: readonly unknown[];
   readonly faults: readonly unknown[];
   readonly quality: Readonly<Record<string, unknown>>;
+  readonly currents: readonly number[];
 }
 
 export class TickValidationError extends Error {
@@ -97,6 +96,15 @@ export function parseTick(raw: unknown): Tick {
       throw new TickValidationError("obs must be finite numbers", step);
     }
   }
+  const currents = raw["currents"];
+  if (!Array.isArray(currents) || currents.length !== MACHINE_IDS.length) {
+    throw new TickValidationError("currents must match machine roster", step);
+  }
+  for (const v of currents) {
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+      throw new TickValidationError("currents must be finite numbers >= 0", step);
+    }
+  }
   const events = raw["events_at_k"];
   const faults = raw["faults"];
   const quality = raw["quality"];
@@ -117,5 +125,6 @@ export function parseTick(raw: unknown): Tick {
     events_at_k: events,
     faults,
     quality,
+    currents: currents.map(Number),
   };
 }

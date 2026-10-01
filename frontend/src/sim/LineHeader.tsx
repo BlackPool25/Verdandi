@@ -12,11 +12,13 @@ import {
   type PanelTick,
 } from "../components/panels/selectors";
 import type { TwinStore } from "../store/twinStore";
+import type { EnergyHeader } from "./streamController";
 
 export interface LineHeaderProps {
   readonly tick: PanelTick | null;
   readonly episodeHeader: EpisodeHeader | null | undefined;
   readonly episodeId: string | null;
+  readonly energy: EnergyHeader | null;
   readonly speed: number;
   readonly playing: boolean;
   readonly selectedId: string | null;
@@ -39,7 +41,7 @@ const ROW: React.CSSProperties = {
 };
 
 export function LineHeader(props: LineHeaderProps): React.JSX.Element {
-  const { tick, episodeHeader, episodeId, speed, playing, selectedId, store } = props;
+  const { tick, episodeHeader, episodeId, energy, speed, playing, selectedId, store } = props;
   const badges = useBadges(store);
   useEffect(() => {
     const id = window.setInterval(() => store.flushBadges(), 100);
@@ -70,6 +72,8 @@ export function LineHeader(props: LineHeaderProps): React.JSX.Element {
       <span data-testid="line-header-scrapped" className="px-hdr-badge">scrapped {fmt(ep.scrapped)}</span>
       <span data-testid="line-header-reworked" className="px-hdr-badge">reworked {fmt(ep.reworked)}</span>
       <span data-testid="line-header-c7tail" className="px-hdr-badge">c7tail_final {fmt(c7)}</span>
+      <span data-testid="line-header-energy" className="px-hdr-badge">kVAh {energy === null ? MISSING : energy.sumKVAh.toFixed(1)}</span>
+      <span data-testid="line-header-energy-unit" className="px-hdr-badge">kVAh/unit {energy?.perUnit == null ? MISSING : energy.perUnit.toFixed(1)}</span>
     </div>
   );
 }

@@ -20,8 +20,9 @@ const EP = "ep-1";
 function mkTick(step: number): LiveTick {
   return {
     step,
-    states: Array.from({ length: 32 }, () => "RUN"),
-    throughput: Array.from({ length: 32 }, () => 1),
+    states: Array.from({ length: STREAM_MACHINE_ORDER.length }, () => "RUN"),
+    throughput: Array.from({ length: STREAM_MACHINE_ORDER.length }, () => 1),
+    currents: Array.from({ length: STREAM_MACHINE_ORDER.length }, () => 7.5),
   };
 }
 
@@ -205,12 +206,12 @@ describe("robustness", () => {
 });
 
 describe("wire order + patch mapping", () => {
-  it("STREAM_MACHINE_ORDER is the sorted 32-id roster the bridge replays", () => {
-    expect(STREAM_MACHINE_ORDER).toHaveLength(32);
+  it("STREAM_MACHINE_ORDER is the sorted 26-id roster the bridge replays", () => {
+    expect(STREAM_MACHINE_ORDER).toHaveLength(26);
     expect([...STREAM_MACHINE_ORDER].sort()).toEqual([...STREAM_MACHINE_ORDER]);
     expect(STREAM_MACHINE_ORDER).toContain("ASM0");
     expect(STREAM_MACHINE_ORDER).toContain("RWK0");
-    expect(STREAM_MACHINE_ORDER.indexOf("ASM0")).toBe(10);
+    expect(STREAM_MACHINE_ORDER.indexOf("ASM0")).toBe(6);
   });
 
   it("toPatch maps arrays by wire order; parseLiveTick rejects bad rows", () => {
