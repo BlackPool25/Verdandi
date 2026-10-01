@@ -25,9 +25,9 @@ import pathlib
 from typing import Any
 
 import numpy as np
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
+import pandas as pd  # type: ignore[import-untyped]
+import pyarrow as pa  # type: ignore[import-untyped]
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from src import config, twin
 
@@ -72,7 +72,7 @@ def export(
     seed: int | None = None,
     seeds: list[int] | None = None,
     out: str | pathlib.Path = "artifacts/dataset_v3.parquet",
-    faults: list[dict[str, Any]] | dict[str, Any] | None = None,
+    faults: list[dict[str, Any]] | dict[Any, Any] | None = None,
     variant: str = "baseline",
     max_bytes: int = DEFAULT_MAX_BYTES,
     compression: str = "snappy",
