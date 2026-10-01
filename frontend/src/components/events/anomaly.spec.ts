@@ -203,7 +203,7 @@ describe("DOWN/UP disambiguation", () => {
     expect(downKindOf({ event: "BLOCK_ON", t: 1, machine: "B6", detail: {} })).toBe(null);
   });
 
-  it("allowlist maps all 11 twin names, rejects unknown", () => {
+  it("allowlist maps all 14 twin names, rejects unknown", () => {
     for (const name of [
       "FAULT_START",
       "FAULT_END",
@@ -216,6 +216,9 @@ describe("DOWN/UP disambiguation", () => {
       "DIVERT_SBUF",
       "AGV_WAIT",
       "REJECT_ROUTE",
+      "FAILOVER",
+      "PACK_FORK",
+      "LATE_VERDICT",
     ] as const) {
       expect(() => classifyEvent({ event: name })).not.toThrow();
     }
