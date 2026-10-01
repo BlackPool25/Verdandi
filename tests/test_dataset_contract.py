@@ -72,7 +72,9 @@ def assert_zero_adhoc_joins(target: Any) -> None:
     visitor.visit(tree)
 
     if visitor.violations:
-        details = [f"{op} at line {line} ({kind})" for op, line, kind in visitor.violations]
+        details = [
+            f"{op} at line {line} ({kind})" for op, line, kind in visitor.violations
+        ]
         raise AssertionError(
             f"Zero-join contract violation: banned join/merge operation(s) found in AST: {details}"
         )
@@ -111,7 +113,9 @@ class MockTrainPipelineConsumer:
 
         # 1. Verify schema version
         if "schema_version" not in df.columns:
-            raise ValueError("Dataset contract violation: 'schema_version' column missing")
+            raise ValueError(
+                "Dataset contract violation: 'schema_version' column missing"
+            )
         schema_version = int(df["schema_version"].iloc[0])
         if schema_version < 3:
             raise ValueError(
@@ -166,7 +170,9 @@ class MockTrainPipelineConsumer:
     ) -> list[tuple[np.ndarray, np.ndarray]]:
         """Perform StratifiedGroupKFold splits grouped by episode_id using embedded stratification key."""
         if strat_key not in df.columns:
-            raise KeyError(f"Stratification key '{strat_key}' not present in dataset columns")
+            raise KeyError(
+                f"Stratification key '{strat_key}' not present in dataset columns"
+            )
         if "episode_id" not in df.columns:
             raise KeyError("Group key 'episode_id' not present in dataset columns")
 
@@ -225,7 +231,9 @@ class MockTrainPipelineConsumer:
     ) -> dict[str, Any]:
         """Execute end-to-end mock consumer training pipeline with zero joins."""
         df = self.load_and_validate(parquet_path, window_config_path, metadata_path)
-        splits = self.create_grouped_splits(df, strat_key=strat_key, n_splits=n_splits, seed=seed)
+        splits = self.create_grouped_splits(
+            df, strat_key=strat_key, n_splits=n_splits, seed=seed
+        )
 
         feature_cols = [c for c in df.columns if c.startswith("obs_")]
         fold_reports = []
@@ -234,8 +242,12 @@ class MockTrainPipelineConsumer:
             fold_reports.append(
                 {
                     "fold": fold_idx,
-                    "train_episodes": sorted(df.iloc[train_idx]["episode_id"].unique().tolist()),
-                    "val_episodes": sorted(df.iloc[val_idx]["episode_id"].unique().tolist()),
+                    "train_episodes": sorted(
+                        df.iloc[train_idx]["episode_id"].unique().tolist()
+                    ),
+                    "val_episodes": sorted(
+                        df.iloc[val_idx]["episode_id"].unique().tolist()
+                    ),
                     "train_rows": len(train_idx),
                     "val_rows": len(val_idx),
                     "train_mean_norm": float(np.linalg.norm(fold_stat["mean"])),
@@ -267,7 +279,9 @@ def test_dataset_contract_artifacts_presence(tmp_path):
     assert parquet_file.exists(), "dataset_v3.parquet must exist"
     assert win_cfg_file.exists(), "window_config.json must exist"
     assert meta_file.exists(), "ingestion_metadata.json must exist"
-    assert not scaler_file.exists(), "LEAKAGE LAW: scaler.pkl must NOT exist in export artifacts"
+    assert not scaler_file.exists(), (
+        "LEAKAGE LAW: scaler.pkl must NOT exist in export artifacts"
+    )
 
     # Verify window_config owned fields
     with open(win_cfg_file, "r", encoding="utf-8") as f:
@@ -305,7 +319,9 @@ def test_mock_train_consumer_zero_join_execution(tmp_path):
     for fold_info in report["folds"]:
         train_eps = set(fold_info["train_episodes"])
         val_eps = set(fold_info["val_episodes"])
-        assert len(train_eps.intersection(val_eps)) == 0, "Episode leaked across train and val!"
+        assert len(train_eps.intersection(val_eps)) == 0, (
+            "Episode leaked across train and val!"
+        )
         assert len(train_eps) > 0
         assert len(val_eps) > 0
 
@@ -334,7 +350,9 @@ def test_grouped_splits_using_stratification_keys_only(tmp_path, strat_key):
     # For continuous wear_endpoint, discretize into discrete classes for stratification
     if strat_key == "wear_endpoint":
         if df["wear_endpoint"].nunique() > 1:
-            df["wear_binned"] = pd.qcut(df["wear_endpoint"], q=2, labels=["low", "high"])
+            df["wear_binned"] = pd.qcut(
+                df["wear_endpoint"], q=2, labels=["low", "high"]
+            )
         else:
             df["wear_binned"] = df["wear_endpoint"].apply(
                 lambda w: "nominal" if w <= 5.0 else "critical"
@@ -343,13 +361,17 @@ def test_grouped_splits_using_stratification_keys_only(tmp_path, strat_key):
     else:
         key_to_use = strat_key
 
-    splits = consumer.create_grouped_splits(df, strat_key=key_to_use, n_splits=2, seed=777)
+    splits = consumer.create_grouped_splits(
+        df, strat_key=key_to_use, n_splits=2, seed=777
+    )
     assert len(splits) == 2
 
     for tr_idx, va_idx in splits:
         tr_eps = set(df.iloc[tr_idx]["episode_id"])
         va_eps = set(df.iloc[va_idx]["episode_id"])
-        assert len(tr_eps.intersection(va_eps)) == 0, f"Leakage with strat_key={strat_key}"
+        assert len(tr_eps.intersection(va_eps)) == 0, (
+            f"Leakage with strat_key={strat_key}"
+        )
 
 
 def test_mock_train_consumer_tf1_leakage_law(tmp_path):
@@ -362,8 +384,12 @@ def test_mock_train_consumer_tf1_leakage_law(tmp_path):
     splits = consumer.create_grouped_splits(df, strat_key="family", n_splits=2)
 
     feature_cols = [c for c in df.columns if c.startswith("obs_")]
-    fold0_stats = consumer.fit_and_evaluate_fold(df, splits[0][0], splits[0][1], feature_cols)
-    fold1_stats = consumer.fit_and_evaluate_fold(df, splits[1][0], splits[1][1], feature_cols)
+    fold0_stats = consumer.fit_and_evaluate_fold(
+        df, splits[0][0], splits[0][1], feature_cols
+    )
+    fold1_stats = consumer.fit_and_evaluate_fold(
+        df, splits[1][0], splits[1][1], feature_cols
+    )
 
     # Different folds have different training episodes and thus different mean vectors
     assert not np.allclose(fold0_stats["mean"], fold1_stats["mean"]), (

@@ -26,8 +26,26 @@ WALL_REPORT_SCHEMA = 2
 
 # Rolling 20-seed batch for hermetic funnel gate evaluation (Todo 7).
 SEEDS_20 = [
-    7, 11, 13, 42, 777, 1234, 999, 2026, 12345,
-    1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
+    7,
+    11,
+    13,
+    42,
+    777,
+    1234,
+    999,
+    2026,
+    12345,
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
 ]
 
 # INSP0 holds each part exactly this many steps before late-verdict release.
@@ -309,38 +327,40 @@ if set(MACHINE_INDEX) != set(MACHINES):
 # PKG01, PKG02, SBUF) REMAIN STRICTLY FROZEN. Any variant attempting to
 # modify an unlisted buffer is rejected by the variant gate.
 
-ALLOWED_UNFREEZE_BUFFERS = frozenset({
-    "GA9",
-    "GB9",
-    "_C7TAIL",
-    "C7PKG",
-    "C67",
-    "A89",
-    "B89",
-    "A78",
-    "B7PB8",
-    "B7SB8",
-    "ASM01",
-    "INSP01",
-    "INSP02",
-    "RWK_RET",
-})
+ALLOWED_UNFREEZE_BUFFERS = frozenset(
+    {
+        "GA9",
+        "GB9",
+        "_C7TAIL",
+        "C7PKG",
+        "C67",
+        "A89",
+        "B89",
+        "A78",
+        "B7PB8",
+        "B7SB8",
+        "ASM01",
+        "INSP01",
+        "INSP02",
+        "RWK_RET",
+    }
+)
 
 UNFROZEN_BUFFER_CAPS = {
-    "GA9": 20,       # old: 15
-    "GB9": 20,       # old: 15
-    "_C7TAIL": 20,   # old: 15
-    "C7PKG": 20,     # old: 15
-    "C67": 20,       # old: 15
-    "A89": 20,       # old: 15
-    "B89": 20,       # old: 15
-    "A78": 20,       # old: 15
-    "B7PB8": 30,     # old: 25
-    "B7SB8": 30,     # old: 25
-    "ASM01": 30,     # old: 25
-    "INSP01": 30,    # old: 25
-    "INSP02": 30,    # old: 25
-    "RWK_RET": 15,   # old: 10
+    "GA9": 20,  # old: 15
+    "GB9": 20,  # old: 15
+    "_C7TAIL": 20,  # old: 15
+    "C7PKG": 20,  # old: 15
+    "C67": 20,  # old: 15
+    "A89": 20,  # old: 15
+    "B89": 20,  # old: 15
+    "A78": 20,  # old: 15
+    "B7PB8": 30,  # old: 25
+    "B7SB8": 30,  # old: 25
+    "ASM01": 30,  # old: 25
+    "INSP01": 30,  # old: 25
+    "INSP02": 30,  # old: 25
+    "RWK_RET": 15,  # old: 10
 }
 
 FUNNEL_VARIANTS = {
@@ -387,4 +407,3 @@ FUNNEL_VARIANTS = {
         "agv_priority": "seeded",
     },
 }
-

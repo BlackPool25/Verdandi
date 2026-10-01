@@ -48,14 +48,33 @@ _DELAY_FAULT = {
 }
 
 _EXACT_20_SEEDS = [
-    7, 11, 13, 42, 777, 1234, 999, 2026, 12345,
-    1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011,
+    7,
+    11,
+    13,
+    42,
+    777,
+    1234,
+    999,
+    2026,
+    12345,
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
 ]
 
 
 # ==============================================================================
 # Group 1: 9-Key Stratification Export Presence per Episode / Window
 # ==============================================================================
+
 
 def test_strat_record_contains_strat_export():
     """Episode record must carry 'strat' stratification export dictionary."""
@@ -81,7 +100,9 @@ def test_strat_9_keys_presence_in_record():
         "funnel_census",
     }
     missing = required_keys - set(strat.keys())
-    assert not missing, f"Stratification export missing required keys: {sorted(missing)}"
+    assert not missing, (
+        f"Stratification export missing required keys: {sorted(missing)}"
+    )
 
 
 def test_strat_wear_endpoint_scalar():
@@ -105,7 +126,9 @@ def test_strat_wear_endpoint_determinism_5_runs():
         rec = twin.run_episode(777, None)
         assert "strat" in rec
         endpoints.append(rec["strat"]["wear_endpoint"])
-    assert len(set(endpoints)) == 1, f"wear_endpoint non-deterministic across 5 runs: {endpoints}"
+    assert len(set(endpoints)) == 1, (
+        f"wear_endpoint non-deterministic across 5 runs: {endpoints}"
+    )
 
 
 def test_strat_wear_knee_acceleration_formula():
@@ -236,6 +259,7 @@ def test_strat_funnel_census_full_accounting():
 # Group 2: Sunk Rolling-20 Median >= 30 Gate Test & Funnel Wall Report
 # ==============================================================================
 
+
 def test_funnel_sunk_rolling_20_median_gate():
     """Rolling-20 median >= 30 gate validator over exact 20-seed batch."""
     assert hasattr(twin, "check_funnel_gate"), (
@@ -247,7 +271,9 @@ def test_funnel_sunk_rolling_20_median_gate():
         f"over seeds {_EXACT_20_SEEDS}"
     )
     assert report["passed"] is True, f"Funnel gate report not marked passed: {report}"
-    assert "p10" in report and "p90" in report, "Funnel gate report missing p10/p90 percentiles"
+    assert "p10" in report and "p90" in report, (
+        "Funnel gate report missing p10/p90 percentiles"
+    )
     assert report["seeds"] == _EXACT_20_SEEDS, "Funnel gate report seeds mismatch"
     assert "variant_id" in report, "Funnel gate report missing variant_id"
 
@@ -270,14 +296,21 @@ def test_funnel_wall_report_schema_version_and_funnel_object(tmp_path):
     cal = tmp_path / "cal.json"
     twin._calibrate(str(cal))
     evdir = tmp_path / "ev"
-    rc = twin.main([
-        "--manifest", "quick",
-        "--subset", "1",
-        "--jobs", "1",
-        "--calibration", str(cal),
-        "--wall-report",
-        "--evidence-dir", str(evdir),
-    ])
+    rc = twin.main(
+        [
+            "--manifest",
+            "quick",
+            "--subset",
+            "1",
+            "--jobs",
+            "1",
+            "--calibration",
+            str(cal),
+            "--wall-report",
+            "--evidence-dir",
+            str(evdir),
+        ]
+    )
     assert rc == 0
     wall = json.loads((evdir / "wall_report.json").read_text())
     assert wall.get("schema_version") == 2, (
@@ -295,6 +328,7 @@ def test_funnel_wall_report_schema_version_and_funnel_object(tmp_path):
 def test_funnel_wall_report_partial_schema_version_and_funnel_object(tmp_path):
     """Partial wall_report.json must carry schema_version=2 and funnel object."""
     import argparse
+
     evdir = tmp_path / "ev_partial"
     args = argparse.Namespace(
         wall_report=True,
@@ -318,6 +352,7 @@ def test_funnel_wall_report_partial_schema_version_and_funnel_object(tmp_path):
 # ==============================================================================
 # Group 3: Schema Version Transition: TWIN_SCHEMA 2->3 and v2 Rejection
 # ==============================================================================
+
 
 @pytest.mark.skipif(
     config.TWIN_SCHEMA < 3,
@@ -348,6 +383,7 @@ def test_schema_v3_record_schema_version_bump():
 )
 def test_schema_v3_v2_readers_reject_v3_loudly_with_value_error():
     """v2 readers must reject v3 records loudly with ValueError."""
+
     def _v2_reader(record):
         if record.get("schema_version") != 2:
             raise ValueError(
@@ -380,6 +416,7 @@ def test_schema_v3_replay_digest_rejects_v2_records():
 # ==============================================================================
 # Group 4: Warm-Up Exclusion from run_calibration Fits
 # ==============================================================================
+
 
 def test_warmup_exclusion_from_run_calibration_fits():
     """run_calibration must exclude first 15 steps (shape must be (105, 26))."""
@@ -414,12 +451,15 @@ def test_warmup_transient_pool_retains_first_15_steps():
         "stratification missing 'warmup_pool' (first 15 steps retained in transient pool)"
     )
     pool = strat["warmup_pool"]
-    assert len(pool) == 15, f"Transient pool must retain exactly 15 warm-up steps, got {len(pool)}"
+    assert len(pool) == 15, (
+        f"Transient pool must retain exactly 15 warm-up steps, got {len(pool)}"
+    )
 
 
 # ==============================================================================
 # Group 5: Per-Machine State Histogram Denominator Rules
 # ==============================================================================
+
 
 def test_histogram_per_machine_denominator_rule_sums_to_one():
     """Per-machine state histogram must sum to 1.0 +- 0.01 across RUN/STARVED/BLOCKED/DOWN."""
@@ -428,7 +468,9 @@ def test_histogram_per_machine_denominator_rule_sums_to_one():
     strat = rec["strat"]
     assert "state_histogram" in strat, "Stratification missing 'state_histogram'"
     hist = strat["state_histogram"]
-    assert len(hist) == 26, f"state_histogram must cover all 26 machines, got {len(hist)}"
+    assert len(hist) == 26, (
+        f"state_histogram must cover all 26 machines, got {len(hist)}"
+    )
     for m, shares in hist.items():
         tot = sum(shares.values())
         assert abs(tot - 1.0) <= 0.01, (
@@ -461,6 +503,7 @@ def test_histogram_plant_rollup_excludes_standby_24_machines():
 # Group 6: Gated Buffer Unfreeze and AGV-Priority Variants (Todo 6)
 # ==============================================================================
 
+
 def test_buffer_unfreeze_listed_bottlenecks_allowed_only():
     """ONLY listed bottleneck buffers are in ALLOWED_UNFREEZE_BUFFERS with documented caps."""
     expected_allowed = {
@@ -484,23 +527,39 @@ def test_buffer_unfreeze_listed_bottlenecks_allowed_only():
     )
 
     # Strictly unlisted buffers must NEVER be allowed
-    for unlisted in ("A01", "A12", "A27", "B01", "B12", "B2B7P", "B2B7S", "C01", "C12", "C26", "PKG01", "PKG02", "SBUF"):
-        assert unlisted not in config.ALLOWED_UNFREEZE_BUFFERS, f"Unlisted buffer {unlisted} must be frozen"
+    for unlisted in (
+        "A01",
+        "A12",
+        "A27",
+        "B01",
+        "B12",
+        "B2B7P",
+        "B2B7S",
+        "C01",
+        "C12",
+        "C26",
+        "PKG01",
+        "PKG02",
+        "SBUF",
+    ):
+        assert unlisted not in config.ALLOWED_UNFREEZE_BUFFERS, (
+            f"Unlisted buffer {unlisted} must be frozen"
+        )
 
     # Verify explicit old -> new caps documented in config
-    assert config.UNFROZEN_BUFFER_CAPS["GA9"] == 20      # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["GB9"] == 20      # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["GA9"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["GB9"] == 20  # old: 15
     assert config.UNFROZEN_BUFFER_CAPS["_C7TAIL"] == 20  # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["C7PKG"] == 20    # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["C67"] == 20      # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["A89"] == 20      # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["B89"] == 20      # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["A78"] == 20      # old: 15
-    assert config.UNFROZEN_BUFFER_CAPS["B7PB8"] == 30    # old: 25
-    assert config.UNFROZEN_BUFFER_CAPS["B7SB8"] == 30    # old: 25
-    assert config.UNFROZEN_BUFFER_CAPS["ASM01"] == 30    # old: 25
-    assert config.UNFROZEN_BUFFER_CAPS["INSP01"] == 30   # old: 25
-    assert config.UNFROZEN_BUFFER_CAPS["INSP02"] == 30   # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["C7PKG"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["C67"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["A89"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["B89"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["A78"] == 20  # old: 15
+    assert config.UNFROZEN_BUFFER_CAPS["B7PB8"] == 30  # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["B7SB8"] == 30  # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["ASM01"] == 30  # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["INSP01"] == 30  # old: 25
+    assert config.UNFROZEN_BUFFER_CAPS["INSP02"] == 30  # old: 25
     assert config.UNFROZEN_BUFFER_CAPS["RWK_RET"] == 15  # old: 10
 
 
@@ -527,10 +586,13 @@ def test_pileup_violations_excessive_buffer_change_rejected_by_gate(monkeypatch)
         "variant_id": "pileup-reject-test",
         "buffer_caps": {"GA9": 20},
     }
-    mock_violation = [{"buffer": "GA9", "downstream": "ASM0", "start": 40, "length": 35}]
+    mock_violation = [
+        {"buffer": "GA9", "downstream": "ASM0", "start": 40, "length": 35}
+    ]
 
     # Mock duty_cycle to simulate a pileup violation
     real_duty_cycle = twin.duty_cycle
+
     def _mock_duty(rec):
         d = real_duty_cycle(rec)
         d["pileup_violations"] = mock_violation
@@ -539,7 +601,9 @@ def test_pileup_violations_excessive_buffer_change_rejected_by_gate(monkeypatch)
     monkeypatch.setattr(twin, "duty_cycle", _mock_duty)
 
     report = twin.check_variant_gate(test_variant, seeds=[777])
-    assert report["passed"] is False, "Variant with pileup violations must NOT pass gate"
+    assert report["passed"] is False, (
+        "Variant with pileup violations must NOT pass gate"
+    )
     assert report["rejected"] is True
     assert "pileup" in report["reason"].lower()
     assert report["pileup_violations"] == mock_violation
@@ -561,18 +625,26 @@ def test_agv_priority_variants_registered_and_clean_on_seed_777():
         "rebalanced-funnel-seeded",
     ]
     for var_id in variants:
-        assert var_id in config.FUNNEL_VARIANTS, f"Variant {var_id} not registered in FUNNEL_VARIANTS"
+        assert var_id in config.FUNNEL_VARIANTS, (
+            f"Variant {var_id} not registered in FUNNEL_VARIANTS"
+        )
         report = twin.check_variant_gate(var_id, seeds=[777])
         assert report["passed"] is True, f"Variant {var_id} failed gate: {report}"
-        assert len(report["pileup_violations"]) == 0, f"Variant {var_id} had pileup violations: {report}"
-        assert report["median_sunk"] >= 30, f"Variant {var_id} median sunk < 30: {report['median_sunk']}"
+        assert len(report["pileup_violations"]) == 0, (
+            f"Variant {var_id} had pileup violations: {report}"
+        )
+        assert report["median_sunk"] >= 30, (
+            f"Variant {var_id} median sunk < 30: {report['median_sunk']}"
+        )
 
 
 def test_seed_777_pileup_clean_and_passes_gate():
     """Seed 777 must have zero pileup violations in duty_cycle and pass the variant gate."""
     rec = twin.run_episode(777, None)
     dc = twin.duty_cycle(rec)
-    assert len(dc["pileup_violations"]) == 0, f"Seed 777 had pileup violations: {dc['pileup_violations']}"
+    assert len(dc["pileup_violations"]) == 0, (
+        f"Seed 777 had pileup violations: {dc['pileup_violations']}"
+    )
     assert len(rec.get("pileup_violations", [])) == 0
     report = twin.check_variant_gate("baseline", seeds=[777])
     assert report["passed"] is True
@@ -596,8 +668,11 @@ def test_buffer_unfreeze_and_agv_priority_20_seeds_gate():
     """Rebalanced funnel variant must achieve rolling median sunk >= 30 across 20 seeds with 0 pileups."""
     report = twin.check_variant_gate("rebalanced-funnel-v1", seeds=_EXACT_20_SEEDS)
     assert report["passed"] is True, f"20-seed gate failed: {report}"
-    assert len(report["pileup_violations"]) == 0, f"20-seed gate had pileup violations: {report}"
-    assert report["median_sunk"] >= 30, f"20-seed median sunk < 30: {report['median_sunk']}"
+    assert len(report["pileup_violations"]) == 0, (
+        f"20-seed gate had pileup violations: {report}"
+    )
+    assert report["median_sunk"] >= 30, (
+        f"20-seed median sunk < 30: {report['median_sunk']}"
+    )
     assert report["p10"] > 0
     assert report["p90"] >= report["median_sunk"]
-
