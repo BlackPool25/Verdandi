@@ -1,16 +1,18 @@
-"""T3 frozen tick schema v3 (contract lock, cross-team reuse) — topology-A only.
+"""T3 frozen tick schema v4 (contract lock, cross-team reuse) — topology-A only.
 
 Twin-mirror verbatim; bridge-strict labeled. Locks the tick JSON the
 bridge replays (T2) and the frontend consumes (T4+):
 
-- v3-only: N_MACHINES=26 / N_BUFFERS=26 (topology-A roster) + TICK
+- v4-only: N_MACHINES=26 / N_BUFFERS=26 (topology-A roster) + TICK
   `currents` row (CH8 motor-current index, twin _record_current) +
   header `energy` dict (CH9 apparent-energy index, twin _energy_header,
-  header-only, never per-tick). Any v1 32-machine tick
+  header-only, never per-tick) + `strat` block (stratification keys,
+  funnel census, warm-up pool). Any v1 32-machine tick
   (states/obs/throughput len 32, buffers len 31) is
   strict-rejected with 'schema v1 non-comparable, rebaseline' — the v1
   code path is DELETED except this error. Any v2 record (no
-  currents/energy keys) is likewise rejected non-comparable via the
+  currents/energy keys) or v3 pre-union record (missing currents or
+  strat) is likewise rejected non-comparable via the
   missing-keys path.
 - V1_NON_COMPARABLE digests (never asserted equal): flow 962b9c54d022,
   demo d2b4fb23… (32-machine schema v1 baselines, retired).
@@ -40,8 +42,8 @@ from typing import Any
 
 from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
 
-SCHEMA_VERSION = 3  # topology-A v3; must equal src.config.TWIN_SCHEMA
-assert SCHEMA_VERSION == TWIN_SCHEMA == 3
+SCHEMA_VERSION = 4  # topology-A v4; must equal src.config.TWIN_SCHEMA
+assert SCHEMA_VERSION == TWIN_SCHEMA == 4
 
 V1_REJECT_MSG = "schema v1 non-comparable, rebaseline"
 

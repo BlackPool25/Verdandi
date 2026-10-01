@@ -18,11 +18,11 @@ N_MACHINES = 26
 N_BUFFERS = 26
 N_STREAMS = 36
 
-# Topology-A schema version: v3 = stratification keys + funnel rebalancing +
-# 26-machine roster + TICK currents row (CH8) + header energy dict (CH9).
-# v1 32-machine baselines and v2 unstratified records are non-comparable.
-TWIN_SCHEMA = 3
-CODE_VERSION = "twin-2.2.0-topology-A"
+# Topology-A schema version: v4 = v3 stratification keys + funnel rebalancing +
+# 26-machine roster + TICK currents row (CH8) + header energy dict (CH9) union.
+# v1 32-machine, v2 unstratified, and v3 pre-union records are non-comparable.
+TWIN_SCHEMA = 4
+CODE_VERSION = "twin-2.3.0-topology-A"
 WALL_REPORT_SCHEMA = 2
 
 # Rolling 20-seed batch for hermetic funnel gate evaluation (Todo 7).

@@ -29,6 +29,9 @@ replay-777-topology-A.json, schema v3 twin-2.2.0-ch8ch9): CH8 "currents"
 is hashed by design, CH9 "energy" is scrubbed. Verify-fixes re-baseline
 (777-clean cef610ac…, 777 F-21 0280680a…): CH8 eta scaled to the Linear
 noise spec N(0, 0.05*I_rated) — currents move by design, schema unchanged.
+Schema v4 union re-baseline (777-clean c54fdb12…,
+777 F-21 d30048ef…): 18-key record (currents + strat), code
+twin-2.3.0-topology-A.
 """
 
 import copy
@@ -51,8 +54,8 @@ _F21_B2 = {
     "mag_sigma": 5.2,
 }
 
-_DIGEST_CLEAN777 = "cef610ac61162a49d592c48cba42594ba7a7641c86832cc564fefb4485157caf"
-_DIGEST_F21_777 = "0280680a39d0c712a6d494931a92f66cabee04946681fa2bb98bb398ec9c4d34"
+_DIGEST_CLEAN777 = "c54fdb120eb30fe0a7d1313bde552af3da722953b18de21a7ade8560a01fedc9"
+_DIGEST_F21_777 = "d30048ef32130b4c57c815cdff85de03a58bee8fd3a35ebbb6a7ab2f274298a6"
 
 
 def _raw_starved(rec):

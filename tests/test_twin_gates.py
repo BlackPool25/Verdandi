@@ -346,15 +346,15 @@ _F21_B2_VERSION_PROBE = {
 }
 
 
-def test_record_carries_schema_v3_and_code_version():
+def test_record_carries_schema_v4_and_code_version():
     from src.config import CODE_VERSION, TWIN_SCHEMA
 
     rec = twin.run_episode(777, copy.deepcopy(_F21_B2_VERSION_PROBE))
-    assert rec["schema_version"] == 3 == TWIN_SCHEMA
-    assert rec["code_version"] == "twin-2.2.0-topology-A" == CODE_VERSION
+    assert rec["schema_version"] == 4 == TWIN_SCHEMA
+    assert rec["code_version"] == "twin-2.3.0-topology-A" == CODE_VERSION
 
 
-def test_topology_a_5x_determinism_v3_not_v1():
+def test_topology_a_5x_determinism_v4_not_v1():
     digests = [
         twin.replay_digest(twin.run_episode(777, copy.deepcopy(_F21_B2_VERSION_PROBE)))
         for _ in range(5)
