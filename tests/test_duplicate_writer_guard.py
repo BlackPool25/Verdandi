@@ -270,13 +270,11 @@ def scan_writers(
         ):
             continue
         try:
-            rel_str = str(
-                py_path.relative_to(
-                    root_dir.parent if root_dir.name == "src" else root_dir
-                )
-            )
+            rel_str = py_path.relative_to(
+                root_dir.parent if root_dir.name == "src" else root_dir
+            ).as_posix()
         except ValueError:
-            rel_str = str(py_path)
+            rel_str = py_path.as_posix()
         content = py_path.read_text(encoding="utf-8")
         tree = ast.parse(content, filename=str(py_path))
         visitor = StructuralWriterVisitor(rel_str, checked_fields)

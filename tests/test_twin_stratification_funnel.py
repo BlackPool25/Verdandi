@@ -155,7 +155,7 @@ def test_strat_wear_stream_budget_zero_new_streams():
     """Minimal C3 wear must draw from existing streams with ZERO new RNG streams."""
     assert config.N_STREAMS == 36
     streams = twin._spawn_streams(777)
-    noise, _place, _drop, _agv, _fail = streams
+    noise, _place, _drop, _agv, _fail, _eta = streams
     assert len(noise) == 26
     # No stream index >= 36
     assert all(idx < 36 for idx in config.MACHINE_INDEX.values())
@@ -350,7 +350,7 @@ def test_funnel_wall_report_partial_schema_version_and_funnel_object(tmp_path):
 
 
 # ==============================================================================
-# Group 3: Schema Version Transition: TWIN_SCHEMA 2->3 and v2 Rejection
+# Group 3: Schema Version Transition: TWIN_SCHEMA 3->4 and v2/v3 Rejection
 # ==============================================================================
 
 
@@ -358,10 +358,10 @@ def test_funnel_wall_report_partial_schema_version_and_funnel_object(tmp_path):
     config.TWIN_SCHEMA < 3,
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
-def test_schema_v3_twin_schema_constant_bump():
-    """TWIN_SCHEMA constant must be bumped 2->3 in src/config.py."""
-    assert config.TWIN_SCHEMA == 3, (
-        f"TWIN_SCHEMA must transition 2->3 for stratification export, got {config.TWIN_SCHEMA}"
+def test_schema_v4_twin_schema_constant_bump():
+    """TWIN_SCHEMA constant must be bumped 3->4 in src/config.py."""
+    assert config.TWIN_SCHEMA == 4, (
+        f"TWIN_SCHEMA must transition 3->4 for MINIPRO-22 union export, got {config.TWIN_SCHEMA}"
     )
 
 
@@ -369,11 +369,11 @@ def test_schema_v3_twin_schema_constant_bump():
     config.TWIN_SCHEMA < 3,
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
-def test_schema_v3_record_schema_version_bump():
-    """Episode record schema_version must be 3."""
+def test_schema_v4_record_schema_version_bump():
+    """Episode record schema_version must be 4."""
     rec = twin.run_episode(777, _PROBE_FAULT)
-    assert rec["schema_version"] == 3, (
-        f"Episode record schema_version must be 3, got {rec.get('schema_version')}"
+    assert rec["schema_version"] == 4, (
+        f"Episode record schema_version must be 4, got {rec.get('schema_version')}"
     )
 
 
@@ -381,8 +381,8 @@ def test_schema_v3_record_schema_version_bump():
     config.TWIN_SCHEMA < 3,
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
-def test_schema_v3_v2_readers_reject_v3_loudly_with_value_error():
-    """v2 readers must reject v3 records loudly with ValueError."""
+def test_schema_v4_v2_readers_reject_v4_loudly_with_value_error():
+    """v2 readers must reject v4 records loudly with ValueError."""
 
     def _v2_reader(record):
         if record.get("schema_version") != 2:
@@ -392,8 +392,8 @@ def test_schema_v3_v2_readers_reject_v3_loudly_with_value_error():
         return True
 
     rec = twin.run_episode(777, _PROBE_FAULT)
-    assert rec.get("schema_version") == 3, (
-        f"Target record must carry schema_version=3 for rejection test, got {rec.get('schema_version')}"
+    assert rec.get("schema_version") == 4, (
+        f"Target record must carry schema_version=4 for rejection test, got {rec.get('schema_version')}"
     )
     with pytest.raises(ValueError, match="v2 reader non-comparable"):
         _v2_reader(rec)
@@ -403,13 +403,13 @@ def test_schema_v3_v2_readers_reject_v3_loudly_with_value_error():
     config.TWIN_SCHEMA < 3,
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
-def test_schema_v3_replay_digest_rejects_v2_records():
-    """When TWIN_SCHEMA transitions to 3, replay_digest must reject v2 records."""
-    assert config.TWIN_SCHEMA == 3, "TWIN_SCHEMA must be 3 for v3 digest validation"
+def test_schema_v4_replay_digest_rejects_v2_records():
+    """When TWIN_SCHEMA transitions to 4, replay_digest must reject v2 records."""
+    assert config.TWIN_SCHEMA == 4, "TWIN_SCHEMA must be 4 for v4 digest validation"
     rec = twin.run_episode(777, _PROBE_FAULT)
     v2_record = copy.deepcopy(rec)
     v2_record["schema_version"] = 2
-    with pytest.raises(ValueError, match="want 3"):
+    with pytest.raises(ValueError, match="want 4"):
         twin.replay_digest(v2_record)
 
 

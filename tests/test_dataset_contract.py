@@ -288,7 +288,7 @@ def test_dataset_contract_artifacts_presence(tmp_path):
     # Verify window_config owned fields
     with open(win_cfg_file, "r", encoding="utf-8") as f:
         win_cfg = json.load(f)
-    assert win_cfg["schema_version"] == 3
+    assert win_cfg["schema_version"] == 4
     assert set(win_cfg["owned_fields"]) == set(dataset_export.OWNED_STRAT_FIELDS)
 
     # Verify consumer can load and validate contract directly

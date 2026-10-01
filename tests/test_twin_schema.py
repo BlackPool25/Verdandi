@@ -37,6 +37,7 @@ def test_record_keys():
     # Full documented contract: T6 added the additive Scope channels 6/7
     # keys (throughput/events reads per TC-006b) on top of the T1 nine.
     # T-B8 adds the Table 3.1 roster snapshot (SIM_SPEC §4.4, Copilot :1161).
+    # W7 (CH8): top-level "currents" 26x300 series (schema v4, hashed).
     assert set(rec) == {
         "seed",
         "T",
@@ -54,6 +55,7 @@ def test_record_keys():
         "agv_waits",
         "parts",
         "faults",
+        "currents",
         "strat",
     }
 
@@ -169,7 +171,7 @@ def test_omitted_mag_materializes_in_fault_range():
     fault = {"id": "F-T", "class": "drift", "origin": "B2", "t0": 150, "dur": 12}
     flist = twin._validate(777, fault)
     assert flist[0].get("mag_sigma") is None
-    _, place, _, _, _ = twin._spawn_streams(777)
+    _, place, _, _, _, _ = twin._spawn_streams(777)
     specs = twin._materialize(place, flist)
     mlo, mhi = FAULT_RANGES["mag_sigma"]
     assert mlo <= specs[0]["mag"] <= mhi
@@ -186,7 +188,7 @@ def test_explicit_mag_preserved():
     }
     flist = twin._validate(777, fault)
     assert flist[0]["mag_sigma"] == 5.2
-    _, place, _, _, _ = twin._spawn_streams(777)
+    _, place, _, _, _, _ = twin._spawn_streams(777)
     specs = twin._materialize(place, flist)
     assert specs[0]["mag"] == 5.2
 

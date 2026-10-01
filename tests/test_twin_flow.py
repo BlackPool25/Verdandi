@@ -263,7 +263,7 @@ def test_rework_asm0_kit_preserves_reject_and_passes():
 
     from src.config import BUFFERS, N_MACHINES, T
 
-    noise, _place, drop, _agv, fail = twin._spawn_streams(_SEED)
+    noise, _place, drop, _agv, fail, _eta = twin._spawn_streams(_SEED)
     shared = {
         "noise": noise,
         "drop": drop,
@@ -272,6 +272,8 @@ def test_rework_asm0_kit_preserves_reject_and_passes():
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
         "tput": [[0] * T for _ in range(N_MACHINES)],
+        "eta": _eta,
+        "currents": [[0.0] * T for _ in range(N_MACHINES)],
         "events": [],
         "pid": [1000],
         "held": [None] * N_MACHINES,
@@ -363,7 +365,7 @@ def test_rework_asm2_holds_reject_when_rwk_full():
 
     from src.config import BUFFERS, MACHINE_INDEX, N_MACHINES, T
 
-    noise, _place, drop, _agv, fail = twin._spawn_streams(_SEED)
+    noise, _place, drop, _agv, fail, _eta = twin._spawn_streams(_SEED)
     draws = iter([0.1] + [0.9] * 64)
 
     class _ScriptedPlace:
@@ -380,6 +382,8 @@ def test_rework_asm2_holds_reject_when_rwk_full():
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
         "tput": [[0] * T for _ in range(N_MACHINES)],
+        "eta": _eta,
+        "currents": [[0.0] * T for _ in range(N_MACHINES)],
         "events": [],
         "parts": [],
         "pid": [1000],

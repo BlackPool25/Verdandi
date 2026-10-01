@@ -32,7 +32,7 @@ def test_export_single_seed_happy_path(tmp_path):
     # Verify sorted column keys
     df = dataset_export.load_dataset(out_parquet)
     assert list(df.columns) == sorted(df.columns)
-    assert df["schema_version"].iloc[0] == 3
+    assert df["schema_version"].iloc[0] == 4
     assert df["code_version"].iloc[0] == config.CODE_VERSION
     assert df["episode_id"].iloc[0] == 777
 
@@ -44,7 +44,7 @@ def test_export_single_seed_happy_path(tmp_path):
     win_cfg_path = tmp_path / "artifacts" / "window_config.json"
     assert win_cfg_path.exists()
     win_cfg = json.loads(win_cfg_path.read_text())
-    assert win_cfg["schema_version"] == 3
+    assert win_cfg["schema_version"] == 4
     assert win_cfg["code_version"] == config.CODE_VERSION
     assert win_cfg["cal_win"] == 120
     assert win_cfg["T"] == 300
@@ -56,7 +56,7 @@ def test_export_single_seed_happy_path(tmp_path):
         meta_path = tmp_path / "artifacts" / meta_name
         assert meta_path.exists()
         meta = json.loads(meta_path.read_text())
-        assert meta["schema_version"] == 3
+        assert meta["schema_version"] == 4
         assert meta["code_version"] == config.CODE_VERSION
         assert meta["dataset_hash"] == res["dataset_hash"]
         assert meta["seeds"] == [777]

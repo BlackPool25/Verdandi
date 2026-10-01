@@ -64,6 +64,7 @@ from src.config import (
     ENVELOPE_SIGMA,
     FAULT_RANGES,
     FUNNEL_VARIANTS,
+    I_IDLE_RATIO,
     INSPECT_DELAY_STEPS,
     MACHINE_INDEX,
     MACHINES,
@@ -76,13 +77,16 @@ from src.config import (
     SEEDS_20,
     STANDBY_EXCLUDED,
     STATE_OFFSETS,
+    STEP_SECONDS,
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
+    VOLT,
     WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
     WEAR,
     T,
+    resolve_current,
 )
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
@@ -103,7 +107,10 @@ _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 # event change — so the digest must stay bit-identical to its pre-split value
 # (777-clean 652fba4f…, 777 F-21 523b0b9e…). replay_digest scrubs these before
 # hashing; old records without the key hash exactly as before.
-_DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split"})
+# CH9 header-only energy (flow_stats["energy"]) is likewise pure post-hoc
+# accounting over I_clamped currents — no behavior change — so it is
+# scrubbed too.
+_DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split", "energy"})
 _DIGEST_SCRUB_RECORD_KEYS = frozenset({"strat"})
 
 # Coverage matrix axes (TC-006): 5 partition groups x 7 channels x 7
@@ -357,12 +364,23 @@ def _validate(seed, fault):
     return normed
 
 
+# Linear noise spec (MINIPRO-22): CH8 eta sigma is 0.05 * I_rated per
+# machine — stored eta rows ARE N(0, 0.05*I_rated), not unit-normal.
+ETA_SIGMA_RATIO = 0.05
+
+
 def _spawn_streams(seed):
     """Seeded streams per SIM_SPEC 6.2 topology-A: noise(0-25) + place/drop/agv/fail.
 
     Noise index == MACHINE_INDEX literal order (A0:0..RWK0:25);
     children 26-31 retired (assert unread below); 32 place, 33 drop,
-    34 agv, 35 fail unchanged.
+    34 agv, 35 fail unchanged. CH8 eta rides dedicated grandchildren
+    children[idx].spawn(1)[0] (MINIPRO-22 G3: never noise[idx], so legacy
+    draws are untouched — deleting the eta block restores byte-identical
+    obs/states), vectorized into one (26,300) episode-start pre-draw indexed
+    [idx][t] in-step (W3 wires the hook; W2 stores it disabled-safe).
+    Each row is scaled to N(0, 0.05*I_rated) per the Linear noise spec
+    (ETA_SIGMA_RATIO; deterministic — scaling touches no RNG state).
     """
     seq = np.random.SeedSequence((seed,))
     children = seq.spawn(36)  # == N_STREAMS; literal kept for the T1 grep
@@ -375,7 +393,16 @@ def _spawn_streams(seed):
     drop = np.random.default_rng(children[33])
     agv = np.random.default_rng(children[34])
     fail = np.random.default_rng(children[35])
-    return noise, place, drop, agv, fail
+    eta_rngs = [
+        np.random.default_rng(children[MACHINE_INDEX[m]].spawn(1)[0])
+        for m in order
+    ]
+    eta = np.empty((N_MACHINES, T))
+    for i, (g, m) in enumerate(zip(eta_rngs, order)):
+        g.standard_normal(out=eta[i])
+        # Linear noise spec: scale the pre-drawn unit row to N(0, 0.05*I_rated).
+        eta[i] *= ETA_SIGMA_RATIO * resolve_current(m)[0]
+    return noise, place, drop, agv, fail, eta
 
 
 def _materialize(place, fault_list):
@@ -500,6 +527,54 @@ def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
     lo, hi = base - _CLAMP_SIGMA * sigma, base + _CLAMP_SIGMA * sigma
     tlo, thi = TEMP_RANGES[cfg["class"]]
     return min(hi, max(lo, val)), float(rng.uniform(tlo, thi)), ar
+
+
+def _record_current(shared, name, idx, st, held, tput, t):
+    """CH8 in-step current hook (Todo W3).
+
+    I = I_idle + k*L*(I_rated-I_idle) + eta[idx][t], clamped at 0.0.
+    L=1 iff RUN-cycling a part this step (held, or the tput==1 release
+    step); BLOCKED-holding, STARVED, and DOWN all draw idle (G4
+    DOWN==I_idle lock, I_idle>0 standby). Never derived from the obs
+    val, so currents stay non-collinear with obs by construction.
+    """
+    i_rated, k = resolve_current(name)
+    i_idle = I_IDLE_RATIO * i_rated
+    lm = 1 if (st == "RUN" and (held or tput == 1)) else 0
+    i = i_idle + k * lm * (i_rated - i_idle) + float(shared["eta"][idx][t])
+    shared["currents"][idx][t] = max(0.0, i)
+
+
+def _energy_header(currents, packaged):
+    """CH9 header-only apparent-energy index (Todo W4).
+
+    E_step = sqrt(3) * 400V * I_clamped * STEP_SECONDS / 3600 summed over
+    all machines x steps; I_clamped = max(0, I) (the W3 hook already
+    clamps at 0.0, negatives contribute 0 here regardless). Apparent
+    kVAh, relative-only, no power factor. packaged == 0 -> per_unit None.
+    Header-only: no per-tick series. No RNG.
+    """
+    e_sum = 0.0
+    for row in currents:
+        for i in row:
+            i_c = max(0.0, i)
+            e_sum += math.sqrt(3.0) * VOLT * i_c * STEP_SECONDS / 3600.0
+    e_sum = float(e_sum)
+    if packaged == 0:
+        return {
+            "sum_kVAh": e_sum,
+            "per_unit": None,
+            "note": "packaged==0",
+            "unit": "kVAh-apparent",
+            "step_seconds": STEP_SECONDS,
+        }
+    return {
+        "sum_kVAh": e_sum,
+        "per_unit": e_sum / packaged,
+        "note": "relative-only apparent index, no PF",
+        "unit": "kVAh-apparent",
+        "step_seconds": STEP_SECONDS,
+    }
 
 
 def _emit(shared, event, t, machine, detail):
@@ -823,6 +898,7 @@ def _line_process(env, spec, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -919,6 +995,7 @@ def _insp0_process(env, up, down, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -1146,6 +1223,7 @@ def _asm0_process(env, asm01, kit, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         _kit_log.append(miss_now)
         yield env.timeout(1)
 
@@ -1275,6 +1353,7 @@ def _asm_mid_process(env, name, up, down, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -1393,6 +1472,7 @@ def _rwk0_process(env, shared):
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
+        _record_current(shared, name, idx, st, held, tput, t)
         yield env.timeout(1)
 
 
@@ -1566,7 +1646,7 @@ def run_episode(
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
     """
     fault_list = _validate(seed, fault)
-    noise, place, drop, rng_agv, fail = _spawn_streams(seed)
+    noise, place, drop, rng_agv, fail, eta = _spawn_streams(seed)
     specs = _materialize(place, fault_list)
 
     var_dict = _resolve_variant(variant)
@@ -1606,10 +1686,12 @@ def run_episode(
         "place": place,
         "drop": drop,
         "fail": fail,
+        "eta": eta,  # stored for the W3 in-step hook (5 sites read shared['eta'])
         "enable_bd": enable_natural_breakdown,
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
         "tput": [[0] * T for _ in range(N_MACHINES)],
+        "currents": [[0.0] * T for _ in range(N_MACHINES)],  # W3 in-step hook
         "events": [],
         "agv_waits": [],
         "parts": [],
@@ -1825,13 +1907,16 @@ def run_episode(
         "kit_C": len(kit["C"]),
     }
 
+    flow_stats["energy"] = _energy_header(
+        shared["currents"], shared["flow"]["packaged"]
+    )
     return {
         "seed": seed,
         "T": T,
         "cal_win": CAL_WIN,
-        # Topology-A schema v2 version binding (MINIPRO-33): the canonical
+        # Topology-A schema v4 version binding (MINIPRO-22 union):
         # replay payload INCLUDES these keys by construction, so version
-        # tampering mismatches the digest. v1 records are non-comparable.
+        # tampering mismatches the digest. v1/v2/v3 records are non-comparable.
         "schema_version": TWIN_SCHEMA,
         "code_version": CODE_VERSION,
         # Table 3.1 roster snapshot (SIM_SPEC §4.4): per-machine operating
@@ -1839,6 +1924,7 @@ def run_episode(
         "machines": {name: dict(cfg) for name, cfg in MACHINES.items()},
         "obs": shared["obs"],
         "states": shared["states"],
+        "currents": shared["currents"],
         "buffers": buf_rows,
         "throughput": shared["tput"],
         "events": shared["events"],
@@ -2220,9 +2306,10 @@ def replay_digest(record):
     subgraph obs} (the record's partition-scoped subgraph obs plus its
     version binding), sorted keys, wall/clock fields excluded via
     _WALLCLOCK_KEYS. schema_version/code_version are INCLUDED by
-    construction: a tampered code_version under schema v2 mismatches the
+    construction: a tampered code_version under schema v4 mismatches the
     digest, while any other schema_version (v1 32-machine records,
-    unversioned records) is strict-rejected as non-comparable.
+    v2 unstratified, v3 pre-union, unversioned records) is strict-rejected
+    as non-comparable.
     Named digest (not hash) so the T1
     no-bare-default_rng/no-hash-seeding source grep stays green.
 

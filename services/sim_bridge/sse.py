@@ -23,7 +23,7 @@ def format_sse(event: str, data: dict[str, Any]) -> str:
 
 
 def build_header(episode_id: str, record: dict[str, Any], digest: str) -> dict[str, Any]:
-    """Episode-final header: sbuf/flow finals + c7tail_final + digest."""
+    """Episode-final header: sbuf/flow finals + c7tail_final + energy + digest."""
     return {
         "episode_id": episode_id,
         "seed": record["seed"],
@@ -32,6 +32,7 @@ def build_header(episode_id: str, record: dict[str, Any], digest: str) -> dict[s
         "sbuf_stats": record["sbuf_stats"],
         "flow_stats": record["flow_stats"],
         "c7tail_final": record["flow_stats"]["c7tail"],
+        "energy": record["flow_stats"]["energy"],
         "faults": record["faults"],
     }
 
