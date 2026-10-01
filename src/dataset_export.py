@@ -1,19 +1,22 @@
-"""v3 dataset export module with deterministic Parquet export and flag-day schema-v3 binding.
+"""Dataset export module with deterministic Parquet export and schema binding.
 
 Normative requirements:
 1. Deterministic Parquet dataset export:
    - Sorted column keys.
    - Fixed row group and creator metadata (no non-deterministic timestamps or random UUIDs).
    - Fixed compression ('snappy').
+   - Hardened Parquet writer (version='2.6', coerce_timestamps='us', use_dictionary=False).
    - Size cap check.
    - Writes to artifacts/ (gitignored).
 2. Generates window_config.json:
    - Owned-field list (stratification keys, window size CAL_WIN=120, T=300, etc.).
 3. Generates ingestion metadata (metadata.json and ingestion_metadata.json):
-   - Dataset hash, code_version, schema_version (3), seed list, funnel summary.
+   - Dataset hash, code_version, schema_version (3 or 4), pyarrow_version, seed list, funnel summary.
 4. ABSOLUTE RULE: NO scaler.pkl! Must NOT fit or write any scaler at export time (leakage law).
-5. Backward compatibility: v2 reader function load_v2_dataset loudly raises ValueError
-   mentioning v3 when trying to read v3 records or datasets.
+5. Flag-day readers:
+   - v2 reader function load_v2_dataset loudly raises ValueError when encountering v3 or v4 datasets.
+   - v3 reader function load_v3_dataset loudly raises ValueError when encountering v4 datasets.
+   - v4 reader function load_v4_dataset validates schema_version == 4.
 """
 
 from __future__ import annotations
@@ -50,15 +53,18 @@ OWNED_STRAT_FIELDS = [
 DEFAULT_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
-def build_window_config() -> dict[str, Any]:
+def build_window_config(schema_version: int | None = None) -> dict[str, Any]:
     """Return dictionary of window and schema configuration constants."""
+    effective_schema = (
+        schema_version if schema_version is not None else config.TWIN_SCHEMA
+    )
     return {
         "cal_win": config.CAL_WIN,
         "T": config.T,
         "warmup_steps": config.WARMUP_STEPS,
         "n_machines": config.N_MACHINES,
         "n_buffers": config.N_BUFFERS,
-        "schema_version": config.TWIN_SCHEMA,
+        "schema_version": effective_schema,
         "code_version": config.CODE_VERSION,
         "owned_fields": list(OWNED_STRAT_FIELDS),
         "ownership": {
@@ -78,8 +84,10 @@ def export(
     compression: str = "snappy",
     row_group_size: int = 1024,
     enable_natural_breakdown: bool = True,
+    include_currents: bool = False,
+    schema_version: int | None = None,
 ) -> dict[str, Any]:
-    """Export deterministic v3 Parquet dataset and associated metadata.
+    """Export deterministic Parquet dataset and associated metadata.
 
     Guarantees:
     - Sorted column keys across all rows.
@@ -125,6 +133,10 @@ def export(
         hist_str = json.dumps(strat.get("state_histogram", {}), sort_keys=True)
         fc_str = json.dumps(fc, sort_keys=True)
 
+        effective_schema_version = int(
+            schema_version if schema_version is not None else rec["schema_version"]
+        )
+
         for t_step in range(config.T):
             row: dict[str, Any] = {
                 "episode_id": int(s),
@@ -132,7 +144,7 @@ def export(
                 "t": int(t_step),
                 "cal_win": int(rec["cal_win"]),
                 "T": int(rec["T"]),
-                "schema_version": int(rec["schema_version"]),
+                "schema_version": effective_schema_version,
                 "code_version": str(rec["code_version"]),
                 # Stratification keys (M0.2e)
                 "wear_endpoint": float(strat["wear_endpoint"]),
@@ -157,6 +169,8 @@ def export(
                 row[f"state_{m_name}"] = str(rec["states"][m_idx][t_step])
                 row[f"buffer_{m_name}"] = int(rec["buffers"][m_idx][t_step])
                 row[f"tput_{m_name}"] = int(rec["throughput"][m_idx][t_step])
+                if include_currents:
+                    row[f"current_{m_name}"] = float(rec["currents"][m_idx][t_step])
 
             rows.append(row)
 
@@ -172,6 +186,9 @@ def export(
         str(out_path),
         compression=compression,
         row_group_size=row_group_size,
+        version="2.6",
+        coerce_timestamps="us",
+        use_dictionary=False,
     )
 
     # Size cap check
@@ -210,7 +227,11 @@ def export(
     }
 
     # Write window_config.json
-    window_cfg = build_window_config()
+    window_cfg = build_window_config(
+        schema_version=effective_schema_version
+        if schema_version is not None
+        else config.TWIN_SCHEMA
+    )
     window_cfg_path = out_dir / "window_config.json"
     with open(window_cfg_path, "w", encoding="utf-8") as f:
         json.dump(window_cfg, f, indent=2, sort_keys=True)
@@ -220,8 +241,11 @@ def export(
         "code_version": config.CODE_VERSION,
         "dataset_hash": dataset_hash,
         "funnel_summary": funnel_summary,
+        "pyarrow_version": pa.__version__,
         "row_count": len(df),
-        "schema_version": config.TWIN_SCHEMA,
+        "schema_version": effective_schema_version
+        if schema_version is not None
+        else config.TWIN_SCHEMA,
         "seed_list": list(target_seeds),
         "seeds": list(target_seeds),
         "total_episodes": len(target_seeds),
@@ -314,19 +338,180 @@ def export_contract_dataset(
     )
 
 
-def load_dataset(path: str | pathlib.Path) -> pd.DataFrame:
-    """Load v3 parquet dataset and validate schema version."""
-    path = pathlib.Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Dataset path does not exist: {path}")
+def export_v4(
+    seed: int | None = None,
+    seeds: list[int] | None = None,
+    out: str | pathlib.Path = "artifacts/dataset_v4.parquet",
+    faults: list[dict[str, Any]] | dict[Any, Any] | None = None,
+    variant: str = "baseline",
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    compression: str = "snappy",
+    row_group_size: int = 1024,
+    enable_natural_breakdown: bool = True,
+) -> dict[str, Any]:
+    """Export deterministic v4 Parquet dataset and associated metadata.
 
-    df = pd.read_parquet(path)
+    Guarantees:
+    - Pinned channels for all 26 machines: obs_*, state_*, buffer_*, tput_*, current_*.
+    - Pinned stratification keys in REQUIRED_STRAT_FIELDS.
+    - Fault target labels: family, mode, root_id.
+    - schema_version == 4 everywhere.
+    - PyArrow version recorded in ingestion metadata.
+    - Hardened Parquet writer (version='2.6', coerce_timestamps='us', use_dictionary=False).
+    - ZERO scaler.pkl fitted or written (TF1 leakage law).
+    """
+    return export(
+        seed=seed,
+        seeds=seeds,
+        out=out,
+        faults=faults,
+        variant=variant,
+        max_bytes=max_bytes,
+        compression=compression,
+        row_group_size=row_group_size,
+        enable_natural_breakdown=enable_natural_breakdown,
+        include_currents=True,
+        schema_version=4,
+    )
+
+
+def export_contract_dataset_v4(
+    out_dir: str | pathlib.Path = "artifacts",
+    seeds: list[int] | None = None,
+    out_name: str = "dataset_v4.parquet",
+) -> dict[str, Any]:
+    """Export a multi-episode v4 dataset with balanced stratification keys for contract testing."""
+    out_dir_path = pathlib.Path(out_dir)
+    out_parquet = out_dir_path / out_name
+
+    target_seeds = (
+        list(seeds) if seeds is not None else [7, 11, 13, 42, 777, 1234, 999, 2026]
+    )
+
+    fault_drift = {
+        "id": "F-21",
+        "class": "drift",
+        "origin": "B2",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 5.2,
+    }
+    fault_pulse = {
+        "id": "F-06",
+        "class": _PULSE,
+        "origin": "A0",
+        "t0": 150,
+        "dur": 10,
+        "mag_sigma": 5.0,
+    }
+    fault_delay = {
+        "id": "F-A0-delay",
+        "class": "delay",
+        "origin": "A0",
+        "t0": 150,
+        "dur": 12,
+        "extra": {"d": 4},
+    }
+
+    fault_map: dict[int, Any] = {}
+    if len(target_seeds) >= 8:
+        fault_map[target_seeds[2]] = fault_drift
+        fault_map[target_seeds[3]] = fault_drift
+        fault_map[target_seeds[4]] = fault_pulse
+        fault_map[target_seeds[5]] = fault_pulse
+        fault_map[target_seeds[6]] = fault_delay
+        fault_map[target_seeds[7]] = fault_delay
+    elif len(target_seeds) >= 4:
+        fault_map[target_seeds[1]] = fault_drift
+        fault_map[target_seeds[2]] = fault_pulse
+        fault_map[target_seeds[3]] = fault_delay
+
+    return export_v4(
+        seeds=target_seeds,
+        out=out_parquet,
+        faults=fault_map,
+    )
+
+
+def load_dataset(
+    path: str | pathlib.Path,
+    schema_version: int | None = None,
+) -> pd.DataFrame:
+    """Load parquet dataset and validate schema version."""
+    p = pathlib.Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Dataset path does not exist: {p}")
+
+    df = pd.read_parquet(p)
     if "schema_version" in df.columns:
         unique_vers = df["schema_version"].unique()
-        if any(v < 3 for v in unique_vers):
+        if schema_version is not None:
+            if any(v != schema_version for v in unique_vers):
+                raise ValueError(
+                    f"Dataset reader rejects dataset: found schema_version={unique_vers.tolist()}, want {schema_version}"
+                )
+        elif any(v < 3 for v in unique_vers):
             raise ValueError(
                 f"v3 reader rejects legacy dataset: found schema_version={unique_vers.tolist()}, want >= 3"
             )
+    return df
+
+
+def load_v3_dataset(source: Any) -> pd.DataFrame:
+    """Legacy v3 reader function.
+
+    Loudly raises ValueError when attempting to read a v4 dataset (flag-day rejection).
+    """
+    if isinstance(source, dict):
+        schema_ver = source.get("schema_version")
+        if schema_ver is not None and schema_ver >= 4:
+            raise ValueError(
+                f"v3 reader rejects v4 dataset: found schema_version={schema_ver}, want 3"
+            )
+        if schema_ver is not None and schema_ver < 3:
+            raise ValueError(
+                f"v3 reader rejects legacy dataset: found schema_version={schema_ver}, want 3"
+            )
+        return source  # type: ignore[return-value]
+
+    if isinstance(source, pd.DataFrame):
+        df = source
+    else:
+        path = pathlib.Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset path does not exist: {path}")
+        df = pd.read_parquet(path)
+
+    if "schema_version" in df.columns:
+        unique_vers = df["schema_version"].unique()
+        if any(v >= 4 for v in unique_vers):
+            raise ValueError(
+                f"v3 reader rejects v4 dataset: found schema_version={unique_vers.tolist()}, want 3"
+            )
+        if any(v < 3 for v in unique_vers):
+            raise ValueError(
+                f"v3 reader rejects legacy dataset: found schema_version={unique_vers.tolist()}, want 3"
+            )
+    return df
+
+
+def load_v4_dataset(source: Any) -> pd.DataFrame:
+    """Load v4 parquet dataset and validate schema version == 4."""
+    if isinstance(source, pd.DataFrame):
+        df = source
+    else:
+        path = pathlib.Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset path does not exist: {path}")
+        df = pd.read_parquet(path)
+
+    if "schema_version" not in df.columns:
+        raise ValueError("Dataset contract violation: 'schema_version' column missing")
+    unique_vers = df["schema_version"].unique()
+    if any(v != 4 for v in unique_vers):
+        raise ValueError(
+            f"v4 reader rejects non-v4 dataset: found schema_version={unique_vers.tolist()}, want 4"
+        )
     return df
 
 
@@ -375,7 +560,7 @@ def load_v2_dataset(source: Any) -> Any:
 def main() -> None:
     """CLI entrypoint for dataset export."""
     parser = argparse.ArgumentParser(
-        description="Export deterministic v3 Parquet dataset."
+        description="Export deterministic Parquet dataset (v3/v4)."
     )
     parser.add_argument("--seed", type=int, default=None, help="Single seed to export")
     parser.add_argument(
@@ -384,15 +569,41 @@ def main() -> None:
     parser.add_argument(
         "--out",
         type=str,
-        default="artifacts/dataset_v3.parquet",
+        default=None,
         help="Output parquet path",
     )
     parser.add_argument(
         "--variant", type=str, default="baseline", help="Variant identifier"
     )
+    parser.add_argument(
+        "--v4",
+        action="store_true",
+        help="Export schema v4 dataset with current channels",
+    )
+    parser.add_argument(
+        "--schema-version",
+        type=int,
+        default=None,
+        choices=[3, 4],
+        help="Schema version to export (3 or 4)",
+    )
     args = parser.parse_args()
 
-    res = export(seed=args.seed, seeds=args.seeds, out=args.out, variant=args.variant)
+    is_v4 = (
+        args.v4
+        or (args.schema_version == 4)
+        or (args.out is not None and "v4" in args.out)
+    )
+    if is_v4:
+        export_fn = export_v4
+        out_path = args.out if args.out is not None else "artifacts/dataset_v4.parquet"
+    else:
+        export_fn = export
+        out_path = args.out if args.out is not None else "artifacts/dataset_v3.parquet"
+
+    res = export_fn(
+        seed=args.seed, seeds=args.seeds, out=out_path, variant=args.variant
+    )
     print(
         f"Exported {res['row_count']} rows to {res['out']} (hash: {res['dataset_hash'][:16]}...)"
     )

@@ -449,7 +449,9 @@ def test_dataset_v4_pinned_columns_roster(tmp_path):
 
     # Verify channel column counts
     obs_cols = [c for c in df.columns if c.startswith("obs_")]
-    state_cols = [c for c in df.columns if c.startswith("state_")]
+    state_cols = [
+        c for c in df.columns if c.startswith("state_") and c != "state_histogram"
+    ]
     buffer_cols = [c for c in df.columns if c.startswith("buffer_")]
     tput_cols = [c for c in df.columns if c.startswith("tput_")]
     current_cols = [c for c in df.columns if c.startswith("current_")]
