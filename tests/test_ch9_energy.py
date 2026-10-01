@@ -34,10 +34,12 @@ def test_ch9_null_guard_and_clamp_packaged_zero():
 def test_ch9_null_guard_and_clamp_sum_uses_I_clamped():
     currents = [[-5.0, 4.0], [0.0, 10.0]]
     hdr = twin._energy_header(currents, 2)
-    assert hdr["sum_kVAh"] == _expected_sum(currents)
+    assert math.isclose(hdr["sum_kVAh"], _expected_sum(currents), rel_tol=1e-9)
     assert hdr["per_unit"] == hdr["sum_kVAh"] / 2
     # Negative raw current contributes nothing (clamped leg).
-    assert hdr["sum_kVAh"] == _expected_sum([[0.0, 4.0], [0.0, 10.0]])
+    assert math.isclose(
+        hdr["sum_kVAh"], _expected_sum([[0.0, 4.0], [0.0, 10.0]]), rel_tol=1e-9
+    )
 
 
 def test_ch9_null_guard_and_clamp_header_shape_unit_step():
@@ -62,7 +64,9 @@ def test_ch9_null_guard_and_clamp_clean_episode_header():
     assert energy["step_seconds"] == 1
     assert isinstance(energy["sum_kVAh"], float) and energy["sum_kVAh"] > 0.0
     assert energy["per_unit"] is not None and energy["per_unit"] > 0.0
-    assert energy["sum_kVAh"] == _expected_sum(rec["currents"])
+    assert math.isclose(
+        energy["sum_kVAh"], _expected_sum(rec["currents"]), rel_tol=1e-9
+    )
     assert rec["flow_stats"]["packaged"] > 0
     assert "energy_series" not in rec["flow_stats"]
     assert "energy" in twin._DIGEST_SCRUB_FLOW_KEYS

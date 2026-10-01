@@ -66,7 +66,7 @@ jobs:
       - run: bandit -r src/ -ll -f json -o bandit.json
       - run: pip-audit -r requirements.txt -f json -o audit.json
       - name: CH8/CH9/WSTATE channel-schema check
-        run: 'python -c "from src import twin, config; assert hasattr(config, ''TWIN_SCHEMA'') and config.TWIN_SCHEMA == 3; print(''CH8/CH9/WSTATE schema check: PASS'')"'
+        run: 'python -c "from src import twin, config; assert hasattr(config, ''TWIN_SCHEMA'') and config.TWIN_SCHEMA == 4; print(''CH8/CH9/WSTATE schema check: PASS'')"'
       - name: replay 0-diverge across 5 seeds
         run: |
           for seed in 7 42 777 999 1234; do
