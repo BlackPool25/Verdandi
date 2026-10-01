@@ -34,6 +34,8 @@ from sklearn.preprocessing import StandardScaler
 
 from src import dataset_export
 
+pytestmark = pytest.mark.k1
+
 BANNED_JOIN_OPS = frozenset({"merge", "join", "concat"})
 
 
