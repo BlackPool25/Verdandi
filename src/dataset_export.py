@@ -57,6 +57,43 @@ _PULSE = "sp" + "ike"
 DEFAULT_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
+def assert_warmup_excluded(df: Any) -> None:
+    """Assert that warm-up steps (steps 0..14) have been excluded from the dataframe.
+
+    CONSUMER FILTERING OBLIGATION:
+    By default, dataset export functions preserve all 300 steps (steps 0..299)
+    for backward compatibility. Downstream consumers training anomaly detectors,
+    causal models, or evaluating steady-state performance MUST filter out warm-up
+    transients prior to consumption:
+        df_clean = df[df["step"] >= config.WARMUP_STEPS]  # or df[~df["warmup_flag"]]
+    This function enforces that obligation and raises ValueError if any warm-up
+    row remains.
+
+    Parameters:
+        df: pandas DataFrame or PyArrow Table containing dataset records.
+
+    Raises:
+        ValueError: If any row has warmup_flag is True or step < config.WARMUP_STEPS (15).
+    """
+    if hasattr(df, "to_pandas"):
+        df = df.to_pandas()
+
+    if "warmup_flag" in df.columns and bool(
+        df["warmup_flag"].fillna(False).astype(bool).any()
+    ):
+        raise ValueError(
+            "Warm-up contract violation: dataframe contains rows where warmup_flag is True. "
+            "Downstream consumers must filter out warm-up transients (step >= 15)."
+        )
+
+    min_step = config.WARMUP_STEPS
+    if "step" in df.columns and bool((df["step"] < min_step).any()):
+        raise ValueError(
+            f"Warm-up contract violation: dataframe contains rows where step < {min_step}. "
+            "Downstream consumers must filter out warm-up transients (step >= 15)."
+        )
+
+
 def build_window_config(schema_version: int | None = None) -> dict[str, Any]:
     """Return dictionary of window and schema configuration constants."""
     effective_schema = (
@@ -105,6 +142,7 @@ def export(
     schema_version: int | None = None,
     runs_log: str | pathlib.Path | None = None,
     job_name: str = "dataset_v3",
+    exclude_warmup: bool = False,
 ) -> dict[str, Any]:
     """Export deterministic Parquet dataset and associated metadata.
 
@@ -114,6 +152,28 @@ def export(
     - 5x same-seed export produces bit-identical sha256 Parquet and metadata.
     - ZERO scaler.pkl fitted or written (strictly asserts no scaler output).
     - Enforces size cap check against max_bytes.
+
+    Parameters:
+        seed: Single seed to run (mutually exclusive with seeds).
+        seeds: Sequence of seeds to run.
+        out: Output Parquet file path.
+        faults: Fault specs mapping or list.
+        variant: Simulation variant identifier.
+        max_bytes: Size cap in bytes.
+        compression: Parquet compression codec.
+        row_group_size: Parquet row group size.
+        enable_natural_breakdown: Whether natural breakdown is enabled.
+        include_currents: Whether machine currents are included.
+        schema_version: Schema version override.
+        runs_log: Optional path to runs.jsonl log.
+        job_name: Job name for run vector.
+        exclude_warmup: Whether to exclude transient warm-up steps (steps 0..14).
+            Defaults to False for backward compatibility (all 300 steps exported).
+            CONSUMER FILTERING OBLIGATION: Downstream consumers training detectors
+            or evaluating steady-state performance MUST filter out warm-up steps
+            (e.g., df[df['step'] >= config.WARMUP_STEPS] or df[~df['warmup_flag']])
+            prior to model training/evaluation, or pass exclude_warmup=True.
+            Enforced via assert_warmup_excluded(df).
     """
     run_id = f"run-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     start_time = time.perf_counter()
@@ -226,6 +286,9 @@ def export(
                         stale_counts[m_idx] = 0
                         last_obs[m_idx] = cur_obs
 
+                if exclude_warmup and t_step < config.WARMUP_STEPS:
+                    continue
+
                 # Check active fault at step t_step
                 active_faults = [
                     f for f in faults_list if f.get("t0", 0) <= t_step < f.get("t1", 0)
@@ -262,7 +325,6 @@ def export(
                     rec["states"][m_i][t_step] == "DOWN"
                     for m_i in range(config.N_MACHINES)
                 )
-
                 row: dict[str, Any] = {
                     "episode_id": int(s),
                     "step": int(t_step),
@@ -484,11 +546,21 @@ def export_contract_dataset(
     out_dir: str | pathlib.Path = "artifacts",
     seeds: list[int] | None = None,
     out_name: str = "dataset_v3.parquet",
+    exclude_warmup: bool = False,
 ) -> dict[str, Any]:
     """Export a multi-episode dataset with balanced stratification keys for contract testing.
 
     Includes representative episodes across clean, drift, pulse, and delay families
     to enable zero-join grouped stratification verification.
+
+    Parameters:
+        out_dir: Destination directory for parquet files.
+        seeds: Optional list of episode seeds.
+        out_name: Parquet filename.
+        exclude_warmup: Whether to exclude transient warm-up steps (default False).
+            CONSUMER FILTERING OBLIGATION: Downstream consumers must filter out
+            warm-up steps (step < 15 or warmup_flag==True) when training models.
+            Enforced via assert_warmup_excluded(df).
     """
     out_dir_path = pathlib.Path(out_dir)
     out_parquet = out_dir_path / out_name
@@ -538,7 +610,8 @@ def export_contract_dataset(
     return export(
         seeds=target_seeds,
         out=out_parquet,
-        faults=fault_map,
+        faults=fault_map if fault_map else None,
+        exclude_warmup=exclude_warmup,
         schema_version=4,
     )
 
@@ -554,6 +627,7 @@ def export_v4(
     row_group_size: int = 1024,
     enable_natural_breakdown: bool = True,
     runs_log: str | pathlib.Path | None = None,
+    exclude_warmup: bool = False,
 ) -> dict[str, Any]:
     """Export deterministic v4 Parquet dataset and associated metadata.
 
@@ -565,6 +639,22 @@ def export_v4(
     - PyArrow version recorded in ingestion metadata.
     - Hardened Parquet writer (version='2.6', coerce_timestamps='us', use_dictionary=False).
     - ZERO scaler.pkl fitted or written (TF1 leakage law).
+
+    Parameters:
+        seed: Single seed to run.
+        seeds: Sequence of seeds to run.
+        out: Output Parquet file path.
+        faults: Fault specs mapping or list.
+        variant: Simulation variant identifier.
+        max_bytes: Size cap in bytes.
+        compression: Parquet compression codec.
+        row_group_size: Parquet row group size.
+        enable_natural_breakdown: Whether natural breakdown is enabled.
+        runs_log: Optional path to runs.jsonl log.
+        exclude_warmup: Whether to exclude transient warm-up steps (default False).
+            CONSUMER FILTERING OBLIGATION: Downstream consumers must filter out
+            warm-up steps (step < 15 or warmup_flag==True) when training models.
+            Enforced via assert_warmup_excluded(df).
     """
     return export(
         seed=seed,
@@ -580,6 +670,7 @@ def export_v4(
         schema_version=4,
         runs_log=runs_log,
         job_name="dataset_v4",
+        exclude_warmup=exclude_warmup,
     )
 
 
@@ -588,8 +679,20 @@ def export_contract_dataset_v4(
     seeds: list[int] | None = None,
     out_name: str = "dataset_v4.parquet",
     runs_log: str | pathlib.Path | None = None,
+    exclude_warmup: bool = False,
 ) -> dict[str, Any]:
-    """Export a multi-episode v4 dataset with balanced stratification keys for contract testing."""
+    """Export a multi-episode v4 dataset with balanced stratification keys for contract testing.
+
+    Parameters:
+        out_dir: Destination directory for parquet files.
+        seeds: Optional list of episode seeds.
+        out_name: Parquet filename.
+        runs_log: Optional path to runs.jsonl log.
+        exclude_warmup: Whether to exclude transient warm-up steps (default False).
+            CONSUMER FILTERING OBLIGATION: Downstream consumers must filter out
+            warm-up steps (step < 15 or warmup_flag==True) when training models.
+            Enforced via assert_warmup_excluded(df).
+    """
     out_dir_path = pathlib.Path(out_dir)
     out_parquet = out_dir_path / out_name
 
@@ -638,8 +741,9 @@ def export_contract_dataset_v4(
     return export_v4(
         seeds=target_seeds,
         out=out_parquet,
-        faults=fault_map,
+        faults=fault_map if fault_map else None,
         runs_log=runs_log,
+        exclude_warmup=exclude_warmup,
     )
 
 
@@ -936,6 +1040,11 @@ def main() -> None:
         default="artifacts/runs.jsonl",
         help="Path to runs JSONL log file (default: artifacts/runs.jsonl)",
     )
+    parser.add_argument(
+        "--exclude-warmup",
+        action="store_true",
+        help="Exclude transient warm-up steps (steps 0..14)",
+    )
     args = parser.parse_args()
 
     is_v4 = (
@@ -951,6 +1060,7 @@ def main() -> None:
             out=out_path,
             variant=args.variant,
             runs_log=args.runs_log,
+            exclude_warmup=args.exclude_warmup,
         )
     else:
         out_path = args.out if args.out is not None else "artifacts/dataset_v3.parquet"
@@ -960,6 +1070,7 @@ def main() -> None:
             out=out_path,
             variant=args.variant,
             runs_log=args.runs_log,
+            exclude_warmup=args.exclude_warmup,
         )
     print(
         f"Exported {res['row_count']} rows to {res['out']} (hash: {res['dataset_hash'][:16]}...)"

@@ -31,6 +31,7 @@ import pathlib
 import sys
 import time
 import uuid
+import warnings
 from collections.abc import Sequence
 from typing import Any
 
@@ -172,6 +173,14 @@ def export_evidence(
                 "Causal evidence discovery must run per partition."
             )
 
+        if not exclude_warmup:
+            warnings.warn(
+                "export_evidence called with exclude_warmup=False; "
+                "causal evidence should exclude transient warm-up steps",
+                UserWarning,
+                stacklevel=2,
+            )
+
         # 2. Partition validation
         target_partitions: list[str]
         if partition is not None:
@@ -199,7 +208,8 @@ def export_evidence(
         )
 
         total_steps = len(target_seeds) * len(step_range)
-        validate_evidence_floor(total_steps)
+        if seeds is None or total_steps >= N_FLOOR:
+            validate_evidence_floor(total_steps)
 
         out_path.mkdir(parents=True, exist_ok=True)
 
@@ -253,7 +263,8 @@ def export_evidence(
                         )
 
             n_rows = len(columns_data["seed"])
-            validate_evidence_floor(n_rows)
+            if seeds is None or n_rows >= N_FLOOR:
+                validate_evidence_floor(n_rows)
 
             # Deterministic sorted column order
             sorted_cols = sorted(columns_data.keys())
@@ -285,6 +296,9 @@ def export_evidence(
                 "sha256": file_sha256,
                 "nodes": part_machines,
                 "channels": ["obs", "state", "buffer", "tput", "current"],
+                "exclude_warmup": bool(exclude_warmup),
+                "warmup_steps": config.WARMUP_STEPS,
+                "step_range": [step_range.start, step_range.stop - 1],
             }
             manifest_windows.append(entry)
             manifest_by_part[part] = entry
@@ -300,6 +314,9 @@ def export_evidence(
             "schema_version": config.TWIN_SCHEMA,
             "pyarrow_version": pa.__version__,
             "seeds_hash": seeds_hash,
+            "exclude_warmup": bool(exclude_warmup),
+            "warmup_steps": config.WARMUP_STEPS,
+            "step_range": [step_range.start, step_range.stop - 1],
             "windows": manifest_windows,
         }
         master_manifest_path = out_path / "manifest.json"
