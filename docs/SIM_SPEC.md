@@ -282,9 +282,9 @@ per the oracle table below.
 
 | Class | Mechanism (origin machine) | Params | Representative machines (mandatory) | Downstream observable (via flow, not echo) |
 |---|---|---|---|---|
-| spike | `+mag·σ` rectangular pulse on origin obs | mag 4–7σ, dur 8–25 | A0(feed), A2(process), B2(process), C6(process), ASM1, RWK0 | degraded part flag travels; brief buffer dip downstream |
-| drift | ramp to `mag·σ` on origin obs | mag 4–7σ end, dur 8–25 | B2 (F-21), A7, C2, ASM0 | growing STARVED gaps downstream as cycle output degrades |
-| bias | constant `+mag·σ` on origin obs | mag 4–7σ, dur 8–25 | A7 (F-22), B8, ASM2 | sustained offset + buffer level shift |
+| spike | `+mag·σ` rectangular pulse on origin obs | mag 1–3 incipient (variant) / 4–7 caricature (baseline) σ, dur 8–25 | A0(feed), A2(process), B2(process), C6(process), ASM1, RWK0 | degraded part flag travels; brief buffer dip downstream |
+| drift | ramp to `mag·σ` on origin obs | mag 1–3 incipient (variant) / 4–7 caricature (baseline) σ end, dur 8–25 | B2 (F-21), A7, C2, ASM0 | growing STARVED gaps downstream as cycle output degrades |
+| bias | constant `+mag·σ` on origin obs | mag 1–3 incipient (variant) / 4–7 caricature (baseline) σ, dur 8–25 | A7 (F-22), B8, ASM2 | sustained offset + buffer level shift |
 | delay (slow-cycle) | origin `cycle_steps += d`, `d ∈ [3,6]` per step for window | dur 8–25 | C2 (F-23), A2, B2, ASM0, RWK0 | upstream BLOCKING cascade, downstream STARVING; arrival shift = `nominal + d` per hop |
 | loss (drops) | 10–30% observation drops at origin + carried-part flag drops, clean-median imputation before detection (cal intact) | dur 8–25 | B7P (F-24), A8, C6, ASM1 | thinned signal; flip rises, F1 holds |
 | breakdown | force state DOWN for window (`MTTR × mttr_mult`, `mult ∈ [1,3]`) | dur 8–25 | B2 (F-25), A7, C6, ASM1 | hard BLOCKED upstream + STARVED downstream; throughput zero at origin |
@@ -310,6 +310,10 @@ intake cap 25; full intake holds ASM1 BLOCKED (no loss).
 
 M0-era restriction (delay/loss origins M1+ only, M0 base-classes only) is
 superseded: every class above lists its own mandatory origins.
+
+Rate-budget constraints enforce that fault duration cannot overwhelm an episode. The rate budget enforces a maximum fault occupancy (nominally 8% or 14.4 steps) evaluated over the 180-step scored interval (steps 120–300, where steps 0–120 represent the calibration window). For breakdown faults, the mechanism forces an extended-down operational state whose actual downtime spans `ceil(dur * mttr_mult)` steps rather than nominal duration alone; rate budget checking calculates union-over-t of occupied time per origin machine across multiple fault windows to prevent cumulative over-saturation. Enforcement is split between builder capping (`cap_budget=True`, bounding `dur <= 14` and `dur * mttr_mult <= 14`) and runtime verification (`check_rate_budget`). Oracle representative pin F-25 (breakdown on B2 with nominal dur=12 and mttr_mult=2.0 yielding 24 steps > 14.4) is explicitly exempted to preserve exact baseline oracle comparability.
+
+Warm-up isolation guarantees that startup dynamics do not leak into downstream evaluation or training datasets. The initial 15 simulation steps (`WARMUP_STEPS = 15`) contain non-stationary startup transients. In episode outputs, warm-up keys are cleanly distinguished: `warmup_pool` and `transient_pool` are maintained as distinct objects, with `transient_pool` providing a full-channel clean-transient baseline extracted under unperturbed conditions. Downstream datasets enforce a strict filtering contract via `dataset_export.assert_warmup_excluded`, ensuring all exported rows satisfy `step >= 15` and `warmup_flag == False`. Export provenance is recorded in `manifest.json` with `exclude_warmup=True` and `warmup_steps=15` metadata, guaranteeing that calibration, feature scaling, and model training piles operate exclusively on post-transient steady-state operations.
 
 ## 6. RNG discipline (normative, K4)
 

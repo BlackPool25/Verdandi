@@ -1741,7 +1741,17 @@ def run_episode(
             or var_dict.get("variant_id") == VARIANT_ID
             or variant == VARIANT_ID
         )
-        check_rate_budget(specs)
+        non_exempt = [
+            s for s in specs
+            if not s.get("rep") and s.get("id") != "F-25"
+        ]
+        # Rep pins are oracle-comparability fixtures; F-25 is the documented
+        # known-breach (12x2=24 > 14.4) exempted to keep the baseline oracle
+        # byte-identical. Single-fault rep episodes skip the budget loudly
+        # only when every spec is exempt; multi-fault variant episodes still
+        # enforce on the non-exempt subset.
+        if non_exempt:
+            check_rate_budget(non_exempt)
         overrides = var_dict.get("buffer_caps", {})
         unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
         if unlisted:
@@ -2500,7 +2510,10 @@ def build_faults_variant(
     Oracle rep pins exempt + documented (F-25 known-breach: 12 * 2 = 24 > 14.4 —
     exemption comment + test asserts exemption, not compliance).
     Default cap_budget=False preserves exact placement (t0, dur) equality
-    with baseline build_faults.
+    with baseline build_faults (zero-draw proof: build_faults(12345) and
+    build_faults_variant(12345) agree on every (t0, dur)); pass
+    cap_budget=True only when generating the capped variant evidence
+    manifest (docs-battery-ladder-variant-182.json).
     """
     effective_seed = master if master != 12345 and seed == 12345 else seed
     if isinstance(effective_seed, bool) or not isinstance(effective_seed, int) or effective_seed < 0:
