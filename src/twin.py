@@ -66,8 +66,13 @@ from src.config import (
     FUNNEL_VARIANTS,
     I_IDLE_RATIO,
     INSPECT_DELAY_STEPS,
+    LOW_RUNG_DELAY_D,
+    LOW_RUNG_DROP_RATE,
+    LOW_RUNG_MTTR_MULT,
+    LOW_RUNG_REJECT_RATE,
     MACHINE_INDEX,
     MACHINES,
+    MAG_LADDER,
     N_BUFFERS,
     N_MACHINES,
     N_STREAMS,
@@ -2268,6 +2273,163 @@ def build_faults(seed: int = 12345) -> list[dict]:
                     "mag_sigma": mag,
                     "extra": extra,
                     "rep": False,
+                }
+            )
+    return rows
+
+
+def _rung_for(seed: int, machine: str, cls: str) -> str:
+    """Zero-draw hash rung assignment: 'incipient' | 'caricature'.
+
+    Deterministic hash rung assignment using sha256(f"{seed}:{machine}:{cls}").
+    Rep rows (fixed dict _ORACLE_REP keys) ALWAYS caricature; share counted
+    over 175 randomizable rows (182 - 7).
+    """
+    fixed = {(r["origin"], r["class"]) for r in _ORACLE_REP}
+    if (machine, cls) in fixed:
+        return "caricature"
+    digest = hashlib.sha256(f"{seed}:{machine}:{cls}".encode()).hexdigest()
+    return "incipient" if int(digest, 16) % 100 < 20 else "caricature"
+
+
+def build_faults_variant(
+    seed: int = 12345,
+    master: int = 12345,
+    cap_budget: bool = False,
+) -> list[dict]:
+    """Build the variant deterministic fault manifest with magnitude ladder.
+
+    Reuses the exact uniform draw count and order from rng_place
+    (placement/dur/t0/extra order bit-identical to build_faults).
+    Remaps mag value using the uniform u already drawn:
+      * incipient: 1.0 + 2.0 * u
+      * caricature: 4.0 + 3.0 * u
+    For non-signal classes: keeps remapped mag label AND remaps the uniform
+    u_extra from existing extra draw:
+      * delay: d in {1, 2}
+      * loss: drop in [0.02, 0.08] (LOW_RUNG_DROP_RATE)
+      * breakdown: mttr_mult in [1.0, 1.5] (LOW_RUNG_MTTR_MULT)
+      * quality: reject_rate in [0.05, 0.12] (LOW_RUNG_REJECT_RATE)
+    Remaps using the same uniform draws, NO new draws!
+    Every variant row gains mag_rung and sev = mag_sigma fields.
+    When cap_budget=True, new variant rows are capped: dur <= 14 AND
+    dur * math.ceil(mult) <= 14 (so variant manifest passes its own budget).
+    Oracle rep pins exempt + documented (F-25 known-breach: 12 * 2 = 24 > 14.4 —
+    exemption comment + test asserts exemption, not compliance).
+    Default cap_budget=False preserves exact placement (t0, dur) equality
+    with baseline build_faults.
+    """
+    effective_seed = master if master != 12345 and seed == 12345 else seed
+    if isinstance(effective_seed, bool) or not isinstance(effective_seed, int) or effective_seed < 0:
+        raise ValueError(f"seed must be a non-negative int, got {effective_seed!r}")
+    seq = np.random.SeedSequence((effective_seed,))
+    children = seq.spawn(36)
+    assert N_STREAMS == 36 and len(children) == N_STREAMS
+    rng_place = np.random.default_rng(children[32])
+    (mlo, mhi) = FAULT_RANGES["mag_sigma"]
+    (dlo, dhi) = FAULT_RANGES["dur"]
+    (ddlo, ddhi) = FAULT_RANGES["delay_d"]
+    (rlo, rhi) = FAULT_RANGES["drop_rate"]
+    (mulo, muhi) = FAULT_RANGES["mttr_mult"]
+    (rjlo, rjhi) = FAULT_RANGES["reject_rate"]
+
+    def _params(m, cls, extra, rung):
+        raw_mag = float(rng_place.uniform(mlo, mhi))
+        u = (raw_mag - mlo) / (mhi - mlo)
+        if rung == "incipient":
+            mag = MAG_LADDER["incipient"][0] + (MAG_LADDER["incipient"][1] - MAG_LADDER["incipient"][0]) * u
+        else:
+            mag = raw_mag
+
+        if cls == "delay" and "d" not in extra:
+            raw_d = int(rng_place.integers(ddlo, ddhi + 1))
+            if rung == "incipient":
+                extra["d"] = LOW_RUNG_DELAY_D[0] if (raw_d - ddlo) < 2 else LOW_RUNG_DELAY_D[1]
+            else:
+                extra["d"] = raw_d
+        elif cls == "loss" and "drop_rate" not in extra:
+            raw_drop = float(rng_place.uniform(rlo, rhi))
+            if rung == "incipient":
+                u_extra = (raw_drop - rlo) / (rhi - rlo)
+                extra["drop_rate"] = float(LOW_RUNG_DROP_RATE[0] + (LOW_RUNG_DROP_RATE[1] - LOW_RUNG_DROP_RATE[0]) * u_extra)
+            else:
+                extra["drop_rate"] = raw_drop
+        elif cls == "breakdown" and "mttr_mult" not in extra:
+            raw_mult = float(rng_place.uniform(mulo, muhi))
+            if rung == "incipient":
+                u_extra = (raw_mult - mulo) / (muhi - mulo)
+                extra["mttr_mult"] = float(LOW_RUNG_MTTR_MULT[0] + (LOW_RUNG_MTTR_MULT[1] - LOW_RUNG_MTTR_MULT[0]) * u_extra)
+            else:
+                extra["mttr_mult"] = raw_mult
+        elif cls == "quality" and "reject_rate" not in extra:
+            raw_reject = float(rng_place.uniform(rjlo, rjhi))
+            if rung == "incipient":
+                u_extra = (raw_reject - rjlo) / (rjhi - rjlo)
+                extra["reject_rate"] = float(LOW_RUNG_REJECT_RATE[0] + (LOW_RUNG_REJECT_RATE[1] - LOW_RUNG_REJECT_RATE[0]) * u_extra)
+            else:
+                extra["reject_rate"] = raw_reject
+        return mag
+
+    order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
+    fixed: dict[Any, Any] = {(r["origin"], r["class"]): r for r in _ORACLE_REP}
+    rows = []
+    for m in order:
+        taken, todo = [], []
+        for cls in _FAULT_CLASSES:
+            key = (m, cls)
+            if key in fixed:
+                r = fixed[key]
+                extra = dict(r.get("extra", {}))
+                mag = r.get("mag_sigma", None)
+                if mag is None:
+                    mag = _params(m, cls, extra, "caricature")
+                rows.append(
+                    {
+                        "id": r["id"],
+                        "class": cls,
+                        "origin": m,
+                        "t0": r["t0"],
+                        "dur": r["dur"],
+                        "mag_sigma": float(mag),
+                        "extra": extra,
+                        "rep": True,
+                        "mag_rung": "caricature",
+                        "sev": float(mag),
+                    }
+                )
+                taken.append((r["t0"], r["t0"] + r["dur"]))
+            else:
+                dur = int(rng_place.integers(int(dlo), int(dhi) + 1))
+                extra = {}
+                rung = _rung_for(effective_seed, m, cls)
+                mag = _params(m, cls, extra, rung)
+                todo.append([cls, dur, mag, extra, f"F-{m}-{cls}", rung])
+        durs = [d for (_, d, _, _, _, _) in todo]
+        t0s = _try_place(rng_place, taken, durs)
+        if t0s is None:  # pathological dur draw: retry with minimal durs
+            for entry in todo:
+                entry[1] = 8
+            t0s = _try_place(rng_place, taken, [8] * len(todo))
+            assert t0s is not None
+        for (cls, dur, mag, extra, fid, rung), t0 in zip(todo, t0s):
+            final_dur = dur
+            if cap_budget:
+                final_dur = min(dur, 14)
+                if cls == "breakdown":
+                    mult = extra.get("mttr_mult", 1.0)
+                    final_dur = min(final_dur, int(14 // math.ceil(mult)))
+            rows.append(
+                {
+                    "id": fid,
+                    "class": cls,
+                    "origin": m,
+                    "t0": t0,
+                    "dur": final_dur,
+                    "mag_sigma": mag,
+                    "extra": extra,
+                    "rep": False,
+                    "mag_rung": rung,
+                    "sev": mag,
                 }
             )
     return rows
