@@ -228,18 +228,97 @@ class TestZeroEnergyEdgeCase:
             assert not np.isinf(val), f"{key} must not be Inf"
 
 
+
 # ---------------------------------------------------------------------------
-# Test 5: Unresolved Base Window
+# Test 5: Unresolved Base Window with Fallback
 # ---------------------------------------------------------------------------
 
 class TestUnresolvedBaseWindow:
     def test_derive_base_window_unresolved(self):
-        """Verify derive_base_window returns UNRESOLVED as no authoritative value exists."""
+        """Verify derive_base_window returns UNRESOLVED base but fallback scale_lengths."""
         cal = np.random.default_rng(42).standard_normal((105, 26))
         wd = we.derive_base_window(cal)
         assert wd["base_window"] == "UNRESOLVED"
-        assert wd["scale_lengths"] == "UNRESOLVED"
         assert wd["method"] == "UNRESOLVED"
+        # scale_lengths is now a dict with fallback q=25 -> 25/50/100
+        assert isinstance(wd["scale_lengths"], dict)
+        assert wd["scale_lengths"] == {"short": 25, "base": 50, "long": 100}
+
+    def test_fallback_metadata_present(self):
+        """Verify fallback metadata fields are present when base is unresolved."""
+        cal = np.random.default_rng(42).standard_normal((105, 26))
+        wd = we.derive_base_window(cal)
+        assert wd["scale_status"] == "unresolved_fallback"
+        assert wd["fallback_q"] == 25
+        assert wd["fallback_policy"] == "q_2q_4q"
+
+    def test_fallback_does_not_claim_resolved_base(self):
+        """Fallback must NOT write base_window = 50 as though resolved."""
+        cal = np.random.default_rng(42).standard_normal((105, 26))
+        wd = we.derive_base_window(cal)
+        assert wd["base_window"] == "UNRESOLVED"
+        assert wd["base_window"] != 50
+
+    def test_fallback_scale_lengths_exact(self):
+        """Fallback scales must be exactly q=25, 2q=50, 4q=100."""
+        cal = np.random.default_rng(7).standard_normal((105, 26))
+        wd = we.derive_base_window(cal)
+        sl = wd["scale_lengths"]
+        assert sl["short"] == 25
+        assert sl["base"] == 50
+        assert sl["long"] == 100
+
+
+# ---------------------------------------------------------------------------
+# Test 6: Resolved Base (0.5B / B / 2B) via _compute_scale_lengths
+# ---------------------------------------------------------------------------
+
+class TestResolvedBase:
+    def test_resolved_scale_lengths(self):
+        """When B is resolved, short=0.5B, base=B, long=2B."""
+        sl = we._compute_scale_lengths(40)
+        assert sl == {"short": 20, "base": 40, "long": 80}
+
+    def test_resolved_odd_base(self):
+        """Rounding convention for odd base windows."""
+        sl = we._compute_scale_lengths(21)
+        assert sl == {"short": 10, "base": 21, "long": 42}
+
+    def test_resolved_small_base(self):
+        """Min 1 sample enforced."""
+        sl = we._compute_scale_lengths(1)
+        assert sl["short"] >= 1
+        assert sl["base"] >= 1
+        assert sl["long"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Test 7: Multi-scale length test (fallback window counts for T=300)
+# ---------------------------------------------------------------------------
+
+class TestFallbackWindowCounts:
+    def test_fallback_window_counts_t300(self):
+        """For T=300, fallback 25/50/100 should produce 276/251/201 windows per channel."""
+        T = 300
+        signal = np.random.default_rng(0).standard_normal(T)
+        rows_25 = we.rolling_features_for_channel(signal, 25, "short", "X")
+        rows_50 = we.rolling_features_for_channel(signal, 50, "base", "X")
+        rows_100 = we.rolling_features_for_channel(signal, 100, "long", "X")
+        assert len(rows_25) == 276, f"W=25: expected 276, got {len(rows_25)}"
+        assert len(rows_50) == 251, f"W=50: expected 251, got {len(rows_50)}"
+        assert len(rows_100) == 201, f"W=100: expected 201, got {len(rows_100)}"
+
+    def test_fallback_total_rows_per_channel(self):
+        """Total rows per channel: 276 + 251 + 201 = 728."""
+        T = 300
+        signal = np.random.default_rng(0).standard_normal(T)
+        total = 0
+        for win, name in [(25, "short"), (50, "base"), (100, "long")]:
+            rows = we.rolling_features_for_channel(signal, win, name, "X")
+            total += len(rows)
+        assert total == 728
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +482,10 @@ class TestOutputVersionTest:
         assert "envelope_band_definition" in m
         assert "source_sampling_convention" in m
         assert m["base_window"] == wd["base_window"]
+        # Fallback metadata must be present when base is unresolved
+        assert m.get("scale_status") == "unresolved_fallback"
+        assert m.get("fallback_q") == 25
+        assert m.get("fallback_policy") == "q_2q_4q"
 
     def test_m0_2e_keys_preserved(self, tmp_path):
         """M0.2e owned keys in existing config must NOT be overwritten."""
@@ -544,3 +627,170 @@ class TestNoScalerPkl:
         cfg_path = tmp_path / "window_config.json"
         we.write_extended_window_config({}, section, cfg_path)
         assert not (tmp_path / "scaler.pkl").exists()
+
+
+# ---------------------------------------------------------------------------
+# Test 15: Multi-scale export — all three scales emitted
+# ---------------------------------------------------------------------------
+
+class TestMultiScaleExport:
+    def test_all_three_scales_emitted(self, tmp_path):
+        """export_multiscale must emit rows for all three scales."""
+        n_ch, T = 4, 30
+        obs = np.random.default_rng(0).standard_normal((n_ch, T))
+        ch_names = [f"M{i}" for i in range(n_ch)]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+        result = we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
+        assert result["row_count"] > 0
+
+        import pandas as pd
+        df = pd.read_parquet(tmp_path / "window_features.parquet")
+        scales = set(df["scale"].unique())
+        assert scales == {"short", "base", "long"}, f"Missing scales: {scales}"
+
+    def test_no_scale_silently_omitted(self, tmp_path):
+        """Each scale must have at least one row per channel."""
+        n_ch, T = 2, 20
+        obs = np.random.default_rng(0).standard_normal((n_ch, T))
+        ch_names = ["A", "B"]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+        we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
+
+        import pandas as pd
+        df = pd.read_parquet(tmp_path / "window_features.parquet")
+        for ch in ch_names:
+            for scale in ["short", "base", "long"]:
+                subset = df[(df["channel"] == ch) & (df["scale"] == scale)]
+                assert len(subset) > 0, f"No rows for channel={ch}, scale={scale}"
+
+    def test_fallback_export_total_rows(self, tmp_path):
+        """Fallback 25/50/100 over 26 channels x T=300 -> 18928 rows."""
+        n_ch, T = 26, 300
+        obs = np.random.default_rng(42).standard_normal((n_ch, T))
+        ch_names = [f"M{i}" for i in range(n_ch)]
+        win_cfg = {"scale_lengths": {"short": 25, "base": 50, "long": 100}}
+        result = we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
+        assert result["row_count"] == 18928, (
+            f"Expected 18928 rows, got {result['row_count']}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 16: Deterministic output
+# ---------------------------------------------------------------------------
+
+class TestDeterministicOutput:
+    def test_same_seed_same_output(self, tmp_path):
+        """Two exports with same seed and config must produce identical output."""
+        n_ch, T = 2, 30
+        ch_names = ["A", "B"]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+
+        dir1 = tmp_path / "run1"
+        dir2 = tmp_path / "run2"
+
+        obs = np.random.default_rng(99).standard_normal((n_ch, T))
+        we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=dir1)
+        we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=dir2)
+
+        import pandas as pd
+        df1 = pd.read_parquet(dir1 / "window_features.parquet")
+        df2 = pd.read_parquet(dir2 / "window_features.parquet")
+        assert df1.equals(df2), "Determinism violated: two runs differ"
+
+
+# ---------------------------------------------------------------------------
+# Test 17: Artifact creation
+# ---------------------------------------------------------------------------
+
+class TestArtifactCreation:
+    def test_artifacts_dir_created(self, tmp_path):
+        """export_multiscale must create the output directory if absent."""
+        out_dir = tmp_path / "new_artifacts"
+        assert not out_dir.exists()
+        n_ch, T = 2, 20
+        obs = np.random.default_rng(0).standard_normal((n_ch, T))
+        ch_names = ["A", "B"]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+        we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=out_dir)
+        assert out_dir.exists()
+        assert (out_dir / "window_features.parquet").exists()
+
+    def test_parquet_readable(self, tmp_path):
+        """window_features.parquet must be readable and contain expected columns."""
+        import pandas as pd
+        n_ch, T = 2, 20
+        obs = np.random.default_rng(0).standard_normal((n_ch, T))
+        ch_names = ["A", "B"]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+        we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
+
+        df = pd.read_parquet(tmp_path / "window_features.parquet")
+        expected_cols = {
+            "channel", "scale", "window_len", "t_start", "t_end",
+            "mean", "rms", "min", "max",
+            "envelope_max", "envelope_min", "envelope_mean",
+            "envelope_std", "envelope_band_energy",
+            "episode_id_ref",
+        }
+        assert expected_cols.issubset(set(df.columns)), (
+            f"Missing columns: {expected_cols - set(df.columns)}"
+        )
+
+    def test_parquet_schema_no_m02e_fields(self, tmp_path):
+        """window_features.parquet must NOT contain M0.2e-owned field names as columns."""
+        import pandas as pd
+        n_ch, T = 2, 20
+        obs = np.random.default_rng(0).standard_normal((n_ch, T))
+        ch_names = ["A", "B"]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+        we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
+
+        df = pd.read_parquet(tmp_path / "window_features.parquet")
+        m02e_in_schema = M0_2E_OWNED_FIELDS & set(df.columns)
+        assert not m02e_in_schema, (
+            f"M0.2e fields leaked into window_features.parquet: {m02e_in_schema}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 18: Integration — M0.2e dataset remains intact
+# ---------------------------------------------------------------------------
+
+class TestIntegration:
+    def test_m02e_dataset_intact_after_m02f(self, tmp_path):
+        """Running M0.2f export must not modify an existing dataset_v3.parquet."""
+        import pandas as pd
+        from src import dataset_export
+        out_parquet = tmp_path / "dataset_v3.parquet"
+        res = dataset_export.export(seed=7, out=out_parquet)
+        df_before = pd.read_parquet(out_parquet)
+
+        # Now run M0.2f export in the same directory
+        from src.twin import run_calibration, run_episode
+        from src.config import MACHINE_INDEX
+        cal = run_calibration(7)
+        wd = we.derive_base_window(cal)
+        rec = run_episode(7, None)
+        obs = np.asarray(rec["obs"], dtype=np.float64)
+        ch_names = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
+        we.export_multiscale(obs, 7, ch_names, wd, out_dir=tmp_path)
+
+        # dataset_v3.parquet must be untouched
+        df_after = pd.read_parquet(out_parquet)
+        assert df_before.equals(df_after), "M0.2e dataset was modified by M0.2f export"
+        assert len(df_after) == 300, f"Expected 300 rows, got {len(df_after)}"
+
+    def test_m02f_does_not_require_join(self, tmp_path):
+        """M0.2f outputs a standalone sidecar artifact, no join required."""
+        import pandas as pd
+        n_ch, T = 2, 20
+        obs = np.random.default_rng(0).standard_normal((n_ch, T))
+        ch_names = ["A", "B"]
+        win_cfg = {"scale_lengths": {"short": 3, "base": 5, "long": 10}}
+        result = we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
+
+        # window_features.parquet is standalone, loadable without dataset_v3
+        df = pd.read_parquet(result["out"])
+        assert len(df) > 0
+        assert "episode_id_ref" in df.columns  # provenance reference, not M0.2e join key

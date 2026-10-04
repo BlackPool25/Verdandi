@@ -70,11 +70,14 @@ _BAND_HI_FRAC = 0.5
 # Minimum spectral energy denominator to avoid NaN/Inf.
 _ENERGY_ZERO_THRESHOLD = 1e-30
 
-# Fallback base-window logic: when no dominant period is detected, derive
-# a short/base/long family from calibration length using fixed rational splits.
-# These are rationals of cal_len, not CAL_WIN or any imported constant.
-_FALLBACK_BASE_FRAC = 0.20   # base ~20% of calibration length
-_FALLBACK_MIN_BASE = 3       # absolute floor
+# Fallback base-window logic: when no dominant period is detected, use a
+# fixed engineering fallback q=25 to generate three scales:
+#   short = q   = 25
+#   base  = 2q  = 50
+#   long  = 4q  = 100
+# q=25 is an ENGINEERING FALLBACK CHOICE, not a proven optimal value.
+# A future project stage (out of scope) may train a model for scale selection.
+_FALLBACK_Q = 25
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +104,15 @@ def detrend_signal(x: np.ndarray) -> np.ndarray:
     return scipy_detrend(x, type="linear")
 
 
+def _compute_fallback_scale_lengths() -> dict[str, int]:
+    """Compute fallback scale lengths from the engineering fallback q.
+
+    Returns {"short": q, "base": 2*q, "long": 4*q} with q = _FALLBACK_Q = 25.
+    """
+    q = _FALLBACK_Q
+    return {"short": q, "base": 2 * q, "long": 4 * q}
+
+
 def derive_base_window(
     calibration: np.ndarray,
     **kwargs: Any,
@@ -108,7 +120,15 @@ def derive_base_window(
     """Derive a deterministic base-window period from clean calibration data.
 
     Currently, the Verdandi repo has no authoritative numeric base-window value.
-    This explicitly represents the base window as UNRESOLVED.
+    The base window is UNRESOLVED, and the fallback engineering scales
+    q=25 -> {short=25, base=50, long=100} are used.
+
+    When a resolved base window B is available (future), returns:
+        scale_lengths = {short: 0.5B, base: B, long: 2B}
+
+    When unresolved (current state), returns:
+        scale_lengths = {short: 25, base: 50, long: 100}
+        scale_status = "unresolved_fallback"
     """
     cal = np.asarray(calibration, dtype=np.float64)
     if cal.ndim != 2:
@@ -117,15 +137,25 @@ def derive_base_window(
         )
     T_cal, n_ch = cal.shape
 
+    fallback_lengths = _compute_fallback_scale_lengths()
+
     return {
         "base_window": "UNRESOLVED",
-        "scale_lengths": "UNRESOLVED",
+        "scale_lengths": fallback_lengths,
         "method": "UNRESOLVED",
         "dominant": False,
         "candidate_pool": [],
         "candidate_votes": {},
         "cal_shape": [T_cal, n_ch],
-        "fallback_note": "No authoritative base-window value found in repo. Representing as UNRESOLVED.",
+        "scale_status": "unresolved_fallback",
+        "fallback_q": _FALLBACK_Q,
+        "fallback_policy": "q_2q_4q",
+        "fallback_note": (
+            "No authoritative base-window value found in repo. "
+            f"Using engineering fallback q={_FALLBACK_Q} -> "
+            f"short={fallback_lengths['short']}, base={fallback_lengths['base']}, "
+            f"long={fallback_lengths['long']}."
+        ),
     }
 
 
@@ -347,7 +377,9 @@ def export_multiscale(
 
     all_rows: list[dict[str, Any]] = []
 
-    if scale_lengths != "UNRESOLVED":
+    # Both resolved and unresolved-fallback paths use the same pipeline.
+    # scale_lengths is a dict of {scale_name: window_len} in both cases.
+    if isinstance(scale_lengths, dict):
         for ch_idx, ch_name in enumerate(channel_names):
             signal = obs[ch_idx, :]
             for scale_name, win_len in scale_lengths.items():
@@ -411,26 +443,40 @@ def build_m0_2f_window_config_section(
     dict -- M0.2f metadata section.
     """
     scale_lengths = window_derivation["scale_lengths"]
-    if scale_lengths == "UNRESOLVED":
+    base_window = window_derivation["base_window"]
+    is_unresolved = base_window == "UNRESOLVED"
+
+    if isinstance(scale_lengths, dict):
+        if is_unresolved:
+            # Fallback: record as fallback scales, NOT as resolved base
+            sl_dict = {
+                name: {
+                    "fallback_q": window_derivation.get("fallback_q", _FALLBACK_Q),
+                    "samples": scale_lengths[name],
+                }
+                for name in _SCALE_NAMES
+            }
+            sf_dict = "UNRESOLVED"
+        else:
+            sf_dict = {
+                name: scale
+                for name, scale in zip(_SCALE_NAMES, _SCALE_FACTORS)
+            }
+            sl_dict = {
+                name: {
+                    "scale_factor": scale,
+                    "samples": scale_lengths[name],
+                }
+                for name, scale in zip(_SCALE_NAMES, _SCALE_FACTORS)
+            }
+    else:
         sl_dict = "UNRESOLVED"
         sf_dict = "UNRESOLVED"
-    else:
-        sf_dict = {
-            name: scale
-            for name, scale in zip(_SCALE_NAMES, _SCALE_FACTORS)
-        }
-        sl_dict = {
-            name: {
-                "scale_factor": scale,
-                "samples": scale_lengths[name],
-            }
-            for name, scale in zip(_SCALE_NAMES, _SCALE_FACTORS)
-        }
 
-    return {
+    section: dict[str, Any] = {
         "export_version": M0_2F_EXPORT_VERSION,
         "code_version": M0_2F_CODE_VERSION,
-        "base_window": window_derivation["base_window"],
+        "base_window": base_window,
         "scale_factors": sf_dict,
         "scale_lengths": sl_dict,
         "base_window_method": window_derivation["method"],
@@ -461,6 +507,18 @@ def build_m0_2f_window_config_section(
         "ownership": "M0.2f (MINIPRO-29)",
         "m0_2e_fields_untouched": True,
     }
+
+    # Add explicit fallback metadata when base is unresolved
+    if is_unresolved:
+        section["scale_status"] = window_derivation.get(
+            "scale_status", "unresolved_fallback"
+        )
+        section["fallback_q"] = window_derivation.get("fallback_q", _FALLBACK_Q)
+        section["fallback_policy"] = window_derivation.get(
+            "fallback_policy", "q_2q_4q"
+        )
+
+    return section
 
 
 def write_extended_window_config(
