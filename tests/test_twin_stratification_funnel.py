@@ -546,7 +546,9 @@ def test_variant_state_histograms_masked_with_warmup():
     assert len(hist) == 26
     for m, shares in hist.items():
         tot = sum(shares.values())
-        assert abs(tot - 1.0) <= 0.01, f"Variant machine {m} state histogram sum {tot} != 1.0"
+        assert abs(tot - 1.0) <= 0.01, (
+            f"Variant machine {m} state histogram sum {tot} != 1.0"
+        )
     rollup = s_var["plant_state_rollup"]
     tot_plant = sum(rollup["shares"].values())
     assert abs(tot_plant - 1.0) <= 0.01

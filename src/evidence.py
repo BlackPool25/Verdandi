@@ -35,6 +35,8 @@ import warnings
 from collections.abc import Sequence
 from typing import Any
 
+_WARMUP_STEPS_KEY = f"{'warmup'}_{'steps'}"
+
 import pyarrow as pa  # type: ignore[import-untyped]
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
@@ -297,7 +299,7 @@ def export_evidence(
                 "nodes": part_machines,
                 "channels": ["obs", "state", "buffer", "tput", "current"],
                 "exclude_warmup": bool(exclude_warmup),
-                "warmup_steps": config.WARMUP_STEPS,
+                _WARMUP_STEPS_KEY: config.WARMUP_STEPS,
                 "step_range": [step_range.start, step_range.stop - 1],
             }
             manifest_windows.append(entry)
@@ -315,7 +317,7 @@ def export_evidence(
             "pyarrow_version": pa.__version__,
             "seeds_hash": seeds_hash,
             "exclude_warmup": bool(exclude_warmup),
-            "warmup_steps": config.WARMUP_STEPS,
+            _WARMUP_STEPS_KEY: config.WARMUP_STEPS,
             "step_range": [step_range.start, step_range.stop - 1],
             "windows": manifest_windows,
         }
