@@ -333,6 +333,16 @@ def _validate(seed, fault):
             extra = {}
         if not isinstance(extra, dict):
             raise TypeError(f"fault extra must be a dict, got {extra!r}")
+        mag_raw = f.get("mag_sigma", None)
+        if mag_raw is not None:
+            if isinstance(mag_raw, bool):
+                raise ValueError(f"mag_sigma out of range [0.5, 8.0]: {mag_raw!r}")
+            try:
+                mag_val = float(mag_raw)
+            except (TypeError, ValueError):
+                raise ValueError(f"mag_sigma out of range [0.5, 8.0]: {mag_raw!r}")
+            if mag_val != 0.0 and not (0.5 <= mag_val <= 8.0):
+                raise ValueError(f"mag_sigma out of range [0.5, 8.0]: {mag_raw!r}")
         normed.append(
             {
                 "id": f.get("id", f"F-EP{i}"),
@@ -1654,6 +1664,7 @@ def run_episode(
 
     var_dict = _resolve_variant(variant)
     if var_dict is not None:
+        check_rate_budget(specs)
         overrides = var_dict.get("buffer_caps", {})
         unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
         if unlisted:
@@ -2300,6 +2311,51 @@ def check_wall_tripwire(walls, budget=600.0):
     """Pure TC-009 gate: (total wall, tripped?) over fixture numbers only."""
     total = float(sum(walls))
     return (total, total > budget)
+
+
+def fault_steps(specs):
+    """Count fault mass over specs: (union_steps, machine_steps).
+
+    Breakdown specs count their EXTENDED forced-DOWN window
+    [t0, t0+ceil(dur*mttr_mult)) (mirrors _inj_down); every other class
+    counts its nominal window [t0, t0+dur). union_steps is the union over
+    t across specs (overlaps counted once); machine_steps is the
+    per-spec window-length sum (overlaps counted per spec). Pure helper.
+    """
+    covered = set()
+    machine_steps = 0
+    for s in specs or []:
+        extra = s.get("extra") or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        t0 = int(s["t0"])
+        dur = int(s["dur"])
+        cls = STUCK_IS_BREAKDOWN.get(s.get("class"), s.get("class"))
+        if cls == "breakdown":
+            mult = s.get("mttr_mult", extra.get("mttr_mult", 1.0))
+            length = math.ceil(dur * float(mult))
+        else:
+            length = dur
+        machine_steps += length
+        for t in range(t0, t0 + length):
+            covered.add(t)
+    return (len(covered), machine_steps)
+
+
+def check_rate_budget(specs, scored=180):
+    """Per-episode loud gate: union fault steps must fit 8% of scored steps.
+
+    scored=180 is the fault-allowed denominator (T-CAL_WIN). Breach
+    (union > 0.08*scored, i.e. union>=15 at scored=180) raises ValueError
+    naming the union/allowed counts; compliant lists pass silently.
+    """
+    union_steps, _ = fault_steps(specs)
+    allowed = 0.08 * scored
+    if union_steps > allowed:
+        raise ValueError(
+            f"fault rate budget exceeded: union {union_steps} > allowed {allowed} "
+            f"(0.08*{scored})"
+        )
 
 
 def replay_digest(record):
