@@ -1972,30 +1972,69 @@ def run_episode(
         mode = None
 
     # Per-machine state histograms (sums to 1.0 +- 0.01 over 26 machines)
-    state_histograms = {}
-    for m_name, m_idx in MACHINE_INDEX.items():
-        st_row = _st[m_idx]
-        state_histograms[m_name] = {
-            st: sum(1 for s in st_row if s == st) / T
+    if shared.get("ladder"):
+        denom = T - WARMUP_STEPS
+        state_histograms = {}
+        for m_name, m_idx in MACHINE_INDEX.items():
+            st_row = _st[m_idx][WARMUP_STEPS:]
+            state_histograms[m_name] = {
+                st: sum(1 for s in st_row if s == st) / denom
+                for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+            }
+
+        # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
+        active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
+        total_active_steps = len(active_machines) * denom
+        active_indices = [MACHINE_INDEX[m] for m in active_machines]
+        plant_shares = {
+            st: sum(1 for idx in active_indices for s in _st[idx][WARMUP_STEPS:] if s == st) / total_active_steps
             for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
         }
+        plant_state_rollup = {
+            "shares": plant_shares,
+            "machines": active_machines,
+            **plant_shares,
+        }
+    else:
+        state_histograms = {}
+        for m_name, m_idx in MACHINE_INDEX.items():
+            st_row = _st[m_idx]
+            state_histograms[m_name] = {
+                st: sum(1 for s in st_row if s == st) / T
+                for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+            }
 
-    # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
-    active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
-    total_active_steps = len(active_machines) * T
-    active_indices = [MACHINE_INDEX[m] for m in active_machines]
-    plant_shares = {
-        st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
-        for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
-    }
-    plant_state_rollup = {
-        "shares": plant_shares,
-        "machines": active_machines,
-        **plant_shares,
-    }
+        # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
+        active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
+        total_active_steps = len(active_machines) * T
+        active_indices = [MACHINE_INDEX[m] for m in active_machines]
+        plant_shares = {
+            st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
+            for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+        }
+        plant_state_rollup = {
+            "shares": plant_shares,
+            "machines": active_machines,
+            **plant_shares,
+        }
 
-    # Warm-up tracking: steps 0..WARMUP_STEPS-1 (transient-inclusive pool)
+    # Warm-up tracking: steps 0..WARMUP_STEPS-1.
+    # Transient pool represents clean-transient precision baseline (measurability
+    # of initial plant settling), NOT fault-replay in transient.
+    # N_FLOOR=800 exemption: transient pool operates on the 15-step initial window
+    # per episode; downstream N_FLOOR=800 sample-size floor applies to training
+    # calibration pools, so the 15-step transient window is exempt.
+    # WARMUP_STEPS stays 15.
     warmup_pool = np.asarray(shared["obs"], dtype=float)[:, :WARMUP_STEPS].T.tolist()
+    transient_pool = copy.deepcopy(warmup_pool)
+    transient_channels = {
+        "observations": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["obs"]]),
+        "obs": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["obs"]]),
+        "states": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["states"]]),
+        "buffers": copy.deepcopy([row[:WARMUP_STEPS] for row in buf_rows]),
+        "throughput": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["tput"]]),
+        "currents": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["currents"]]),
+    }
 
     # Funnel census counts
     funnel_census = {
@@ -2011,6 +2050,11 @@ def run_episode(
     flow_stats["energy"] = _energy_header(
         shared["currents"], shared["flow"]["packaged"]
     )
+    stat_probe = probe_stationarity({
+        "states": shared["states"],
+        "buffers": buf_rows,
+        "T": T,
+    })
     return {
         "seed": seed,
         "T": T,
@@ -2046,13 +2090,15 @@ def run_episode(
             "root_ids": root_ids,
             "sensor_vs_process": "unknown",
             "sensor_vs_process_unvalidated": True,
-            "warmup_flag": True,
+            "has_warmup_period": True,
             "warmup_steps": WARMUP_STEPS,
             "warmup_window": (0, WARMUP_STEPS - 1),
             "warmup_mask": [t < WARMUP_STEPS for t in range(T)],
             "warmup_pool": warmup_pool,
-            "transient_pool": warmup_pool,
-            "is_warmup": True,
+            "transient_pool": transient_pool,
+            "transient_channels": transient_channels,
+            "is_warmup_episode": True,
+            "stationarity_probe": stat_probe,
             "state_histogram": state_histograms,
             "state_histograms": state_histograms,
             "machine_histograms": state_histograms,
@@ -2065,6 +2111,60 @@ def run_episode(
             "agv_priority": agv_prio,
             **({"kit_sev_max": shared.get("kit_sev_max", 0.0)} if is_ladder else {}),
         },
+    }
+
+
+def probe_stationarity(record: dict) -> dict[str, Any]:
+    """Stationarity probe comparing transient window (steps 0-14) vs post-warmup window (steps 15-29).
+
+    RECORD-ONLY diagnostic helper: compares transient vs post-warmup metrics
+    (e.g. STARVED share, buffer occupancy) to observe initial plant settling.
+    Logs/records values, never gates, rejects, or raises.
+    """
+    states = record.get("states", [])
+    buffers = record.get("buffers", [])
+    t_total = record.get("T", 300)
+    w0_steps = min(WARMUP_STEPS, t_total)
+    w1_steps = min(WARMUP_STEPS, max(0, t_total - w0_steps))
+
+    n_mach = len(states) if states else 1
+    n_bufs = len(buffers) if buffers else 1
+
+    transient_starved = (
+        sum(1 for m in states for s in m[:w0_steps] if s == "STARVED") / (n_mach * w0_steps)
+        if w0_steps > 0
+        else 0.0
+    )
+    post_starved = (
+        sum(1 for m in states for s in m[w0_steps : w0_steps + w1_steps] if s == "STARVED")
+        / (n_mach * w1_steps)
+        if w1_steps > 0
+        else 0.0
+    )
+
+    transient_buf = (
+        sum(sum(b[:w0_steps]) for b in buffers) / (n_bufs * w0_steps)
+        if w0_steps > 0 and n_bufs > 0
+        else 0.0
+    )
+    post_buf = (
+        sum(sum(b[w0_steps : w0_steps + w1_steps]) for b in buffers) / (n_bufs * w1_steps)
+        if w1_steps > 0 and n_bufs > 0
+        else 0.0
+    )
+
+    return {
+        "transient_window": (0, w0_steps - 1) if w0_steps > 0 else (0, 0),
+        "post_window": (w0_steps, w0_steps + w1_steps - 1) if w1_steps > 0 else (w0_steps, w0_steps),
+        "transient_starved_share": transient_starved,
+        "post_starved_share": post_starved,
+        "starved_delta": post_starved - transient_starved,
+        "transient_buffer_mean": transient_buf,
+        "post_buffer_mean": post_buf,
+        "buffer_delta": post_buf - transient_buf,
+        "transient_buffer_occupancy": transient_buf,
+        "post_buffer_occupancy": post_buf,
+        "buffer_occupancy_delta": post_buf - transient_buf,
     }
 
 

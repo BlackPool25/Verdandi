@@ -96,7 +96,7 @@ def test_strat_9_keys_presence_in_record():
         "root_id",
         "sensor_vs_process",
         "state_histogram",
-        "warmup_flag",
+        "has_warmup_period",
         "funnel_census",
     }
     missing = required_keys - set(strat.keys())
@@ -233,11 +233,16 @@ def test_strat_sensor_vs_process_deferred_unknown():
 
 
 def test_strat_warmup_flag_steps_0_14():
-    """Stratification export must flag steps 0-14 as warm-up."""
+    """Stratification export must flag steps 0-14 as warm-up via has_warmup_period."""
     rec = twin.run_episode(777, _PROBE_FAULT)
     assert "strat" in rec, "Record missing 'strat' export"
     strat = rec["strat"]
-    assert "warmup_flag" in strat, "Stratification missing 'warmup_flag'"
+    assert "has_warmup_period" in strat, "Stratification missing 'has_warmup_period'"
+    assert strat["has_warmup_period"] is True
+    assert "is_warmup_episode" in strat, "Stratification missing 'is_warmup_episode'"
+    assert strat["is_warmup_episode"] is True
+    assert "warmup_flag" not in strat, "Old episode key 'warmup_flag' must be renamed"
+    assert "is_warmup" not in strat, "Old episode key 'is_warmup' must be renamed"
     assert strat.get("warmup_steps") == 15 or strat.get("warmup_window") == (0, 14), (
         f"Expected first 15 steps (0-14) marked as warm-up, "
         f"got {strat.get('warmup_steps') or strat.get('warmup_window')}"
@@ -456,6 +461,40 @@ def test_warmup_transient_pool_retains_first_15_steps():
     )
 
 
+def test_transient_pool_alias_kill_and_channels():
+    """Transient pool must be a separate object from warmup_pool with all 5 channels."""
+    rec = twin.run_episode(777, None)
+    strat = rec["strat"]
+    assert "warmup_pool" in strat and "transient_pool" in strat
+    assert strat["warmup_pool"] is not strat["transient_pool"]
+    val_before = strat["transient_pool"][0][0]
+    strat["warmup_pool"][0][0] = 99999.0
+    assert strat["transient_pool"][0][0] == val_before, (
+        "Mutation in warmup_pool affected transient_pool (alias not killed)"
+    )
+    assert "transient_channels" in strat
+    tc = strat["transient_channels"]
+    for ch in ("observations", "states", "buffers", "throughput", "currents"):
+        assert ch in tc, f"transient_channels missing channel '{ch}'"
+        assert len(tc[ch][0]) == 15, f"Channel '{ch}' first row length != 15"
+
+
+def test_stationarity_probe_record_only():
+    """probe_stationarity computes metric deltas over steps 0-14 vs 15-29 without gating."""
+    rec = twin.run_episode(777, None)
+    probe = twin.probe_stationarity(rec)
+    for k in (
+        "transient_starved_share",
+        "post_starved_share",
+        "starved_delta",
+        "transient_buffer_mean",
+        "post_buffer_mean",
+        "buffer_delta",
+    ):
+        assert k in probe, f"probe_stationarity missing key '{k}'"
+    assert "stationarity_probe" in rec["strat"]
+
+
 # ==============================================================================
 # Group 5: Per-Machine State Histogram Denominator Rules
 # ==============================================================================
@@ -497,6 +536,32 @@ def test_histogram_plant_rollup_excludes_standby_24_machines():
     assert len(machines) == 24, (
         f"Plant rollup must cover exactly 24 machines, got {len(machines)}"
     )
+
+
+def test_variant_state_histograms_masked_with_warmup():
+    """Variant path masks state_histograms and plant rollup with warmup_mask (denom 285)."""
+    rec_var = twin.run_episode(777, None, variant="ladder-budget-warmup-v1")
+    s_var = rec_var["strat"]
+    hist = s_var["state_histograms"]
+    assert len(hist) == 26
+    for m, shares in hist.items():
+        tot = sum(shares.values())
+        assert abs(tot - 1.0) <= 0.01, f"Variant machine {m} state histogram sum {tot} != 1.0"
+    rollup = s_var["plant_state_rollup"]
+    tot_plant = sum(rollup["shares"].values())
+    assert abs(tot_plant - 1.0) <= 0.01
+
+
+def test_baseline_state_histograms_unmasked_denominator_300():
+    """Baseline path retains unmasked histograms with denominator 300 (zero baseline reds)."""
+    rec = twin.run_episode(777, None)
+    s = rec["strat"]
+    # Pinned golden baseline values for seed 777
+    assert s["plant_state_rollup"]["shares"]["RUN"] == 0.8573611111111111
+    assert s["plant_state_rollup"]["shares"]["DOWN"] == 0.015277777777777777
+    assert s["plant_state_rollup"]["shares"]["STARVED"] == 0.12736111111111112
+    assert s["state_histograms"]["ASM0"]["RUN"] == 0.7733333333333333
+    assert s["state_histograms"]["ASM0"]["STARVED"] == 0.22666666666666666
 
 
 # ==============================================================================
