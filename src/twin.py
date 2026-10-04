@@ -86,6 +86,7 @@ from src.config import (
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
+    VARIANT_ID,
     VOLT,
     WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
@@ -514,6 +515,21 @@ def _degrade_at(fx, t):
     return False
 
 
+def _degrade_spec(fx, t):
+    """Active degrade spec covering this machine at t (or None)."""
+    candidates = [
+        s
+        for s in fx
+        if s["t0"] <= t < s["t1"]
+        and (
+            s["class"] in ("drift", "bias", "delay", "loss") or s["class"] == _PULSE
+        )
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda s: float(s.get("mag_sigma", s.get("mag", 0.0))))
+
+
 def _loss_at(fx, t):
     """Active loss spec on this machine at step t (or None)."""
     for s in fx:
@@ -792,17 +808,18 @@ def _line_process(env, spec, shared):
             # packaged goods — flow_stats packaged+=1, never rejoin kit,
             # never SBUF-divert (tails are excluded via _TAILS).
             shared["flow"]["packaged"] += 1
-            shared["parts"].append(
-                {
-                    "id": part["id"],
-                    "t": t,
-                    "machine": name,
-                    "via": "PKG",
-                    "disposition": "packaged",
-                    "passes": part.get("passes", 0),
-                    "flag": part.get("flag", "OK"),
-                }
-            )
+            rec = {
+                "id": part["id"],
+                "t": t,
+                "machine": name,
+                "via": "PKG",
+                "disposition": "packaged",
+                "passes": part.get("passes", 0),
+                "flag": part.get("flag", "OK"),
+            }
+            if shared.get("ladder") and "sev" in part:
+                rec["sev"] = part["sev"]
+            shared["parts"].append(rec)
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
         elif isinstance(down, tuple):
@@ -908,6 +925,10 @@ def _line_process(env, spec, shared):
             # Channel-4 flag rides the part object downstream (never a
             # signal-channel copy — downstream machines see it on arrival).
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                f_spec = _degrade_spec(fx, t)
+                spec_sev = float(f_spec.get("mag_sigma", f_spec.get("mag", 0.0))) if f_spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -990,6 +1011,15 @@ def _insp0_process(env, up, down, shared):
                     part["flag"] = "REJECT"
                 elif part.get("flag") == "OK":
                     part["flag"] = "DEGRADE"
+                    if shared.get("ladder"):
+                        spec = _degrade_spec(fx, t)
+                        spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                        part["sev"] = max(part.get("sev", 0.0), spec_sev)
+                elif shared.get("ladder"):
+                    spec = _degrade_spec(fx, t)
+                    if spec is not None or "sev" in part:
+                        spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                        part["sev"] = max(part.get("sev", 0.0), spec_sev)
             _emit(
                 shared,
                 "LATE_VERDICT",
@@ -1005,6 +1035,10 @@ def _insp0_process(env, up, down, shared):
             dfault = None
         if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                spec = _degrade_spec(fx, t)
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -1038,17 +1072,18 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     shared["agv_waits"].append(
         {"t": t_del, "part": part["id"], "hold": hold, "wait": wait}
     )
-    shared["parts"].append(
-        {
-            "id": part["id"],
-            "t": t_del,
-            "machine": src,
-            "via": "AGV",
-            "disposition": "diverted" if part["diverted"] else "delivered",
-            "passes": part.get("passes", 0),
-            "flag": part.get("flag", "OK"),
-        }
-    )
+    rec = {
+        "id": part["id"],
+        "t": t_del,
+        "machine": src,
+        "via": "AGV",
+        "disposition": "diverted" if part["diverted"] else "delivered",
+        "passes": part.get("passes", 0),
+        "flag": part.get("flag", "OK"),
+    }
+    if shared.get("ladder") and "sev" in part:
+        rec["sev"] = part["sev"]
+    shared["parts"].append(rec)
     if src == "SBUF":
         shared["sbuf"]["drained"] += 1
     _emit(
@@ -1214,15 +1249,18 @@ def _asm0_process(env, asm01, kit, shared):
                 if any(p.get("flag") == "DEGRADE" for p in batch)
                 else "OK"
             )
-            yield asm01.put(
-                {
-                    "id": pid,
-                    "line": "ASM",
-                    "kit": [p["id"] for p in batch],
-                    "passes": max(p.get("passes", 0) for p in batch),
-                    "flag": kit_flag,
-                }
-            )
+            kit_part = {
+                "id": pid,
+                "line": "ASM",
+                "kit": [p["id"] for p in batch],
+                "passes": max(p.get("passes", 0) for p in batch),
+                "flag": kit_flag,
+            }
+            if shared.get("ladder"):
+                kit_sev = max((p.get("sev", 0.0) for p in batch), default=0.0)
+                kit_part["sev"] = kit_sev
+                shared["kit_sev_max"] = max(shared.get("kit_sev_max", 0.0), kit_sev)
+            yield asm01.put(kit_part)
             shared["flow"]["asm_created"] += 1
             held, rem, batch = False, 0, None
             st, tput = "RUN", 1
@@ -1233,6 +1271,10 @@ def _asm0_process(env, asm01, kit, shared):
         if held and batch is not None and _degrade_at(fx, t):
             for p in batch:
                 p["flag"] = "DEGRADE"
+                if shared.get("ladder"):
+                    spec = _degrade_spec(fx, t)
+                    spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                    p["sev"] = max(p.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
@@ -1321,17 +1363,18 @@ def _asm_mid_process(env, name, up, down, shared):
                         name,
                         {"part": part["id"], "to": "scrap", "passes": part["passes"]},
                     )
-                    shared["parts"].append(
-                        {
-                            "id": part["id"],
-                            "t": t,
-                            "machine": name,
-                            "via": "RWK0",
-                            "disposition": "scrap",
-                            "passes": part["passes"],
-                            "flag": "REJECT",
-                        }
-                    )
+                    rec = {
+                        "id": part["id"],
+                        "t": t,
+                        "machine": name,
+                        "via": "RWK0",
+                        "disposition": "scrap",
+                        "passes": part["passes"],
+                        "flag": "REJECT",
+                    }
+                    if shared.get("ladder") and "sev" in part:
+                        rec["sev"] = part["sev"]
+                    shared["parts"].append(rec)
                     held, rem, part = False, 0, None
                     st, tput = "RUN", 1
                 elif len(rwk.items) < rwk.capacity:
@@ -1363,6 +1406,10 @@ def _asm_mid_process(env, name, up, down, shared):
             dfault = None
         if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                spec = _degrade_spec(fx, t)
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -1432,17 +1479,18 @@ def _rwk0_process(env, shared):
                         name,
                         {"part": part["id"], "to": "scrap", "passes": part["passes"]},
                     )
-                    shared["parts"].append(
-                        {
-                            "id": part["id"],
-                            "t": t,
-                            "machine": name,
-                            "via": "RWK0",
-                            "disposition": "scrap",
-                            "passes": part["passes"],
-                            "flag": part.get("flag", "OK"),
-                        }
-                    )
+                    rec = {
+                        "id": part["id"],
+                        "t": t,
+                        "machine": name,
+                        "via": "RWK0",
+                        "disposition": "scrap",
+                        "passes": part["passes"],
+                        "flag": part.get("flag", "OK"),
+                    }
+                    if shared.get("ladder") and "sev" in part:
+                        rec["sev"] = part["sev"]
+                    shared["parts"].append(rec)
                     part = None
                     st, tput = "RUN", 1
                 else:
@@ -1465,23 +1513,28 @@ def _rwk0_process(env, shared):
             part["line"] = "C"  # re-enter kitting via the C intake
             kit["C"].append(part)
             shared["flow"]["reworked"] += 1
-            shared["parts"].append(
-                {
-                    "id": part["id"],
-                    "t": t,
-                    "machine": name,
-                    "via": "RWK0",
-                    "disposition": "reworked",
-                    "passes": part["passes"],
-                    "flag": part.get("flag", "OK"),
-                }
-            )
+            rec = {
+                "id": part["id"],
+                "t": t,
+                "machine": name,
+                "via": "RWK0",
+                "disposition": "reworked",
+                "passes": part["passes"],
+                "flag": part.get("flag", "OK"),
+            }
+            if shared.get("ladder") and "sev" in part:
+                rec["sev"] = part["sev"]
+            shared["parts"].append(rec)
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
         if inj is None:
             dfault = None
         if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                spec = _degrade_spec(fx, t)
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -1497,9 +1550,14 @@ def _rwk0_process(env, shared):
 def _fault_clock(env, shared):
     """Emit FAULT_START/END channel-7 events at exact GT window edges."""
     marks = []
+    is_ladder = bool(shared.get("ladder"))
     for spec in shared["specs"]:
         marks.append((spec["t0"], 0, "FAULT_START", spec))
-        marks.append((spec["t1"], 1, "FAULT_END", spec))
+        if is_ladder and spec["class"] == "breakdown":
+            t_end = spec["t0"] + math.ceil(spec["dur"] * float(spec.get("mttr_mult", 1.0)))
+        else:
+            t_end = spec["t1"]
+        marks.append((t_end, 1, "FAULT_END", spec))
     marks.sort(key=lambda m: (m[0], m[1]))
     for t, _, kind, spec in marks:
         yield env.timeout(t - env.now)
@@ -1641,6 +1699,14 @@ def _resolve_variant(variant: str | dict | None) -> dict | None:
     if variant is None:
         return None
     if isinstance(variant, str):
+        if variant == VARIANT_ID:
+            return {
+                "variant_id": VARIANT_ID,
+                "description": "M0.2d magnitude ladder rate budget warmup variant",
+                "buffer_caps": {},
+                "agv_priority": "default",
+                "ladder": True,
+            }
         if variant not in FUNNEL_VARIANTS:
             raise ValueError(f"Unknown variant ID: {variant}")
         return copy.deepcopy(FUNNEL_VARIANTS[variant])
@@ -1668,7 +1734,13 @@ def run_episode(
     specs = _materialize(place, fault_list)
 
     var_dict = _resolve_variant(variant)
+    is_ladder = False
     if var_dict is not None:
+        is_ladder = bool(
+            var_dict.get("ladder")
+            or var_dict.get("variant_id") == VARIANT_ID
+            or variant == VARIANT_ID
+        )
         check_rate_budget(specs)
         overrides = var_dict.get("buffer_caps", {})
         unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
@@ -1731,12 +1803,22 @@ def run_episode(
         "kit_empty_log": [],
         "specs": specs,
         "fx": fx,
-        "gwin": [(s["t0"], s["t1"]) for s in specs],
+        "gwin": [
+            (
+                s["t0"],
+                s["t0"] + math.ceil(s["dur"] * float(s.get("mttr_mult", 1.0)))
+                if (is_ladder and s["class"] == "breakdown")
+                else s["t1"],
+            )
+            for s in specs
+        ],
         "qwin": [
             (s["t0"], s["t1"], s["reject_rate"], s["origin"])
             for s in specs
             if s["class"] == "quality"
         ],
+        "ladder": is_ladder,
+        "kit_sev_max": 0.0,
     }
     kit: dict[str, list[Any]] = {"A": [], "B": [], "C": []}
     shared["kit"] = kit
@@ -1981,6 +2063,7 @@ def run_episode(
             "variant_id": var_id,
             "buffer_caps": effective_caps,
             "agv_priority": agv_prio,
+            **({"kit_sev_max": shared.get("kit_sev_max", 0.0)} if is_ladder else {}),
         },
     }
 
