@@ -24,7 +24,6 @@ import json
 import pathlib
 
 import numpy as np
-import pytest
 
 from src import window_export as we
 
@@ -32,13 +31,28 @@ from src import window_export as we
 # Helpers
 # ---------------------------------------------------------------------------
 
-M0_2E_OWNED_FIELDS = frozenset({
-    "episode_id", "wear_endpoint", "maint_flag", "family", "mode",
-    "root_id", "hop", "root_ids", "sensor_vs_process", "warmup_steps",
-    "state_histograms", "funnel_census", "state_histogram",
-    "machine_histograms", "per_machine_histogram", "plant_state_rollup",
-    "plant_rollup", "warmup_flag",
-})
+M0_2E_OWNED_FIELDS = frozenset(
+    {
+        "episode_id",
+        "wear_endpoint",
+        "maint_flag",
+        "family",
+        "mode",
+        "root_id",
+        "hop",
+        "root_ids",
+        "sensor_vs_process",
+        "warmup_steps",
+        "state_histograms",
+        "funnel_census",
+        "state_histogram",
+        "machine_histograms",
+        "per_machine_histogram",
+        "plant_state_rollup",
+        "plant_rollup",
+        "warmup_flag",
+    }
+)
 
 
 def _rng(seed=0):
@@ -48,6 +62,7 @@ def _rng(seed=0):
 # ---------------------------------------------------------------------------
 # Test 1: Hand-computed aggregate test
 # ---------------------------------------------------------------------------
+
 
 class TestAggregateWindow:
     def test_mean(self):
@@ -59,7 +74,7 @@ class TestAggregateWindow:
         # RMS([1,2,3,4]) = sqrt((1+4+9+16)/4) = sqrt(7.5)
         x = np.array([1.0, 2.0, 3.0, 4.0])
         res = we.aggregate_window(x)
-        expected_rms = float(np.sqrt(np.mean(x ** 2)))
+        expected_rms = float(np.sqrt(np.mean(x**2)))
         assert abs(res["rms"] - expected_rms) < 1e-12
 
     def test_min_max(self):
@@ -94,6 +109,7 @@ class TestAggregateWindow:
 # Test 2: Envelope-stat test
 # ---------------------------------------------------------------------------
 
+
 class TestEnvelopeFeatures:
     def test_pure_sine_envelope(self):
         """Pure sine: envelope should be approximately constant (= amplitude)."""
@@ -111,13 +127,17 @@ class TestEnvelopeFeatures:
         x = np.array([1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
         res = we.envelope_features(x)
         assert set(res.keys()) == {
-            "envelope_max", "envelope_min", "envelope_mean",
-            "envelope_std", "envelope_band_energy"
+            "envelope_max",
+            "envelope_min",
+            "envelope_mean",
+            "envelope_std",
+            "envelope_band_energy",
         }
 
     def test_population_std_ddof0(self):
         """Verify std uses population convention (ddof=0)."""
         from scipy.signal import hilbert
+
         x = np.array([1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0], dtype=np.float64)
         e = np.abs(hilbert(x))
         expected_std = float(np.std(e, ddof=0))
@@ -127,6 +147,7 @@ class TestEnvelopeFeatures:
     def test_envelope_mean_matches_hilbert(self):
         """envelope_mean must match mean(|hilbert(x)|)."""
         from scipy.signal import hilbert
+
         rng = np.random.default_rng(42)
         x = rng.standard_normal(64)
         e = np.abs(hilbert(x))
@@ -144,10 +165,12 @@ class TestEnvelopeFeatures:
 # Test 3: Envelope-band-energy exact formula test
 # ---------------------------------------------------------------------------
 
+
 class TestEnvelopeBandEnergy:
     def _reference_band_energy(self, x, fs):
         """Reference implementation of the TL formula."""
         from scipy.signal import hilbert
+
         e = np.abs(hilbert(x))
         e_mean = np.mean(e)
         s = (e - e_mean) ** 2
@@ -203,6 +226,7 @@ class TestEnvelopeBandEnergy:
 # Test 4: Zero-energy edge-case test
 # ---------------------------------------------------------------------------
 
+
 class TestZeroEnergyEdgeCase:
     def test_constant_signal_no_nan_inf(self):
         """Constant signal has zero spectral energy; must return 0.0, not NaN."""
@@ -228,10 +252,10 @@ class TestZeroEnergyEdgeCase:
             assert not np.isinf(val), f"{key} must not be Inf"
 
 
-
 # ---------------------------------------------------------------------------
 # Test 5: Unresolved Base Window with Fallback
 # ---------------------------------------------------------------------------
+
 
 class TestUnresolvedBaseWindow:
     def test_derive_base_window_unresolved(self):
@@ -273,6 +297,7 @@ class TestUnresolvedBaseWindow:
 # Test 6: Resolved Base (0.5B / B / 2B) via _compute_scale_lengths
 # ---------------------------------------------------------------------------
 
+
 class TestResolvedBase:
     def test_resolved_scale_lengths(self):
         """When B is resolved, short=0.5B, base=B, long=2B."""
@@ -295,6 +320,7 @@ class TestResolvedBase:
 # ---------------------------------------------------------------------------
 # Test 7: Multi-scale length test (fallback window counts for T=300)
 # ---------------------------------------------------------------------------
+
 
 class TestFallbackWindowCounts:
     def test_fallback_window_counts_t300(self):
@@ -319,11 +345,10 @@ class TestFallbackWindowCounts:
         assert total == 728
 
 
-
-
 # ---------------------------------------------------------------------------
 # Test 8: Rolling stride test
 # ---------------------------------------------------------------------------
+
 
 class TestRollingStride:
     def test_stride_1_no_skipped_positions(self):
@@ -365,6 +390,7 @@ class TestRollingStride:
 # Test 9: Fast-channel preservation test
 # ---------------------------------------------------------------------------
 
+
 class TestFastChannelPreservation:
     def test_source_length_unchanged(self):
         """Output t_end goes up to T-1; no samples are skipped."""
@@ -373,7 +399,7 @@ class TestFastChannelPreservation:
         win = 5
         rows = we.rolling_features_for_channel(signal, win, "base", "A0")
         t_ends = [r["t_end"] for r in rows]
-        assert max(t_ends) == T - 1, f"Last t_end must be T-1={T-1}"
+        assert max(t_ends) == T - 1, f"Last t_end must be T-1={T - 1}"
         assert len(rows) == T - win + 1, "Row count must be T - win + 1"
 
     def test_no_every_other_step_reduction(self):
@@ -405,6 +431,7 @@ class TestFastChannelPreservation:
 # Test 10: Per-channel independence test
 # ---------------------------------------------------------------------------
 
+
 class TestPerChannelIndependence:
     def test_changing_channel_a_does_not_affect_channel_b(self):
         """Aggregate for channel B must be unchanged when channel A values change."""
@@ -413,12 +440,8 @@ class TestPerChannelIndependence:
         obs = rng.standard_normal((n_ch, T))
 
         # Build a fake window_config
-        win_cfg = {"scale_lengths": {"base": 5}}
-
         def get_channel_b_means(obs_arr):
-            rows_b = we.rolling_features_for_channel(
-                obs_arr[1, :], 5, "base", "B"
-            )
+            rows_b = we.rolling_features_for_channel(obs_arr[1, :], 5, "base", "B")
             return [r["mean"] for r in rows_b]
 
         b_means_original = get_channel_b_means(obs)
@@ -438,9 +461,9 @@ class TestPerChannelIndependence:
         """Each channel's aggregate uses only that channel's data."""
         T = 15
         obs = np.zeros((3, T))
-        obs[0, :] = 1.0   # channel 0: all ones
-        obs[1, :] = 2.0   # channel 1: all twos
-        obs[2, :] = 3.0   # channel 2: all threes
+        obs[0, :] = 1.0  # channel 0: all ones
+        obs[1, :] = 2.0  # channel 1: all twos
+        obs[2, :] = 3.0  # channel 2: all threes
 
         win = 3
         for ch_idx in range(3):
@@ -458,10 +481,12 @@ class TestPerChannelIndependence:
 # Test 11: Output/version test
 # ---------------------------------------------------------------------------
 
+
 class TestOutputVersionTest:
     def test_window_config_contains_m0_2f_section(self, tmp_path):
         """write_extended_window_config must add an m0_2f section."""
         from src.twin import run_calibration
+
         cal = run_calibration(7)
         wd = we.derive_base_window(cal)
         section = we.build_m0_2f_window_config_section(wd)
@@ -490,12 +515,15 @@ class TestOutputVersionTest:
     def test_m0_2e_keys_preserved(self, tmp_path):
         """M0.2e owned keys in existing config must NOT be overwritten."""
         from src.twin import run_calibration
+
         cal = run_calibration(7)
         wd = we.derive_base_window(cal)
         section = we.build_m0_2f_window_config_section(wd)
 
         existing = {
-            "cal_win": 120, "T": 300, "schema_version": 4,
+            "cal_win": 120,
+            "T": 300,
+            "schema_version": 4,
             "owned_fields": ["episode_id", "wear_endpoint"],
             "code_version": "twin-2.2.0-topology-A",
         }
@@ -515,6 +543,7 @@ class TestOutputVersionTest:
     def test_measured_base_in_config(self, tmp_path):
         """window_config must record UNRESOLVED for base_window."""
         from src.twin import run_calibration
+
         cal = run_calibration(7)
         wd = we.derive_base_window(cal)
         section = we.build_m0_2f_window_config_section(wd)
@@ -524,6 +553,7 @@ class TestOutputVersionTest:
 # ---------------------------------------------------------------------------
 # Test 12: M0.2e boundary test (AST-based)
 # ---------------------------------------------------------------------------
+
 
 class TestM0_2eBoundary:
     def test_window_export_does_not_write_m0_2e_keys(self):
@@ -538,9 +568,12 @@ class TestM0_2eBoundary:
             # Detect dict key assignments: {"key": ...}
             if isinstance(node, ast.Dict):
                 for key in node.keys:
-                    if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                        if key.value in M0_2E_OWNED_FIELDS:
-                            violations.append((key.lineno, key.value))
+                    if (
+                        isinstance(key, ast.Constant)
+                        and isinstance(key.value, str)
+                        and key.value in M0_2E_OWNED_FIELDS
+                    ):
+                        violations.append((key.lineno, key.value))
 
             # Detect subscript assignments: d["key"] = ...
             if isinstance(node, ast.Assign):
@@ -563,10 +596,12 @@ class TestM0_2eBoundary:
 # Test 13: Existing v3 contract regression
 # ---------------------------------------------------------------------------
 
+
 class TestV3ContractRegression:
     def test_existing_export_still_works(self, tmp_path):
         """Import window_export must not break dataset_export."""
         from src import dataset_export
+
         out_parquet = tmp_path / "dataset_v3.parquet"
         res = dataset_export.export(seed=7, out=out_parquet)
         assert out_parquet.exists()
@@ -576,6 +611,7 @@ class TestV3ContractRegression:
         """Adding M0.2f section must not corrupt M0.2e contract in window_config."""
         from src import dataset_export
         from src.twin import run_calibration
+
         out_parquet = tmp_path / "dataset_v3.parquet"
         dataset_export.export(seed=7, out=out_parquet)
 
@@ -594,8 +630,15 @@ class TestV3ContractRegression:
             updated = json.load(fh)
 
         # All M0.2e keys must be unchanged.
-        for key in ("cal_win", "T", "warmup_steps", "n_machines", "schema_version",
-                    "code_version", "owned_fields"):
+        for key in (
+            "cal_win",
+            "T",
+            "warmup_steps",
+            "n_machines",
+            "schema_version",
+            "code_version",
+            "owned_fields",
+        ):
             assert updated[key] == original[key], (
                 f"M0.2e key {key!r} was altered by M0.2f extension"
             )
@@ -605,6 +648,7 @@ class TestV3ContractRegression:
 # ---------------------------------------------------------------------------
 # Test 14: No scaler.pkl test
 # ---------------------------------------------------------------------------
+
 
 class TestNoScalerPkl:
     def test_export_multiscale_does_not_create_scaler(self, tmp_path):
@@ -621,6 +665,7 @@ class TestNoScalerPkl:
     def test_artifacts_dir_no_scaler(self, tmp_path):
         """After write_extended_window_config, no scaler.pkl appears."""
         from src.twin import run_calibration
+
         cal = run_calibration(7)
         wd = we.derive_base_window(cal)
         section = we.build_m0_2f_window_config_section(wd)
@@ -633,6 +678,7 @@ class TestNoScalerPkl:
 # Test 15: Multi-scale export — all three scales emitted
 # ---------------------------------------------------------------------------
 
+
 class TestMultiScaleExport:
     def test_all_three_scales_emitted(self, tmp_path):
         """export_multiscale must emit rows for all three scales."""
@@ -644,6 +690,7 @@ class TestMultiScaleExport:
         assert result["row_count"] > 0
 
         import pandas as pd
+
         df = pd.read_parquet(tmp_path / "window_features.parquet")
         scales = set(df["scale"].unique())
         assert scales == {"short", "base", "long"}, f"Missing scales: {scales}"
@@ -657,6 +704,7 @@ class TestMultiScaleExport:
         we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=tmp_path)
 
         import pandas as pd
+
         df = pd.read_parquet(tmp_path / "window_features.parquet")
         for ch in ch_names:
             for scale in ["short", "base", "long"]:
@@ -679,6 +727,7 @@ class TestMultiScaleExport:
 # Test 16: Deterministic output
 # ---------------------------------------------------------------------------
 
+
 class TestDeterministicOutput:
     def test_same_seed_same_output(self, tmp_path):
         """Two exports with same seed and config must produce identical output."""
@@ -694,6 +743,7 @@ class TestDeterministicOutput:
         we.export_multiscale(obs, 0, ch_names, win_cfg, out_dir=dir2)
 
         import pandas as pd
+
         df1 = pd.read_parquet(dir1 / "window_features.parquet")
         df2 = pd.read_parquet(dir2 / "window_features.parquet")
         assert df1.equals(df2), "Determinism violated: two runs differ"
@@ -702,6 +752,7 @@ class TestDeterministicOutput:
 # ---------------------------------------------------------------------------
 # Test 17: Artifact creation
 # ---------------------------------------------------------------------------
+
 
 class TestArtifactCreation:
     def test_artifacts_dir_created(self, tmp_path):
@@ -719,6 +770,7 @@ class TestArtifactCreation:
     def test_parquet_readable(self, tmp_path):
         """window_features.parquet must be readable and contain expected columns."""
         import pandas as pd
+
         n_ch, T = 2, 20
         obs = np.random.default_rng(0).standard_normal((n_ch, T))
         ch_names = ["A", "B"]
@@ -727,10 +779,20 @@ class TestArtifactCreation:
 
         df = pd.read_parquet(tmp_path / "window_features.parquet")
         expected_cols = {
-            "channel", "scale", "window_len", "t_start", "t_end",
-            "mean", "rms", "min", "max",
-            "envelope_max", "envelope_min", "envelope_mean",
-            "envelope_std", "envelope_band_energy",
+            "channel",
+            "scale",
+            "window_len",
+            "t_start",
+            "t_end",
+            "mean",
+            "rms",
+            "min",
+            "max",
+            "envelope_max",
+            "envelope_min",
+            "envelope_mean",
+            "envelope_std",
+            "envelope_band_energy",
             "episode_id_ref",
         }
         assert expected_cols.issubset(set(df.columns)), (
@@ -740,6 +802,7 @@ class TestArtifactCreation:
     def test_parquet_schema_no_m02e_fields(self, tmp_path):
         """window_features.parquet must NOT contain M0.2e-owned field names as columns."""
         import pandas as pd
+
         n_ch, T = 2, 20
         obs = np.random.default_rng(0).standard_normal((n_ch, T))
         ch_names = ["A", "B"]
@@ -757,18 +820,19 @@ class TestArtifactCreation:
 # Test 18: Integration — M0.2e dataset remains intact
 # ---------------------------------------------------------------------------
 
+
 class TestIntegration:
     def test_m02e_dataset_intact_after_m02f(self, tmp_path):
         """Running M0.2f export must not modify an existing dataset_v3.parquet."""
         import pandas as pd
-        from src import dataset_export
-        out_parquet = tmp_path / "dataset_v3.parquet"
-        res = dataset_export.export(seed=7, out=out_parquet)
-        df_before = pd.read_parquet(out_parquet)
 
-        # Now run M0.2f export in the same directory
-        from src.twin import run_calibration, run_episode
+        from src import dataset_export
         from src.config import MACHINE_INDEX
+        from src.twin import run_calibration, run_episode
+
+        out_parquet = tmp_path / "dataset_v3.parquet"
+        dataset_export.export(seed=7, out=out_parquet)
+        df_before = pd.read_parquet(out_parquet)
         cal = run_calibration(7)
         wd = we.derive_base_window(cal)
         rec = run_episode(7, None)
@@ -784,6 +848,7 @@ class TestIntegration:
     def test_m02f_does_not_require_join(self, tmp_path):
         """M0.2f outputs a standalone sidecar artifact, no join required."""
         import pandas as pd
+
         n_ch, T = 2, 20
         obs = np.random.default_rng(0).standard_normal((n_ch, T))
         ch_names = ["A", "B"]
@@ -793,4 +858,6 @@ class TestIntegration:
         # window_features.parquet is standalone, loadable without dataset_v3
         df = pd.read_parquet(result["out"])
         assert len(df) > 0
-        assert "episode_id_ref" in df.columns  # provenance reference, not M0.2e join key
+        assert (
+            "episode_id_ref" in df.columns
+        )  # provenance reference, not M0.2e join key

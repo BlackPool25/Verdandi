@@ -168,7 +168,7 @@ def _compute_scale_lengths(base_window: int) -> dict[str, int]:
     """
     result: dict[str, int] = {}
     for scale, name in zip(_SCALE_FACTORS, _SCALE_NAMES):
-        result[name] = max(1, int(round(scale * base_window)))
+        result[name] = max(1, round(scale * base_window))
     return result
 
 
@@ -191,7 +191,7 @@ def aggregate_window(x: np.ndarray) -> dict[str, float]:
         )
     return {
         "mean": float(np.mean(x)),
-        "rms": float(np.sqrt(np.mean(x ** 2))),
+        "rms": float(np.sqrt(np.mean(x**2))),
         "min": float(np.min(x)),
         "max": float(np.max(x)),
     }
@@ -365,7 +365,7 @@ def export_multiscale(
         raise ValueError(
             f"episode_obs must be 2-D [n_channels, T], got shape {obs.shape}"
         )
-    n_ch, T = obs.shape
+    n_ch, _T = obs.shape
     if n_ch != len(channel_names):
         raise ValueError(
             f"channel_names length {len(channel_names)} != obs n_channels {n_ch}"
@@ -392,12 +392,25 @@ def export_multiscale(
                 all_rows.extend(rows)
 
     if not all_rows:
-        df = pd.DataFrame(columns=[
-            "episode_id_ref", "channel", "scale", "window_len", 
-            "t_start", "t_end", "mean", "rms", "min", "max", 
-            "envelope_max", "envelope_min", "envelope_mean", 
-            "envelope_std", "envelope_band_energy"
-        ])
+        df = pd.DataFrame(
+            columns=[
+                "episode_id_ref",
+                "channel",
+                "scale",
+                "window_len",
+                "t_start",
+                "t_end",
+                "mean",
+                "rms",
+                "min",
+                "max",
+                "envelope_max",
+                "envelope_min",
+                "envelope_mean",
+                "envelope_std",
+                "envelope_band_energy",
+            ]
+        )
     else:
         df = pd.DataFrame(all_rows)
         # Determinism: sort columns.
@@ -458,10 +471,7 @@ def build_m0_2f_window_config_section(
             }
             sf_dict = "UNRESOLVED"
         else:
-            sf_dict = {
-                name: scale
-                for name, scale in zip(_SCALE_NAMES, _SCALE_FACTORS)
-            }
+            sf_dict = {name: scale for name, scale in zip(_SCALE_NAMES, _SCALE_FACTORS)}
             sl_dict = {
                 name: {
                     "scale_factor": scale,
@@ -514,9 +524,7 @@ def build_m0_2f_window_config_section(
             "scale_status", "unresolved_fallback"
         )
         section["fallback_q"] = window_derivation.get("fallback_q", _FALLBACK_Q)
-        section["fallback_policy"] = window_derivation.get(
-            "fallback_policy", "q_2q_4q"
-        )
+        section["fallback_policy"] = window_derivation.get("fallback_policy", "q_2q_4q")
 
     return section
 
@@ -582,9 +590,9 @@ def run_m0_2f_export(
         features_path, row_count, window_config_path
     """
     # Lazy imports to avoid circular deps at module level.
-    from src.twin import run_calibration, run_episode
     from src.config import MACHINE_INDEX
     from src.dataset_export import build_window_config
+    from src.twin import run_calibration, run_episode
 
     _cal_seed = cal_seed if cal_seed is not None else seed
 

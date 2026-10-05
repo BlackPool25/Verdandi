@@ -447,7 +447,8 @@ def test_clean_tree_no_m0_2f_aggregates() -> None:
     repo_src = pathlib.Path("src").resolve()
     writes, _ = scan_writers(repo_src, M0_2F_OWNED_FIELDS)
     unauthorized = [
-        w for w in writes
+        w
+        for w in writes
         if w.file_path not in DESIGNATED_M0_2F_OWNERS
         or w.scope not in DESIGNATED_M0_2F_OWNERS[w.file_path]
     ]
