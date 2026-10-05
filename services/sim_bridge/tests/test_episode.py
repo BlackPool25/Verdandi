@@ -115,7 +115,10 @@ def test_enable_natural_breakdown_round_trip():
 def test_single_dict_fault_accepted():
     r = client.post(
         "/episode",
-        json={"seed": 7, "faults": {"class": "drift", "origin": "B2", "t0": 150, "dur": 10}},
+        json={
+            "seed": 7,
+            "faults": {"class": "drift", "origin": "B2", "t0": 150, "dur": 10},
+        },
     )
     assert r.status_code == 200, r.text
 

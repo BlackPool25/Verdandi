@@ -42,8 +42,9 @@ from typing import Any
 
 from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
 
-SCHEMA_VERSION = 4  # topology-A v4; must equal src.config.TWIN_SCHEMA
-assert SCHEMA_VERSION == TWIN_SCHEMA == 4
+SCHEMA_VERSION = TWIN_SCHEMA  # topology-A; must equal src.config.TWIN_SCHEMA
+assert SCHEMA_VERSION == TWIN_SCHEMA
+assert SCHEMA_VERSION in (4, 5)
 
 V1_REJECT_MSG = "schema v1 non-comparable, rebaseline"
 
@@ -288,13 +289,10 @@ def validate_tick(tick: dict[str, Any]) -> None:
             )
         if entry.get("flag") not in FLAG_VALUES:
             raise SchemaViolation(
-                f"quality[{machine}] flag {entry.get('flag')!r} "
-                f"outside {FLAG_VALUES}"
+                f"quality[{machine}] flag {entry.get('flag')!r} outside {FLAG_VALUES}"
             )
         if "part_id" not in entry:
-            raise SchemaViolation(
-                f"quality[{machine}] missing part_id: {entry!r}"
-            )
+            raise SchemaViolation(f"quality[{machine}] missing part_id: {entry!r}")
 
 
 def validate_header(header: dict[str, Any]) -> None:
@@ -315,9 +313,7 @@ def validate_header(header: dict[str, Any]) -> None:
     if not isinstance(energy, dict):
         raise SchemaViolation(f"header energy must be a dict: {energy!r}")
     if "sum_kVAh" not in energy or "unit" not in energy:
-        raise SchemaViolation(
-            f"header energy missing sum_kVAh/unit: {sorted(energy)}"
-        )
+        raise SchemaViolation(f"header energy missing sum_kVAh/unit: {sorted(energy)}")
     if energy["unit"] != "kVAh-apparent":
         raise SchemaViolation(
             f"header energy unit must be 'kVAh-apparent': {energy['unit']!r}"

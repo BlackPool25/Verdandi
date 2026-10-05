@@ -26,3 +26,5 @@ playwright-report/
 .omo/
 .opencode/
 frontend/qa-*
+.commandcode/
+docs/synopsis/

@@ -59,13 +59,21 @@ M0_2E_ALIAS_FIELDS = frozenset(
 
 M0_2E_ALL_FIELDS = frozenset(M0_2E_OWNED_FIELDS | M0_2E_ALIAS_FIELDS)
 
-# M0.2f owned fields (MINIPRO-29, Gowtham) - M0.2e MUST NOT implement these!
+# M0.2f owned fields (MINIPRO-29, M0.2f Trainable Rework) - M0.2e MUST NOT implement these!
 M0_2F_OWNED_FIELDS = frozenset(
     {
         "envelope_max",
         "envelope_min",
         "envelope_mean",
         "envelope_std",
+        "envelope_band_energy",
+        "episode_id_ref",
+        "t_start",
+        "t_end",
+        "B_i",
+        "scale_status",
+        "scale_cover",
+        "envelope_definition_id",
         "rollup_0_5s",
         "rollup_1_0s",
         "rollup_2_0s",
@@ -84,6 +92,26 @@ DESIGNATED_OWNERS: dict[str, set[str]] = {
     # Module relative path -> allowed scopes/functions
     "src/twin.py": {"run_episode"},
     "src/dataset_export.py": {"export", "build_window_config"},
+}
+
+# Designated canonical writers for M0.2f fields in production code (MINIPRO-29).
+DESIGNATED_M0_2F_OWNERS: dict[str, set[str]] = {
+    "src/window_export.py": {
+        "envelope_features",
+        "rolling_features_for_channel",
+        "export_multiscale",
+        "export_cover",
+        "derive_base_window",
+        "rolling_bank",
+        "build_m0_2f_window_config_section",
+        "run_m0_2f_export",
+    },
+    "src/dataset_export.py": {
+        "build_window_config",
+    },
+    "src/train_pipeline.py": {
+        "build_windows",
+    },
 }
 
 
@@ -305,9 +333,11 @@ def validate_duplicate_and_unauthorized_writers(
     writes_by_field_and_scope: dict[str, list[FieldWrite]] = {}
 
     for w in writes:
-        # Check M0.2f boundary prohibition
+        # Check M0.2f boundary prohibition: only designated M0.2f owners may write M0.2f fields
         if w.field in M0_2F_OWNED_FIELDS:
-            m0_2f_boundary_violations.append(w)
+            allowed_m0_2f = DESIGNATED_M0_2F_OWNERS.get(w.file_path)
+            if allowed_m0_2f is None or w.scope not in allowed_m0_2f:
+                m0_2f_boundary_violations.append(w)
             continue
 
         # Check authorized modules and scopes
@@ -411,24 +441,38 @@ def test_clean_tree_designated_owners_only() -> None:
         f"Canonical M0.2e fields missing from writers: {missing_canonical}"
     )
 
-    # Verify that writes were performed ONLY by twin.py (run_episode) and dataset_export.py (export/build_window_config)
+    # Verify that writes were performed ONLY by designated owners
     for w in result["writes"]:
-        assert w.file_path in DESIGNATED_OWNERS, (
-            f"Unexpected writer file: {w.file_path}"
-        )
-        assert w.scope in DESIGNATED_OWNERS[w.file_path], (
-            f"Unexpected writer scope in {w.file_path}: {w.scope}"
-        )
+        if w.field in M0_2F_OWNED_FIELDS:
+            assert w.file_path in DESIGNATED_M0_2F_OWNERS, (
+                f"Unexpected M0.2f writer file: {w.file_path}"
+            )
+            assert w.scope in DESIGNATED_M0_2F_OWNERS[w.file_path], (
+                f"Unexpected M0.2f writer scope in {w.file_path}: {w.scope}"
+            )
+        else:
+            assert w.file_path in DESIGNATED_OWNERS, (
+                f"Unexpected writer file: {w.file_path}"
+            )
+            assert w.scope in DESIGNATED_OWNERS[w.file_path], (
+                f"Unexpected writer scope in {w.file_path}: {w.scope}"
+            )
 
 
 @pytest.mark.k1
 def test_clean_tree_no_m0_2f_aggregates() -> None:
-    """Verify that NO module in src/ implements M0.2f multi-scale aggregates or envelopes."""
+    """Verify that M0.2e canonical modules (twin.py, dataset_export.py) do NOT implement M0.2f fields."""
     repo_src = pathlib.Path("src").resolve()
     writes, _ = scan_writers(repo_src, M0_2F_OWNED_FIELDS)
-    assert not writes, (
+    unauthorized = [
+        w
+        for w in writes
+        if w.file_path not in DESIGNATED_M0_2F_OWNERS
+        or w.scope not in DESIGNATED_M0_2F_OWNERS[w.file_path]
+    ]
+    assert not unauthorized, (
         f"M0.2e violated boundary by implementing M0.2f owned fields: "
-        f"{[(w.file_path, w.lineno, w.field) for w in writes]}"
+        f"{[(w.file_path, w.lineno, w.field) for w in unauthorized]}"
     )
 
 

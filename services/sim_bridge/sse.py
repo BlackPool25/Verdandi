@@ -22,7 +22,9 @@ def format_sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def build_header(episode_id: str, record: dict[str, Any], digest: str) -> dict[str, Any]:
+def build_header(
+    episode_id: str, record: dict[str, Any], digest: str
+) -> dict[str, Any]:
     """Episode-final header: sbuf/flow finals + c7tail_final + energy + digest."""
     return {
         "episode_id": episode_id,

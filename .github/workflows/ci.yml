@@ -41,6 +41,8 @@ jobs:
       - run: python -m pytest tests/ -m "k1 or k2 or k3 or k4 or k5 or battery" --junitxml=junit.xml --cov=src --cov-fail-under=80 -q -n auto
       - run: mkdir -p artifacts && cp tests/fixtures/gates_all_green.csv artifacts/battery.csv
       - run: python scripts/check_gates.py --csv artifacts/battery.csv --f1 0.85 --ac1 0.70 --flip 0.40 --ground 0.95 --max-s 600
+      - name: M0.2f anomaly retention quality gate
+        run: python scripts/check_anomaly_quality.py --families all
       - name: T9 duty cycle verification (test_twin_duty)
         run: python -m pytest tests/test_twin_duty.py -q
       - uses: actions/upload-artifact@v4
@@ -66,7 +68,7 @@ jobs:
       - run: bandit -r src/ -ll -f json -o bandit.json
       - run: pip-audit -r requirements.txt -f json -o audit.json
       - name: CH8/CH9/WSTATE channel-schema check
-        run: 'python -c "from src import twin, config; assert hasattr(config, ''TWIN_SCHEMA'') and config.TWIN_SCHEMA == 4; print(''CH8/CH9/WSTATE schema check: PASS'')"'
+        run: 'python -c "from src import twin, config; assert hasattr(config, ''TWIN_SCHEMA'') and config.TWIN_SCHEMA == 5; print(''CH8/CH9/WSTATE schema check: PASS'')"'
       - name: replay 0-diverge across 5 seeds
         run: |
           for seed in 7 42 777 999 1234; do

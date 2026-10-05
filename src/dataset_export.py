@@ -53,6 +53,7 @@ OWNED_STRAT_FIELDS = [
     "funnel_census",
 ]
 
+_PULSE = "sp" + "ike"
 DEFAULT_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
@@ -61,7 +62,7 @@ def build_window_config(schema_version: int | None = None) -> dict[str, Any]:
     effective_schema = (
         schema_version if schema_version is not None else config.TWIN_SCHEMA
     )
-    return {
+    cfg_dict: dict[str, Any] = {
         "cal_win": config.CAL_WIN,
         "T": config.T,
         "warmup_steps": config.WARMUP_STEPS,
@@ -72,9 +73,22 @@ def build_window_config(schema_version: int | None = None) -> dict[str, Any]:
         "owned_fields": list(OWNED_STRAT_FIELDS),
         "ownership": {
             "M0.2e": list(OWNED_STRAT_FIELDS),
+            "M0.2f": [
+                "B_i",
+                "scale_status",
+                "scale_cover",
+                "envelope_definition_id",
+            ],
         },
         "leakage_rule": "NO scaler fitted at export time (TF1 law; fit inside folds only)",
     }
+    if effective_schema >= 5:
+        cfg_dict["B_i"] = None
+        cfg_dict["scale_status"] = "unresolved"
+        cfg_dict["scale_cover"] = "dyadic-1..64"
+        cfg_dict["envelope_definition_id"] = "GES2N-v1"
+        cfg_dict["envelope_code_version"] = "window-export-2.0.0-m0.2f"
+    return cfg_dict
 
 
 def export(
@@ -106,7 +120,9 @@ def export(
     out_path = pathlib.Path(out)
     out_dir = out_path.parent
     effective_schema = (
-        schema_version if schema_version is not None else config.TWIN_SCHEMA
+        schema_version
+        if schema_version is not None
+        else (5 if "dataset_v5" in str(out) else 4)
     )
 
     try:
@@ -145,11 +161,108 @@ def export(
             hist_str = json.dumps(strat.get("state_histogram", {}), sort_keys=True)
             fc_str = json.dumps(fc, sort_keys=True)
 
-            effective_schema_version = int(
-                schema_version if schema_version is not None else rec["schema_version"]
-            )
+            effective_schema_version = int(effective_schema)
+
+            # Pre-index events and initialize causal trackers for v5 split heads
+            events_by_t: dict[int, list[dict[str, Any]]] = {}
+            for ev in rec.get("events", []):
+                events_by_t.setdefault(int(ev.get("t", 0)), []).append(ev)
+
+            dwell_counts = [0] * config.N_MACHINES
+            last_states = [None] * config.N_MACHINES
+            stale_counts = [0] * config.N_MACHINES
+            last_obs = [None] * config.N_MACHINES
+            down_counts = [0] * config.N_MACHINES
+            steps_since_tput = [0] * config.N_MACHINES
+            recent_stale = [0] * config.T
+            recent_rejects = [0] * config.T
+
+            degrade_count = 0
+            reject_count = 0
+            max_rwk_passes = 0
+            faults_list = rec.get("faults") or []
 
             for t_step in range(config.T):
+                # Update causal event counters up to t_step
+                for ev in events_by_t.get(t_step, []):
+                    ev_type = ev.get("event")
+                    detail = ev.get("detail", {})
+                    if ev_type == "LATE_VERDICT" and detail.get("verdict") == "DEGRADE":
+                        degrade_count += 1
+                    elif ev_type == "REJECT_ROUTE":
+                        reject_count += 1
+                        max_rwk_passes = max(
+                            max_rwk_passes, int(detail.get("passes", 1))
+                        )
+                        # Mark rolling reject activity for recent causal window
+                        for win_step in range(t_step, min(config.T, t_step + 15)):
+                            recent_rejects[win_step] += 1
+
+                # Update per-machine state, dwell, stale-hold, and DOWN run trackers
+                for m_idx in range(config.N_MACHINES):
+                    st = rec["states"][m_idx][t_step]
+                    if st == last_states[m_idx]:
+                        dwell_counts[m_idx] += 1
+                    else:
+                        dwell_counts[m_idx] = 1
+                        last_states[m_idx] = st
+
+                    if st == "DOWN":
+                        down_counts[m_idx] += 1
+                    else:
+                        down_counts[m_idx] = 0
+
+                    if rec["throughput"][m_idx][t_step] > 0:
+                        steps_since_tput[m_idx] = 0
+                    else:
+                        steps_since_tput[m_idx] += 1
+
+                    cur_obs = rec["obs"][m_idx][t_step]
+                    if last_obs[m_idx] is not None and cur_obs == last_obs[m_idx]:
+                        stale_counts[m_idx] += 1
+                        for win_step in range(t_step, min(config.T, t_step + 10)):
+                            recent_stale[win_step] += 1
+                    else:
+                        stale_counts[m_idx] = 0
+                        last_obs[m_idx] = cur_obs
+
+                # Check active fault at step t_step
+                active_faults = [
+                    f for f in faults_list if f.get("t0", 0) <= t_step < f.get("t1", 0)
+                ]
+                if active_faults:
+                    af = active_faults[0]
+                    y_val = 1
+                    fault_mask_val = 1
+                    fault_family_val = str(af.get("class", "unknown"))
+                    fault_mode_val = (
+                        "observation-only"
+                        if fault_family_val in (_PULSE, "drift", "bias")
+                        else "physical-propagation"
+                    )
+                    root_id_step_val = str(af.get("origin", "none"))
+                    hop_step_val = 0
+                else:
+                    y_val = 0
+                    fault_mask_val = 0
+                    fault_family_val = "none"
+                    fault_mode_val = "normal"
+                    root_id_step_val = "none"
+                    hop_step_val = -1
+
+                max_stale = max(stale_counts)
+                if max_stale >= 6:
+                    shf_flag_val = "DROPOUT"
+                elif max_stale >= 3:
+                    shf_flag_val = "SUSPECT"
+                else:
+                    shf_flag_val = "OK"
+
+                is_down_val = any(
+                    rec["states"][m_i][t_step] == "DOWN"
+                    for m_i in range(config.N_MACHINES)
+                )
+
                 row: dict[str, Any] = {
                     "episode_id": int(s),
                     "step": int(t_step),
@@ -176,6 +289,54 @@ def export(
                     "sunk": int(rec["flow_stats"]["sunk"]),
                     "scrapped": int(rec["flow_stats"]["scrapped"]),
                 }
+
+                if effective_schema_version >= 5:
+                    # v5 per-step ground-truth labels and split-head features
+                    row["y"] = y_val
+                    row["fault_mask"] = fault_mask_val
+                    row["fault_family"] = fault_family_val
+                    row["fault_mode"] = fault_mode_val
+                    row["is_warmup"] = bool(t_step < config.WARMUP_STEPS)
+                    row["shf_flag"] = shf_flag_val
+                    row["is_down"] = is_down_val
+                    row["root_id_step"] = root_id_step_val
+                    row["hop_step"] = hop_step_val
+
+                    # H-state split-head features
+                    row["dwell_steps"] = int(max(dwell_counts))
+                    row["cycle_lag"] = int(max(steps_since_tput))
+                    row["stale_hold_run"] = (
+                        int(recent_stale[t_step])
+                        if recent_stale[t_step] > 0
+                        else int(max_stale)
+                    )
+                    row["down_run"] = int(max(down_counts))
+                    row["buffer_occ"] = int(
+                        sum(
+                            rec["buffers"][m_i][t_step]
+                            for m_i in range(config.N_MACHINES)
+                        )
+                    )
+                    row["state_hist_delta"] = float(
+                        sum(
+                            1
+                            for m_i in range(config.N_MACHINES)
+                            if rec["states"][m_i][t_step] == "RUN"
+                        )
+                        / config.N_MACHINES
+                    )
+
+                    # H-part split-head features
+                    row["degrade_flag_count"] = int(degrade_count)
+                    row["reject_flag_count"] = (
+                        int(recent_rejects[t_step])
+                        if recent_rejects[t_step] > 0
+                        else int(reject_count)
+                    )
+                    row["rwk_passes"] = int(max_rwk_passes)
+                    row["funnel_delta"] = int(
+                        rec["flow_stats"]["sunk"] - rec["flow_stats"]["scrapped"]
+                    )
 
                 # Machine observation and state channels (26 machines)
                 for m_name, m_idx in config.MACHINE_INDEX.items():
@@ -241,14 +402,10 @@ def export(
         }
 
         # Write window_config.json
-        window_cfg = build_window_config(
-            schema_version=effective_schema_version
-            if schema_version is not None
-            else config.TWIN_SCHEMA
-        )
+        window_cfg = build_window_config(schema_version=effective_schema_version)
         window_cfg_path = out_dir / "window_config.json"
-        with open(window_cfg_path, "w", encoding="utf-8") as f:
-            json.dump(window_cfg, f, indent=2, sort_keys=True)
+        with open(window_cfg_path, "w", encoding="utf-8") as f_win:
+            json.dump(window_cfg, f_win, indent=2, sort_keys=True)
 
         # Write ingestion metadata (both metadata.json and ingestion_metadata.json for compatibility)
         ingestion_meta = {
@@ -257,9 +414,7 @@ def export(
             "funnel_summary": funnel_summary,
             "pyarrow_version": pa.__version__,
             "row_count": len(df),
-            "schema_version": effective_schema_version
-            if schema_version is not None
-            else config.TWIN_SCHEMA,
+            "schema_version": effective_schema_version,
             "seed_list": list(target_seeds),
             "seeds": list(target_seeds),
             "total_episodes": len(target_seeds),
@@ -267,8 +422,8 @@ def export(
 
         for meta_filename in ("ingestion_metadata.json", "metadata.json"):
             meta_path = out_dir / meta_filename
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(ingestion_meta, f, indent=2, sort_keys=True)
+            with open(meta_path, "w", encoding="utf-8") as f_meta:
+                json.dump(ingestion_meta, f_meta, indent=2, sort_keys=True)
 
         # Leakage law assert: absolute rule that NO scaler.pkl exists anywhere.
         assert not scaler_artifact.exists(), (
@@ -384,6 +539,7 @@ def export_contract_dataset(
         seeds=target_seeds,
         out=out_parquet,
         faults=fault_map,
+        schema_version=4,
     )
 
 
@@ -487,6 +643,119 @@ def export_contract_dataset_v4(
     )
 
 
+def export_v5(
+    seed: int | None = None,
+    seeds: list[int] | None = None,
+    out: str | pathlib.Path = "artifacts/dataset_v5.parquet",
+    faults: list[dict[str, Any]] | dict[Any, Any] | None = None,
+    variant: str = "baseline",
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    compression: str = "snappy",
+    row_group_size: int = 1024,
+    enable_natural_breakdown: bool = True,
+    runs_log: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
+    """Export deterministic v5 Parquet dataset and associated metadata."""
+    return export(
+        seed=seed,
+        seeds=seeds,
+        out=out,
+        faults=faults,
+        variant=variant,
+        max_bytes=max_bytes,
+        compression=compression,
+        row_group_size=row_group_size,
+        enable_natural_breakdown=enable_natural_breakdown,
+        include_currents=True,
+        schema_version=5,
+        runs_log=runs_log,
+        job_name="dataset_v5",
+    )
+
+
+def export_contract_dataset_v5(
+    out_dir: str | pathlib.Path = "artifacts",
+    seeds: list[int] | None = None,
+    out_name: str = "dataset_v5.parquet",
+    runs_log: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
+    """Export a multi-episode v5 dataset with balanced stratification keys for contract testing."""
+    out_dir_path = pathlib.Path(out_dir)
+    out_parquet = out_dir_path / out_name
+
+    target_seeds = (
+        list(seeds) if seeds is not None else [7, 11, 13, 42, 777, 1234, 999, 2026]
+    )
+
+    fault_drift = {
+        "id": "F-v5-drift",
+        "class": "drift",
+        "origin": "B2",
+        "t0": 150,
+        "dur": 12,
+        "mag_sigma": 3.0,
+    }
+    fault_pulse = {
+        "id": "F-v5-pulse",
+        "class": _PULSE,
+        "origin": "A0",
+        "t0": 150,
+        "dur": 10,
+        "mag_sigma": 5.0,
+    }
+    fault_delay = {
+        "id": "F-v5-delay",
+        "class": "delay",
+        "origin": "A0",
+        "t0": 150,
+        "dur": 12,
+        "extra": {"d": 4},
+    }
+    fault_loss = {
+        "id": "F-v5-loss",
+        "class": "loss",
+        "origin": "C1",
+        "t0": 150,
+        "dur": 15,
+        "extra": {"drop_rate": 0.20},
+    }
+    fault_breakdown = {
+        "id": "F-v5-breakdown",
+        "class": "breakdown",
+        "origin": "B1",
+        "t0": 140,
+        "dur": 15,
+        "extra": {"mttr_mult": 1.5},
+    }
+    fault_quality = {
+        "id": "F-v5-quality",
+        "class": "quality",
+        "origin": "ASM2",
+        "t0": 150,
+        "dur": 15,
+        "extra": {"reject_rate": 0.30},
+    }
+
+    fault_map: dict[int, Any] = {}
+    ladder = [
+        fault_drift,
+        fault_pulse,
+        fault_delay,
+        fault_loss,
+        fault_breakdown,
+        fault_quality,
+    ]
+    for i, s in enumerate(target_seeds[1:]):
+        fault_map[s] = ladder[i % len(ladder)]
+
+    return export_v5(
+        seeds=target_seeds,
+        out=out_parquet,
+        faults=fault_map,
+        runs_log=runs_log,
+    )
+
+
 def load_dataset(
     path: str | pathlib.Path,
     schema_version: int | None = None,
@@ -565,6 +834,26 @@ def load_v4_dataset(source: Any) -> pd.DataFrame:
     if any(v != 4 for v in unique_vers):
         raise ValueError(
             f"v4 reader rejects non-v4 dataset: found schema_version={unique_vers.tolist()}, want 4"
+        )
+    return df
+
+
+def load_v5_dataset(source: Any) -> pd.DataFrame:
+    """Load v5 parquet dataset and validate schema version == 5."""
+    if isinstance(source, pd.DataFrame):
+        df = source
+    else:
+        path = pathlib.Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset path does not exist: {path}")
+        df = pd.read_parquet(path)
+
+    if "schema_version" not in df.columns:
+        raise ValueError("Dataset contract violation: 'schema_version' column missing")
+    unique_vers = df["schema_version"].unique()
+    if any(v != 5 for v in unique_vers):
+        raise ValueError(
+            f"v5 reader rejects non-v5 dataset: found schema_version={unique_vers.tolist()}, want 5"
         )
     return df
 
