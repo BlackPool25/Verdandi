@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 import time
+from typing import Any
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -469,6 +471,166 @@ def run_wall_mean_gate(calibration_path: str, factor: float) -> int:
     return EXIT_OK
 
 
+def parse_runs_log(path: str) -> list[dict[str, Any]]:
+    """Parse a runs.jsonl log file and return list of run vector dictionaries.
+
+    Raises:
+        FileNotFoundError: If path does not exist.
+        ValueError: If log is empty or lines are not valid JSON or missing fields.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Runs log not found: {path}")
+
+    vectors: list[dict[str, Any]] = []
+    with open(path, mode="r", encoding="utf-8") as f:
+        for line_idx, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                data = json.loads(line)
+            except Exception as err:
+                raise ValueError(
+                    f"Invalid JSON in runs log at line {line_idx}: {err}"
+                ) from err
+            if not isinstance(data, dict):
+                raise TypeError(
+                    f"Invalid entry in runs log at line {line_idx}: expected object"
+                )
+            for req in ("run_id", "job_name", "wall_seconds", "status"):
+                if req not in data:
+                    raise ValueError(
+                        f"Missing required field '{req}' in runs log at line {line_idx}"
+                    )
+            vectors.append(data)
+
+    if not vectors:
+        raise ValueError(f"Runs log is empty: {path}")
+
+    return vectors
+
+
+def evaluate_runs_log(
+    vectors: list[dict[str, Any]],
+    export_budget: float,
+    budget_factor: float,
+    max_rss_mb: float = 4096.0,
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Evaluates parsed run vectors against timing, RSS, and status criteria.
+
+    Returns:
+        (failures, failed_categories)
+    """
+    failures: list[tuple[str, str]] = []
+    failed_categories: list[str] = []
+
+    budget_s = export_budget * budget_factor
+
+    for vec in vectors:
+        run_id = str(vec.get("run_id", "unknown"))
+        job_name = str(vec.get("job_name", "unknown"))
+        status = str(vec.get("status", "unknown"))
+
+        # Status check
+        if status != "success":
+            msg = f"run {run_id} ({job_name}) has failure status '{status}'"
+            failures.append(("status", msg))
+            if "status" not in failed_categories:
+                failed_categories.append("status")
+
+        # Wall timing check
+        try:
+            wall_s = float(vec["wall_seconds"])
+        except (ValueError, TypeError):
+            msg = f"run {run_id} ({job_name}) has non-numeric wall_seconds {vec.get('wall_seconds')!r}"
+            failures.append(("wall", msg))
+            if "wall" not in failed_categories:
+                failed_categories.append("wall")
+            continue
+
+        if wall_s <= 0:
+            msg = f"run {run_id} ({job_name}) non-positive wall_seconds: {wall_s:.4f}s"
+            failures.append(("wall", msg))
+            if "wall" not in failed_categories:
+                failed_categories.append("wall")
+        elif wall_s > budget_s:
+            msg = f"wall job={job_name} run={run_id} ({wall_s:.4f}s > budget {budget_s:.4f}s)"
+            failures.append(("wall", msg))
+            if "wall" not in failed_categories:
+                failed_categories.append("wall")
+
+        # RSS check
+        rss_mb: float | None = None
+        if "peak_rss_mb" in vec:
+            try:
+                rss_mb = float(vec["peak_rss_mb"])
+            except (ValueError, TypeError):
+                pass
+        if rss_mb is None and "peak_rss_kb" in vec:
+            try:
+                rss_mb = float(vec["peak_rss_kb"]) / 1024.0
+            except (ValueError, TypeError):
+                pass
+
+        if rss_mb is None or rss_mb <= 0:
+            msg = f"run {run_id} ({job_name}) missing or non-positive peak RSS value"
+            failures.append(("rss", msg))
+            if "rss" not in failed_categories:
+                failed_categories.append("rss")
+        elif rss_mb > max_rss_mb:
+            msg = f"rss job={job_name} run={run_id} ({rss_mb:.1f}MB > limit {max_rss_mb:.1f}MB)"
+            failures.append(("rss", msg))
+            if "rss" not in failed_categories:
+                failed_categories.append("rss")
+
+    return failures, failed_categories
+
+
+def run_runs_log_gate(
+    runs_log_path: str,
+    budget_factor: float,
+    export_budget: float = 60.0,
+    max_rss_mb: float = 4096.0,
+) -> int:
+    """Gate checking all run vectors in runs.jsonl meet status, wall time, and RSS budgets."""
+    vectors = parse_runs_log(runs_log_path)
+    budget_s = export_budget * budget_factor
+
+    print(
+        f"runs_log={runs_log_path} count={len(vectors)} budget_factor={budget_factor} "
+        f"export_budget={export_budget:.2f}s (budget={budget_s:.2f}s)"
+    )
+    for vec in vectors:
+        run_id = vec.get("run_id", "unknown")
+        job_name = vec.get("job_name", "unknown")
+        wall_s = vec.get("wall_seconds", 0.0)
+        rss_mb = vec.get("peak_rss_mb") or (
+            vec.get("peak_rss_kb", 0.0) / 1024.0 if "peak_rss_kb" in vec else 0.0
+        )
+        status = vec.get("status", "unknown")
+        print(
+            f"run_id={run_id} job={job_name} wall={wall_s:.4f}s rss={rss_mb:.1f}MB status={status}"
+        )
+
+    failures, failed_categories = evaluate_runs_log(
+        vectors=vectors,
+        export_budget=export_budget,
+        budget_factor=budget_factor,
+        max_rss_mb=max_rss_mb,
+    )
+
+    if failures:
+        for _cat, msg in failures:
+            sys.stderr.write(f"GATE FAILURE: {msg}\n")
+        sys.stderr.write(f"FAILED GATES: {', '.join(failed_categories)}\n")
+        if "wall" in failed_categories:
+            return EXIT_WALL_FAIL
+        return EXIT_ERROR
+
+    print(f"PASS: all {len(vectors)} run vectors verified within budget")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Builds and returns command-line argument parser."""
     parser = argparse.ArgumentParser(
@@ -479,7 +641,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=False,
         default=None,
         type=str,
-        help="Path to battery metrics CSV file (required unless --wall-mean is given)",
+        help="Path to battery metrics CSV file (required unless --wall-mean or --runs-log is given)",
     )
     parser.add_argument(
         "--f1",
@@ -527,6 +689,28 @@ def build_parser() -> argparse.ArgumentParser:
         "enables the W6 per-seed wall gate instead of the CSV gates",
     )
     parser.add_argument(
+        "--runs-log",
+        dest="runs_log",
+        type=str,
+        default=None,
+        help="Path to runs JSONL log file (from calibrate, evidence, dataset_v4)",
+    )
+    parser.add_argument(
+        "--export-budget",
+        "--export-budget-s",
+        dest="export_budget",
+        type=float,
+        default=60.0,
+        help="Base wall budget in seconds for export runs (default: 60.0)",
+    )
+    parser.add_argument(
+        "--max-rss-mb",
+        dest="max_rss_mb",
+        type=float,
+        default=4096.0,
+        help="Maximum allowed peak RSS in MB (default: 4096.0)",
+    )
+    parser.add_argument(
         "--budget-factor",
         dest="budget_factor",
         type=float,
@@ -551,8 +735,27 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"ERROR: {exc}\n")
             return EXIT_ERROR
 
+    if args.runs_log is not None:
+        if args.budget_factor is None or args.budget_factor <= 0:
+            parser.error("--budget-factor must be a positive number")
+        try:
+            runs_exit = run_runs_log_gate(
+                args.runs_log,
+                budget_factor=args.budget_factor,
+                export_budget=args.export_budget,
+                max_rss_mb=args.max_rss_mb,
+            )
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            sys.stderr.write(f"ERROR: {exc}\n")
+            return EXIT_ERROR
+
+        if runs_exit != EXIT_OK:
+            return runs_exit
+        if not args.csv:
+            return EXIT_OK
+
     if not args.csv:
-        parser.error("--csv is required unless --wall-mean is given")
+        parser.error("--csv is required unless --wall-mean or --runs-log is given")
 
     try:
         metrics = parse_csv_file(args.csv)
