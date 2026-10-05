@@ -131,7 +131,7 @@ def test_bridge_strict_dur_below_range():
 
 
 def test_bridge_strict_mag_out_of_range():
-    fault = {"class": "drift", "origin": "B2", "t0": 150, "dur": 10, "mag_sigma": 99.0}
+    fault = {"class": "drift", "origin": "B2", "t0": 150, "dur": 10, "mag_sigma": 7.5}
     r = client.post("/episode", json={"seed": 7, "faults": [fault]})
     assert r.status_code == 422, r.text
     assert "bridge-strict (superset of twin)" in r.json()["detail"]
