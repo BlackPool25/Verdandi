@@ -37,11 +37,11 @@ import pathlib
 from typing import Any
 
 import numpy as np
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
-from scipy.signal import detrend as scipy_detrend
-from scipy.signal import hilbert
+import pandas as pd  # type: ignore[import-untyped]
+import pyarrow as pa  # type: ignore[import-untyped]
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
+from scipy.signal import detrend as scipy_detrend  # type: ignore[import-untyped]
+from scipy.signal import hilbert  # type: ignore[import-untyped]
 
 # ---------------------------------------------------------------------------
 # M0.2f version constants
@@ -263,7 +263,7 @@ def rolling_bank(
 
 
 def reconstruct(
-    cover: dict[str, Any] | dict[int, dict[str, np.ndarray]],
+    cover: dict[Any, Any],
     s: int,
     w: int,
 ) -> dict[str, float]:

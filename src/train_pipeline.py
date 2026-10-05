@@ -13,8 +13,8 @@ Guarantees:
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
-from sklearn.model_selection import StratifiedGroupKFold
+import pandas as pd  # type: ignore[import-untyped]
+from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
 from src.window_export import reconstruct
 

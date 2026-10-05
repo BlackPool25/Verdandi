@@ -404,8 +404,8 @@ def export(
         # Write window_config.json
         window_cfg = build_window_config(schema_version=effective_schema_version)
         window_cfg_path = out_dir / "window_config.json"
-        with open(window_cfg_path, "w", encoding="utf-8") as f:
-            json.dump(window_cfg, f, indent=2, sort_keys=True)
+        with open(window_cfg_path, "w", encoding="utf-8") as f_win:
+            json.dump(window_cfg, f_win, indent=2, sort_keys=True)
 
         # Write ingestion metadata (both metadata.json and ingestion_metadata.json for compatibility)
         ingestion_meta = {
@@ -422,8 +422,8 @@ def export(
 
         for meta_filename in ("ingestion_metadata.json", "metadata.json"):
             meta_path = out_dir / meta_filename
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(ingestion_meta, f, indent=2, sort_keys=True)
+            with open(meta_path, "w", encoding="utf-8") as f_meta:
+                json.dump(ingestion_meta, f_meta, indent=2, sort_keys=True)
 
         # Leakage law assert: absolute rule that NO scaler.pkl exists anywhere.
         assert not scaler_artifact.exists(), (
