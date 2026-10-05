@@ -107,6 +107,15 @@ FAULT_RANGES = {
     "reject_rate": (0.15, 0.40),
 }
 
+# M0.2d ladder rung constants (additive; frozen FAULT_RANGES untouched).
+MAG_LADDER = {"incipient": (1.0, 3.0), "caricature": (4.0, 7.0)}
+INCIPIENT_SHARE = 0.20
+LOW_RUNG_DELAY_D = (1, 2)
+LOW_RUNG_DROP_RATE = (0.02, 0.08)
+LOW_RUNG_MTTR_MULT = (1.0, 1.5)
+LOW_RUNG_REJECT_RATE = (0.05, 0.12)
+VARIANT_ID = "ladder-budget-warmup-v1"
+
 # Nominal temperature bands in °C (SIM_SPEC §8 channel 2): process 60–95,
 # feed/form 20–45, assembly 25–55, test/rework 20–60. Finish rides the hot
 # line band; inspect tails ride the test band (§8 has four bands only).

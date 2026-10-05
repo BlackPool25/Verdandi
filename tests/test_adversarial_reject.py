@@ -166,3 +166,19 @@ def test_case10_null_episode_record_rejected():
     """Case 10: Null episode / None record rejected by replay_digest with explicit exception."""
     with pytest.raises((AttributeError, TypeError, ValueError)):
         twin.replay_digest(None)
+
+
+def test_case11_mag_sigma_out_of_range_rejected():
+    """Case 11: Out-of-range mag_sigma rejected by twin._validate with ValueError."""
+    for bad_mag in (100, 0.01, -3, 8.1, 0.49, True, "abc"):
+        with pytest.raises(ValueError, match="mag_sigma out of range"):
+            twin._validate(
+                777,
+                {
+                    "origin": "B2",
+                    "class": "drift",
+                    "t0": 150,
+                    "dur": 12,
+                    "mag_sigma": bad_mag,
+                },
+            )

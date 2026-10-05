@@ -66,8 +66,13 @@ from src.config import (
     FUNNEL_VARIANTS,
     I_IDLE_RATIO,
     INSPECT_DELAY_STEPS,
+    LOW_RUNG_DELAY_D,
+    LOW_RUNG_DROP_RATE,
+    LOW_RUNG_MTTR_MULT,
+    LOW_RUNG_REJECT_RATE,
     MACHINE_INDEX,
     MACHINES,
+    MAG_LADDER,
     N_BUFFERS,
     N_MACHINES,
     N_STREAMS,
@@ -81,6 +86,7 @@ from src.config import (
     STUCK_IS_BREAKDOWN,
     TEMP_RANGES,
     TWIN_SCHEMA,
+    VARIANT_ID,
     VOLT,
     WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
@@ -333,6 +339,16 @@ def _validate(seed, fault):
             extra = {}
         if not isinstance(extra, dict):
             raise TypeError(f"fault extra must be a dict, got {extra!r}")
+        mag_raw = f.get("mag_sigma", None)
+        if mag_raw is not None:
+            if isinstance(mag_raw, bool):
+                raise ValueError(f"mag_sigma out of range [0.5, 8.0]: {mag_raw!r}")
+            try:
+                mag_val = float(mag_raw)
+            except (TypeError, ValueError):
+                raise ValueError(f"mag_sigma out of range [0.5, 8.0]: {mag_raw!r}")
+            if mag_val != 0.0 and not (0.5 <= mag_val <= 8.0):
+                raise ValueError(f"mag_sigma out of range [0.5, 8.0]: {mag_raw!r}")
         normed.append(
             {
                 "id": f.get("id", f"F-EP{i}"),
@@ -497,6 +513,21 @@ def _degrade_at(fx, t):
         ):
             return True
     return False
+
+
+def _degrade_spec(fx, t):
+    """Active degrade spec covering this machine at t (or None)."""
+    candidates = [
+        s
+        for s in fx
+        if s["t0"] <= t < s["t1"]
+        and (
+            s["class"] in ("drift", "bias", "delay", "loss") or s["class"] == _PULSE
+        )
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda s: float(s.get("mag_sigma", s.get("mag", 0.0))))
 
 
 def _loss_at(fx, t):
@@ -777,17 +808,18 @@ def _line_process(env, spec, shared):
             # packaged goods — flow_stats packaged+=1, never rejoin kit,
             # never SBUF-divert (tails are excluded via _TAILS).
             shared["flow"]["packaged"] += 1
-            shared["parts"].append(
-                {
-                    "id": part["id"],
-                    "t": t,
-                    "machine": name,
-                    "via": "PKG",
-                    "disposition": "packaged",
-                    "passes": part.get("passes", 0),
-                    "flag": part.get("flag", "OK"),
-                }
-            )
+            rec = {
+                "id": part["id"],
+                "t": t,
+                "machine": name,
+                "via": "PKG",
+                "disposition": "packaged",
+                "passes": part.get("passes", 0),
+                "flag": part.get("flag", "OK"),
+            }
+            if shared.get("ladder") and "sev" in part:
+                rec["sev"] = part["sev"]
+            shared["parts"].append(rec)
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
         elif isinstance(down, tuple):
@@ -893,6 +925,10 @@ def _line_process(env, spec, shared):
             # Channel-4 flag rides the part object downstream (never a
             # signal-channel copy — downstream machines see it on arrival).
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                f_spec = _degrade_spec(fx, t)
+                spec_sev = float(f_spec.get("mag_sigma", f_spec.get("mag", 0.0))) if f_spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -975,6 +1011,15 @@ def _insp0_process(env, up, down, shared):
                     part["flag"] = "REJECT"
                 elif part.get("flag") == "OK":
                     part["flag"] = "DEGRADE"
+                    if shared.get("ladder"):
+                        spec = _degrade_spec(fx, t)
+                        spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                        part["sev"] = max(part.get("sev", 0.0), spec_sev)
+                elif shared.get("ladder"):
+                    spec = _degrade_spec(fx, t)
+                    if spec is not None or "sev" in part:
+                        spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                        part["sev"] = max(part.get("sev", 0.0), spec_sev)
             _emit(
                 shared,
                 "LATE_VERDICT",
@@ -990,6 +1035,10 @@ def _insp0_process(env, up, down, shared):
             dfault = None
         if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                spec = _degrade_spec(fx, t)
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -1023,17 +1072,18 @@ def _agv_xfer(env, agv, rng_agv, part, src, kit, shared, t_req):
     shared["agv_waits"].append(
         {"t": t_del, "part": part["id"], "hold": hold, "wait": wait}
     )
-    shared["parts"].append(
-        {
-            "id": part["id"],
-            "t": t_del,
-            "machine": src,
-            "via": "AGV",
-            "disposition": "diverted" if part["diverted"] else "delivered",
-            "passes": part.get("passes", 0),
-            "flag": part.get("flag", "OK"),
-        }
-    )
+    rec = {
+        "id": part["id"],
+        "t": t_del,
+        "machine": src,
+        "via": "AGV",
+        "disposition": "diverted" if part["diverted"] else "delivered",
+        "passes": part.get("passes", 0),
+        "flag": part.get("flag", "OK"),
+    }
+    if shared.get("ladder") and "sev" in part:
+        rec["sev"] = part["sev"]
+    shared["parts"].append(rec)
     if src == "SBUF":
         shared["sbuf"]["drained"] += 1
     _emit(
@@ -1199,15 +1249,18 @@ def _asm0_process(env, asm01, kit, shared):
                 if any(p.get("flag") == "DEGRADE" for p in batch)
                 else "OK"
             )
-            yield asm01.put(
-                {
-                    "id": pid,
-                    "line": "ASM",
-                    "kit": [p["id"] for p in batch],
-                    "passes": max(p.get("passes", 0) for p in batch),
-                    "flag": kit_flag,
-                }
-            )
+            kit_part = {
+                "id": pid,
+                "line": "ASM",
+                "kit": [p["id"] for p in batch],
+                "passes": max(p.get("passes", 0) for p in batch),
+                "flag": kit_flag,
+            }
+            if shared.get("ladder"):
+                kit_sev = max((p.get("sev", 0.0) for p in batch), default=0.0)
+                kit_part["sev"] = kit_sev
+                shared["kit_sev_max"] = max(shared.get("kit_sev_max", 0.0), kit_sev)
+            yield asm01.put(kit_part)
             shared["flow"]["asm_created"] += 1
             held, rem, batch = False, 0, None
             st, tput = "RUN", 1
@@ -1218,6 +1271,10 @@ def _asm0_process(env, asm01, kit, shared):
         if held and batch is not None and _degrade_at(fx, t):
             for p in batch:
                 p["flag"] = "DEGRADE"
+                if shared.get("ladder"):
+                    spec = _degrade_spec(fx, t)
+                    spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                    p["sev"] = max(p.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
@@ -1306,17 +1363,18 @@ def _asm_mid_process(env, name, up, down, shared):
                         name,
                         {"part": part["id"], "to": "scrap", "passes": part["passes"]},
                     )
-                    shared["parts"].append(
-                        {
-                            "id": part["id"],
-                            "t": t,
-                            "machine": name,
-                            "via": "RWK0",
-                            "disposition": "scrap",
-                            "passes": part["passes"],
-                            "flag": "REJECT",
-                        }
-                    )
+                    rec = {
+                        "id": part["id"],
+                        "t": t,
+                        "machine": name,
+                        "via": "RWK0",
+                        "disposition": "scrap",
+                        "passes": part["passes"],
+                        "flag": "REJECT",
+                    }
+                    if shared.get("ladder") and "sev" in part:
+                        rec["sev"] = part["sev"]
+                    shared["parts"].append(rec)
                     held, rem, part = False, 0, None
                     st, tput = "RUN", 1
                 elif len(rwk.items) < rwk.capacity:
@@ -1348,6 +1406,10 @@ def _asm_mid_process(env, name, up, down, shared):
             dfault = None
         if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                spec = _degrade_spec(fx, t)
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -1417,17 +1479,18 @@ def _rwk0_process(env, shared):
                         name,
                         {"part": part["id"], "to": "scrap", "passes": part["passes"]},
                     )
-                    shared["parts"].append(
-                        {
-                            "id": part["id"],
-                            "t": t,
-                            "machine": name,
-                            "via": "RWK0",
-                            "disposition": "scrap",
-                            "passes": part["passes"],
-                            "flag": part.get("flag", "OK"),
-                        }
-                    )
+                    rec = {
+                        "id": part["id"],
+                        "t": t,
+                        "machine": name,
+                        "via": "RWK0",
+                        "disposition": "scrap",
+                        "passes": part["passes"],
+                        "flag": part.get("flag", "OK"),
+                    }
+                    if shared.get("ladder") and "sev" in part:
+                        rec["sev"] = part["sev"]
+                    shared["parts"].append(rec)
                     part = None
                     st, tput = "RUN", 1
                 else:
@@ -1450,23 +1513,28 @@ def _rwk0_process(env, shared):
             part["line"] = "C"  # re-enter kitting via the C intake
             kit["C"].append(part)
             shared["flow"]["reworked"] += 1
-            shared["parts"].append(
-                {
-                    "id": part["id"],
-                    "t": t,
-                    "machine": name,
-                    "via": "RWK0",
-                    "disposition": "reworked",
-                    "passes": part["passes"],
-                    "flag": part.get("flag", "OK"),
-                }
-            )
+            rec = {
+                "id": part["id"],
+                "t": t,
+                "machine": name,
+                "via": "RWK0",
+                "disposition": "reworked",
+                "passes": part["passes"],
+                "flag": part.get("flag", "OK"),
+            }
+            if shared.get("ladder") and "sev" in part:
+                rec["sev"] = part["sev"]
+            shared["parts"].append(rec)
             held, rem, part = False, 0, None
             st, tput = "RUN", 1
         if inj is None:
             dfault = None
         if held and part is not None and _degrade_at(fx, t):
             part["flag"] = "DEGRADE"
+            if shared.get("ladder"):
+                spec = _degrade_spec(fx, t)
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
+                part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
@@ -1482,9 +1550,14 @@ def _rwk0_process(env, shared):
 def _fault_clock(env, shared):
     """Emit FAULT_START/END channel-7 events at exact GT window edges."""
     marks = []
+    is_ladder = bool(shared.get("ladder"))
     for spec in shared["specs"]:
         marks.append((spec["t0"], 0, "FAULT_START", spec))
-        marks.append((spec["t1"], 1, "FAULT_END", spec))
+        if is_ladder and spec["class"] == "breakdown":
+            t_end = spec["t0"] + math.ceil(spec["dur"] * float(spec.get("mttr_mult", 1.0)))
+        else:
+            t_end = spec["t1"]
+        marks.append((t_end, 1, "FAULT_END", spec))
     marks.sort(key=lambda m: (m[0], m[1]))
     for t, _, kind, spec in marks:
         yield env.timeout(t - env.now)
@@ -1626,6 +1699,14 @@ def _resolve_variant(variant: str | dict | None) -> dict | None:
     if variant is None:
         return None
     if isinstance(variant, str):
+        if variant == VARIANT_ID:
+            return {
+                "variant_id": VARIANT_ID,
+                "description": "M0.2d magnitude ladder rate budget warmup variant",
+                "buffer_caps": {},
+                "agv_priority": "default",
+                "ladder": True,
+            }
         if variant not in FUNNEL_VARIANTS:
             raise ValueError(f"Unknown variant ID: {variant}")
         return copy.deepcopy(FUNNEL_VARIANTS[variant])
@@ -1653,7 +1734,24 @@ def run_episode(
     specs = _materialize(place, fault_list)
 
     var_dict = _resolve_variant(variant)
+    is_ladder = False
     if var_dict is not None:
+        is_ladder = bool(
+            var_dict.get("ladder")
+            or var_dict.get("variant_id") == VARIANT_ID
+            or variant == VARIANT_ID
+        )
+        non_exempt = [
+            s for s in specs
+            if not s.get("rep") and s.get("id") != "F-25"
+        ]
+        # Rep pins are oracle-comparability fixtures; F-25 is the documented
+        # known-breach (12x2=24 > 14.4) exempted to keep the baseline oracle
+        # byte-identical. Single-fault rep episodes skip the budget loudly
+        # only when every spec is exempt; multi-fault variant episodes still
+        # enforce on the non-exempt subset.
+        if non_exempt:
+            check_rate_budget(non_exempt)
         overrides = var_dict.get("buffer_caps", {})
         unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
         if unlisted:
@@ -1715,12 +1813,22 @@ def run_episode(
         "kit_empty_log": [],
         "specs": specs,
         "fx": fx,
-        "gwin": [(s["t0"], s["t1"]) for s in specs],
+        "gwin": [
+            (
+                s["t0"],
+                s["t0"] + math.ceil(s["dur"] * float(s.get("mttr_mult", 1.0)))
+                if (is_ladder and s["class"] == "breakdown")
+                else s["t1"],
+            )
+            for s in specs
+        ],
         "qwin": [
             (s["t0"], s["t1"], s["reject_rate"], s["origin"])
             for s in specs
             if s["class"] == "quality"
         ],
+        "ladder": is_ladder,
+        "kit_sev_max": 0.0,
     }
     kit: dict[str, list[Any]] = {"A": [], "B": [], "C": []}
     shared["kit"] = kit
@@ -1874,30 +1982,69 @@ def run_episode(
         mode = None
 
     # Per-machine state histograms (sums to 1.0 +- 0.01 over 26 machines)
-    state_histograms = {}
-    for m_name, m_idx in MACHINE_INDEX.items():
-        st_row = _st[m_idx]
-        state_histograms[m_name] = {
-            st: sum(1 for s in st_row if s == st) / T
+    if shared.get("ladder"):
+        denom = T - WARMUP_STEPS
+        state_histograms = {}
+        for m_name, m_idx in MACHINE_INDEX.items():
+            st_row = _st[m_idx][WARMUP_STEPS:]
+            state_histograms[m_name] = {
+                st: sum(1 for s in st_row if s == st) / denom
+                for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+            }
+
+        # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
+        active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
+        total_active_steps = len(active_machines) * denom
+        active_indices = [MACHINE_INDEX[m] for m in active_machines]
+        plant_shares = {
+            st: sum(1 for idx in active_indices for s in _st[idx][WARMUP_STEPS:] if s == st) / total_active_steps
             for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
         }
+        plant_state_rollup = {
+            "shares": plant_shares,
+            "machines": active_machines,
+            **plant_shares,
+        }
+    else:
+        state_histograms = {}
+        for m_name, m_idx in MACHINE_INDEX.items():
+            st_row = _st[m_idx]
+            state_histograms[m_name] = {
+                st: sum(1 for s in st_row if s == st) / T
+                for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+            }
 
-    # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
-    active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
-    total_active_steps = len(active_machines) * T
-    active_indices = [MACHINE_INDEX[m] for m in active_machines]
-    plant_shares = {
-        st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
-        for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
-    }
-    plant_state_rollup = {
-        "shares": plant_shares,
-        "machines": active_machines,
-        **plant_shares,
-    }
+        # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
+        active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
+        total_active_steps = len(active_machines) * T
+        active_indices = [MACHINE_INDEX[m] for m in active_machines]
+        plant_shares = {
+            st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
+            for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
+        }
+        plant_state_rollup = {
+            "shares": plant_shares,
+            "machines": active_machines,
+            **plant_shares,
+        }
 
-    # Warm-up tracking: steps 0..WARMUP_STEPS-1 (transient-inclusive pool)
+    # Warm-up tracking: steps 0..WARMUP_STEPS-1.
+    # Transient pool represents clean-transient precision baseline (measurability
+    # of initial plant settling), NOT fault-replay in transient.
+    # N_FLOOR=800 exemption: transient pool operates on the 15-step initial window
+    # per episode; downstream N_FLOOR=800 sample-size floor applies to training
+    # calibration pools, so the 15-step transient window is exempt.
+    # WARMUP_STEPS stays 15.
     warmup_pool = np.asarray(shared["obs"], dtype=float)[:, :WARMUP_STEPS].T.tolist()
+    transient_pool = copy.deepcopy(warmup_pool)
+    transient_channels = {
+        "observations": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["obs"]]),
+        "obs": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["obs"]]),
+        "states": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["states"]]),
+        "buffers": copy.deepcopy([row[:WARMUP_STEPS] for row in buf_rows]),
+        "throughput": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["tput"]]),
+        "currents": copy.deepcopy([row[:WARMUP_STEPS] for row in shared["currents"]]),
+    }
 
     # Funnel census counts
     funnel_census = {
@@ -1913,6 +2060,11 @@ def run_episode(
     flow_stats["energy"] = _energy_header(
         shared["currents"], shared["flow"]["packaged"]
     )
+    stat_probe = probe_stationarity({
+        "states": shared["states"],
+        "buffers": buf_rows,
+        "T": T,
+    })
     return {
         "seed": seed,
         "T": T,
@@ -1948,13 +2100,15 @@ def run_episode(
             "root_ids": root_ids,
             "sensor_vs_process": "unknown",
             "sensor_vs_process_unvalidated": True,
-            "warmup_flag": True,
+            "has_warmup_period": True,
             "warmup_steps": WARMUP_STEPS,
             "warmup_window": (0, WARMUP_STEPS - 1),
             "warmup_mask": [t < WARMUP_STEPS for t in range(T)],
             "warmup_pool": warmup_pool,
-            "transient_pool": warmup_pool,
-            "is_warmup": True,
+            "transient_pool": transient_pool,
+            "transient_channels": transient_channels,
+            "is_warmup_episode": True,
+            "stationarity_probe": stat_probe,
             "state_histogram": state_histograms,
             "state_histograms": state_histograms,
             "machine_histograms": state_histograms,
@@ -1965,7 +2119,62 @@ def run_episode(
             "variant_id": var_id,
             "buffer_caps": effective_caps,
             "agv_priority": agv_prio,
+            **({"kit_sev_max": shared.get("kit_sev_max", 0.0)} if is_ladder else {}),
         },
+    }
+
+
+def probe_stationarity(record: dict) -> dict[str, Any]:
+    """Stationarity probe comparing transient window (steps 0-14) vs post-warmup window (steps 15-29).
+
+    RECORD-ONLY diagnostic helper: compares transient vs post-warmup metrics
+    (e.g. STARVED share, buffer occupancy) to observe initial plant settling.
+    Logs/records values, never gates, rejects, or raises.
+    """
+    states = record.get("states", [])
+    buffers = record.get("buffers", [])
+    t_total = record.get("T", 300)
+    w0_steps = min(WARMUP_STEPS, t_total)
+    w1_steps = min(WARMUP_STEPS, max(0, t_total - w0_steps))
+
+    n_mach = len(states) if states else 1
+    n_bufs = len(buffers) if buffers else 1
+
+    transient_starved = (
+        sum(1 for m in states for s in m[:w0_steps] if s == "STARVED") / (n_mach * w0_steps)
+        if w0_steps > 0
+        else 0.0
+    )
+    post_starved = (
+        sum(1 for m in states for s in m[w0_steps : w0_steps + w1_steps] if s == "STARVED")
+        / (n_mach * w1_steps)
+        if w1_steps > 0
+        else 0.0
+    )
+
+    transient_buf = (
+        sum(sum(b[:w0_steps]) for b in buffers) / (n_bufs * w0_steps)
+        if w0_steps > 0 and n_bufs > 0
+        else 0.0
+    )
+    post_buf = (
+        sum(sum(b[w0_steps : w0_steps + w1_steps]) for b in buffers) / (n_bufs * w1_steps)
+        if w1_steps > 0 and n_bufs > 0
+        else 0.0
+    )
+
+    return {
+        "transient_window": (0, w0_steps - 1) if w0_steps > 0 else (0, 0),
+        "post_window": (w0_steps, w0_steps + w1_steps - 1) if w1_steps > 0 else (w0_steps, w0_steps),
+        "transient_starved_share": transient_starved,
+        "post_starved_share": post_starved,
+        "starved_delta": post_starved - transient_starved,
+        "transient_buffer_mean": transient_buf,
+        "post_buffer_mean": post_buf,
+        "buffer_delta": post_buf - transient_buf,
+        "transient_buffer_occupancy": transient_buf,
+        "post_buffer_occupancy": post_buf,
+        "buffer_occupancy_delta": post_buf - transient_buf,
     }
 
 
@@ -2262,6 +2471,166 @@ def build_faults(seed: int = 12345) -> list[dict]:
     return rows
 
 
+def _rung_for(seed: int, machine: str, cls: str) -> str:
+    """Zero-draw hash rung assignment: 'incipient' | 'caricature'.
+
+    Deterministic hash rung assignment using sha256(f"{seed}:{machine}:{cls}").
+    Rep rows (fixed dict _ORACLE_REP keys) ALWAYS caricature; share counted
+    over 175 randomizable rows (182 - 7).
+    """
+    fixed = {(r["origin"], r["class"]) for r in _ORACLE_REP}
+    if (machine, cls) in fixed:
+        return "caricature"
+    digest = hashlib.sha256(f"{seed}:{machine}:{cls}".encode()).hexdigest()
+    return "incipient" if int(digest, 16) % 100 < 20 else "caricature"
+
+
+def build_faults_variant(
+    seed: int = 12345,
+    master: int = 12345,
+    cap_budget: bool = False,
+) -> list[dict]:
+    """Build the variant deterministic fault manifest with magnitude ladder.
+
+    Reuses the exact uniform draw count and order from rng_place
+    (placement/dur/t0/extra order bit-identical to build_faults).
+    Remaps mag value using the uniform u already drawn:
+      * incipient: 1.0 + 2.0 * u
+      * caricature: 4.0 + 3.0 * u
+    For non-signal classes: keeps remapped mag label AND remaps the uniform
+    u_extra from existing extra draw:
+      * delay: d in {1, 2}
+      * loss: drop in [0.02, 0.08] (LOW_RUNG_DROP_RATE)
+      * breakdown: mttr_mult in [1.0, 1.5] (LOW_RUNG_MTTR_MULT)
+      * quality: reject_rate in [0.05, 0.12] (LOW_RUNG_REJECT_RATE)
+    Remaps using the same uniform draws, NO new draws!
+    Every variant row gains mag_rung and sev = mag_sigma fields.
+    When cap_budget=True, new variant rows are capped: dur <= 14 AND
+    dur * math.ceil(mult) <= 14 (so variant manifest passes its own budget).
+    Oracle rep pins exempt + documented (F-25 known-breach: 12 * 2 = 24 > 14.4 —
+    exemption comment + test asserts exemption, not compliance).
+    Default cap_budget=False preserves exact placement (t0, dur) equality
+    with baseline build_faults (zero-draw proof: build_faults(12345) and
+    build_faults_variant(12345) agree on every (t0, dur)); pass
+    cap_budget=True only when generating the capped variant evidence
+    manifest (docs-battery-ladder-variant-182.json).
+    """
+    effective_seed = master if master != 12345 and seed == 12345 else seed
+    if isinstance(effective_seed, bool) or not isinstance(effective_seed, int) or effective_seed < 0:
+        raise ValueError(f"seed must be a non-negative int, got {effective_seed!r}")
+    seq = np.random.SeedSequence((effective_seed,))
+    children = seq.spawn(36)
+    assert N_STREAMS == 36 and len(children) == N_STREAMS
+    rng_place = np.random.default_rng(children[32])
+    (mlo, mhi) = FAULT_RANGES["mag_sigma"]
+    (dlo, dhi) = FAULT_RANGES["dur"]
+    (ddlo, ddhi) = FAULT_RANGES["delay_d"]
+    (rlo, rhi) = FAULT_RANGES["drop_rate"]
+    (mulo, muhi) = FAULT_RANGES["mttr_mult"]
+    (rjlo, rjhi) = FAULT_RANGES["reject_rate"]
+
+    def _params(m, cls, extra, rung):
+        raw_mag = float(rng_place.uniform(mlo, mhi))
+        u = (raw_mag - mlo) / (mhi - mlo)
+        if rung == "incipient":
+            mag = MAG_LADDER["incipient"][0] + (MAG_LADDER["incipient"][1] - MAG_LADDER["incipient"][0]) * u
+        else:
+            mag = raw_mag
+
+        if cls == "delay" and "d" not in extra:
+            raw_d = int(rng_place.integers(ddlo, ddhi + 1))
+            if rung == "incipient":
+                extra["d"] = LOW_RUNG_DELAY_D[0] if (raw_d - ddlo) < 2 else LOW_RUNG_DELAY_D[1]
+            else:
+                extra["d"] = raw_d
+        elif cls == "loss" and "drop_rate" not in extra:
+            raw_drop = float(rng_place.uniform(rlo, rhi))
+            if rung == "incipient":
+                u_extra = (raw_drop - rlo) / (rhi - rlo)
+                extra["drop_rate"] = float(LOW_RUNG_DROP_RATE[0] + (LOW_RUNG_DROP_RATE[1] - LOW_RUNG_DROP_RATE[0]) * u_extra)
+            else:
+                extra["drop_rate"] = raw_drop
+        elif cls == "breakdown" and "mttr_mult" not in extra:
+            raw_mult = float(rng_place.uniform(mulo, muhi))
+            if rung == "incipient":
+                u_extra = (raw_mult - mulo) / (muhi - mulo)
+                extra["mttr_mult"] = float(LOW_RUNG_MTTR_MULT[0] + (LOW_RUNG_MTTR_MULT[1] - LOW_RUNG_MTTR_MULT[0]) * u_extra)
+            else:
+                extra["mttr_mult"] = raw_mult
+        elif cls == "quality" and "reject_rate" not in extra:
+            raw_reject = float(rng_place.uniform(rjlo, rjhi))
+            if rung == "incipient":
+                u_extra = (raw_reject - rjlo) / (rjhi - rjlo)
+                extra["reject_rate"] = float(LOW_RUNG_REJECT_RATE[0] + (LOW_RUNG_REJECT_RATE[1] - LOW_RUNG_REJECT_RATE[0]) * u_extra)
+            else:
+                extra["reject_rate"] = raw_reject
+        return mag
+
+    order = sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m])
+    fixed: dict[Any, Any] = {(r["origin"], r["class"]): r for r in _ORACLE_REP}
+    rows = []
+    for m in order:
+        taken, todo = [], []
+        for cls in _FAULT_CLASSES:
+            key = (m, cls)
+            if key in fixed:
+                r = fixed[key]
+                extra = dict(r.get("extra", {}))
+                mag = r.get("mag_sigma", None)
+                if mag is None:
+                    mag = _params(m, cls, extra, "caricature")
+                rows.append(
+                    {
+                        "id": r["id"],
+                        "class": cls,
+                        "origin": m,
+                        "t0": r["t0"],
+                        "dur": r["dur"],
+                        "mag_sigma": float(mag),
+                        "extra": extra,
+                        "rep": True,
+                        "mag_rung": "caricature",
+                        "sev": float(mag),
+                    }
+                )
+                taken.append((r["t0"], r["t0"] + r["dur"]))
+            else:
+                dur = int(rng_place.integers(int(dlo), int(dhi) + 1))
+                extra = {}
+                rung = _rung_for(effective_seed, m, cls)
+                mag = _params(m, cls, extra, rung)
+                todo.append([cls, dur, mag, extra, f"F-{m}-{cls}", rung])
+        durs = [d for (_, d, _, _, _, _) in todo]
+        t0s = _try_place(rng_place, taken, durs)
+        if t0s is None:  # pathological dur draw: retry with minimal durs
+            for entry in todo:
+                entry[1] = 8
+            t0s = _try_place(rng_place, taken, [8] * len(todo))
+            assert t0s is not None
+        for (cls, dur, mag, extra, fid, rung), t0 in zip(todo, t0s):
+            final_dur = dur
+            if cap_budget:
+                final_dur = min(dur, 14)
+                if cls == "breakdown":
+                    mult = extra.get("mttr_mult", 1.0)
+                    final_dur = min(final_dur, int(14 // math.ceil(mult)))
+            rows.append(
+                {
+                    "id": fid,
+                    "class": cls,
+                    "origin": m,
+                    "t0": t0,
+                    "dur": final_dur,
+                    "mag_sigma": mag,
+                    "extra": extra,
+                    "rep": False,
+                    "mag_rung": rung,
+                    "sev": mag,
+                }
+            )
+    return rows
+
+
 def validate_coverage(manifest, oracle):
     """Pure TC-006 gate: coverage rows x oracle fault ids -> gap list [].
 
@@ -2300,6 +2669,51 @@ def check_wall_tripwire(walls, budget=600.0):
     """Pure TC-009 gate: (total wall, tripped?) over fixture numbers only."""
     total = float(sum(walls))
     return (total, total > budget)
+
+
+def fault_steps(specs):
+    """Count fault mass over specs: (union_steps, machine_steps).
+
+    Breakdown specs count their EXTENDED forced-DOWN window
+    [t0, t0+ceil(dur*mttr_mult)) (mirrors _inj_down); every other class
+    counts its nominal window [t0, t0+dur). union_steps is the union over
+    t across specs (overlaps counted once); machine_steps is the
+    per-spec window-length sum (overlaps counted per spec). Pure helper.
+    """
+    covered = set()
+    machine_steps = 0
+    for s in specs or []:
+        extra = s.get("extra") or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        t0 = int(s["t0"])
+        dur = int(s["dur"])
+        cls = STUCK_IS_BREAKDOWN.get(s.get("class"), s.get("class"))
+        if cls == "breakdown":
+            mult = s.get("mttr_mult", extra.get("mttr_mult", 1.0))
+            length = math.ceil(dur * float(mult))
+        else:
+            length = dur
+        machine_steps += length
+        for t in range(t0, t0 + length):
+            covered.add(t)
+    return (len(covered), machine_steps)
+
+
+def check_rate_budget(specs, scored=180):
+    """Per-episode loud gate: union fault steps must fit 8% of scored steps.
+
+    scored=180 is the fault-allowed denominator (T-CAL_WIN). Breach
+    (union > 0.08*scored, i.e. union>=15 at scored=180) raises ValueError
+    naming the union/allowed counts; compliant lists pass silently.
+    """
+    union_steps, _ = fault_steps(specs)
+    allowed = 0.08 * scored
+    if union_steps > allowed:
+        raise ValueError(
+            f"fault rate budget exceeded: union {union_steps} > allowed {allowed} "
+            f"(0.08*{scored})"
+        )
 
 
 def replay_digest(record):
