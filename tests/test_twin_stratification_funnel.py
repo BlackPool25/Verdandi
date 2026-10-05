@@ -359,9 +359,9 @@ def test_funnel_wall_report_partial_schema_version_and_funnel_object(tmp_path):
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
 def test_schema_v4_twin_schema_constant_bump():
-    """TWIN_SCHEMA constant must be bumped 3->4 in src/config.py."""
-    assert config.TWIN_SCHEMA == 4, (
-        f"TWIN_SCHEMA must transition 3->4 for MINIPRO-22 union export, got {config.TWIN_SCHEMA}"
+    """TWIN_SCHEMA constant must be bumped >= 4 in src/config.py."""
+    assert config.TWIN_SCHEMA >= 4, (
+        f"TWIN_SCHEMA must be >= 4, got {config.TWIN_SCHEMA}"
     )
 
 
@@ -370,10 +370,10 @@ def test_schema_v4_twin_schema_constant_bump():
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
 def test_schema_v4_record_schema_version_bump():
-    """Episode record schema_version must be 4."""
+    """Episode record schema_version must match config.TWIN_SCHEMA."""
     rec = twin.run_episode(777, _PROBE_FAULT)
-    assert rec["schema_version"] == 4, (
-        f"Episode record schema_version must be 4, got {rec.get('schema_version')}"
+    assert rec["schema_version"] == config.TWIN_SCHEMA, (
+        f"Episode record schema_version must be {config.TWIN_SCHEMA}, got {rec.get('schema_version')}"
     )
 
 
@@ -382,7 +382,7 @@ def test_schema_v4_record_schema_version_bump():
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
 def test_schema_v4_v2_readers_reject_v4_loudly_with_value_error():
-    """v2 readers must reject v4 records loudly with ValueError."""
+    """v2 readers must reject v4+ records loudly with ValueError."""
 
     def _v2_reader(record):
         if record.get("schema_version") != 2:
@@ -392,8 +392,8 @@ def test_schema_v4_v2_readers_reject_v4_loudly_with_value_error():
         return True
 
     rec = twin.run_episode(777, _PROBE_FAULT)
-    assert rec.get("schema_version") == 4, (
-        f"Target record must carry schema_version=4 for rejection test, got {rec.get('schema_version')}"
+    assert rec.get("schema_version") == config.TWIN_SCHEMA, (
+        f"Target record must carry schema_version={config.TWIN_SCHEMA} for rejection test, got {rec.get('schema_version')}"
     )
     with pytest.raises(ValueError, match="v2 reader non-comparable"):
         _v2_reader(rec)
@@ -404,12 +404,12 @@ def test_schema_v4_v2_readers_reject_v4_loudly_with_value_error():
     reason="TWIN_SCHEMA 2->3 bump belongs to Todo 5 / Todo 9 flag-day migration",
 )
 def test_schema_v4_replay_digest_rejects_v2_records():
-    """When TWIN_SCHEMA transitions to 4, replay_digest must reject v2 records."""
-    assert config.TWIN_SCHEMA == 4, "TWIN_SCHEMA must be 4 for v4 digest validation"
+    """When TWIN_SCHEMA transitions to 4+, replay_digest must reject v2 records."""
+    assert config.TWIN_SCHEMA >= 4, "TWIN_SCHEMA must be >= 4 for digest validation"
     rec = twin.run_episode(777, _PROBE_FAULT)
     v2_record = copy.deepcopy(rec)
     v2_record["schema_version"] = 2
-    with pytest.raises(ValueError, match="want 4"):
+    with pytest.raises(ValueError, match=f"want {config.TWIN_SCHEMA}"):
         twin.replay_digest(v2_record)
 
 

@@ -43,7 +43,9 @@ async def create_episode(req: Request) -> JSONResponse:
     except ValueError:
         return JSONResponse(status_code=422, content={"detail": "invalid JSON body"})
     if not isinstance(body, dict):
-        return JSONResponse(status_code=422, content={"detail": "body must be a JSON object"})
+        return JSONResponse(
+            status_code=422, content={"detail": "body must be a JSON object"}
+        )
     seed: Any = body.get("seed")
     fault: Any = body.get("faults", body.get("fault", None))
     enable_natural_breakdown: Any = body.get("enable_natural_breakdown", True)
@@ -60,7 +62,9 @@ async def create_episode(req: Request) -> JSONResponse:
     # schema_version=4 + code_version twin-2.3.0-topology-A (see schema.py).
     from src.twin import replay_digest, run_episode
 
-    record = run_episode(seed, result.faults, enable_natural_breakdown=bool(enable_natural_breakdown))
+    record = run_episode(
+        seed, result.faults, enable_natural_breakdown=bool(enable_natural_breakdown)
+    )
     digest = replay_digest(record)
     EPISODES[episode_id] = {
         "seed": seed,
@@ -93,9 +97,14 @@ def stream_episode(episode_id: str, from_step: int = 0):
     if entry is None or "record" not in entry:
         return JSONResponse(status_code=404, content={"detail": "unknown episode_id"})
     record = entry["record"]
-    if not isinstance(from_step, int) or isinstance(from_step, bool) or not 0 <= from_step < record["T"]:
+    if (
+        not isinstance(from_step, int)
+        or isinstance(from_step, bool)
+        or not 0 <= from_step < record["T"]
+    ):
         return JSONResponse(
-            status_code=422, content={"detail": f"from_step out of range: {from_step!r}"}
+            status_code=422,
+            content={"detail": f"from_step out of range: {from_step!r}"},
         )
     return StreamingResponse(
         replay_frames(episode_id, record, entry["replay_digest"], from_step),

@@ -116,7 +116,5 @@ def validate_episode(seed: Any, fault: Any) -> ValidationResult:
     """Twin mirror first, bridge-strict second. Returns normalized faults."""
     normed = twin_mirror_validate(seed, fault)
     bridge_strict_check(normed)
-    noop = any(
-        f["class"] == "quality" and f["origin"] != QUALITY_HOME for f in normed
-    )
+    noop = any(f["class"] == "quality" and f["origin"] != QUALITY_HOME for f in normed)
     return ValidationResult(faults=normed, noop_warning=noop)

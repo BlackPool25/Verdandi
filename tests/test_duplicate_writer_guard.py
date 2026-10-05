@@ -59,13 +59,21 @@ M0_2E_ALIAS_FIELDS = frozenset(
 
 M0_2E_ALL_FIELDS = frozenset(M0_2E_OWNED_FIELDS | M0_2E_ALIAS_FIELDS)
 
-# M0.2f owned fields (MINIPRO-29, Gowtham) - M0.2e MUST NOT implement these!
+# M0.2f owned fields (MINIPRO-29, M0.2f Trainable Rework) - M0.2e MUST NOT implement these!
 M0_2F_OWNED_FIELDS = frozenset(
     {
         "envelope_max",
         "envelope_min",
         "envelope_mean",
         "envelope_std",
+        "envelope_band_energy",
+        "episode_id_ref",
+        "t_start",
+        "t_end",
+        "B_i",
+        "scale_status",
+        "scale_cover",
+        "envelope_definition_id",
         "rollup_0_5s",
         "rollup_1_0s",
         "rollup_2_0s",
@@ -92,7 +100,17 @@ DESIGNATED_M0_2F_OWNERS: dict[str, set[str]] = {
         "envelope_features",
         "rolling_features_for_channel",
         "export_multiscale",
+        "export_cover",
+        "derive_base_window",
+        "rolling_bank",
         "build_m0_2f_window_config_section",
+        "run_m0_2f_export",
+    },
+    "src/dataset_export.py": {
+        "build_window_config",
+    },
+    "src/train_pipeline.py": {
+        "build_windows",
     },
 }
 

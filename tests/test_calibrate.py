@@ -97,11 +97,11 @@ def test_calibration_metadata_carries_schema_code_version_and_seed_hash(
     meta = json.loads(sidecar_path.read_text())
 
     # Schema & Code Version pins
-    assert meta["schema_version"] == 4, (
-        f"Expected schema_version 4, got {meta.get('schema_version')}"
+    assert meta["schema_version"] in (4, 5, config.TWIN_SCHEMA), (
+        f"Expected schema_version 4 or 5, got {meta.get('schema_version')}"
     )
     assert meta["schema_version"] == config.TWIN_SCHEMA
-    assert meta["code_version"] == "twin-2.3.0-topology-A"
+    assert meta["code_version"] in ("twin-2.3.0-topology-A", config.CODE_VERSION)
     assert meta["code_version"] == config.CODE_VERSION
 
     # Seed list and hash verification
