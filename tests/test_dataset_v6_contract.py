@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from src import config, dataset_export, twin
+from src import config, dataset_export
 
 pytestmark = [pytest.mark.k1, pytest.mark.battery]
 
@@ -102,21 +102,33 @@ class TestDatasetV6Contract:
 
     def test_v5_reader_rejects_v6(self, tmp_path):
         out_parquet = tmp_path / "dataset_v6.parquet"
-        res = dataset_export.export_dataset(out=out_parquet, seeds=[777], schema_version=6)
+        res = dataset_export.export_dataset(
+            out=out_parquet, seeds=[777], schema_version=6
+        )
         with pytest.raises(ValueError, match="v5 reader rejects non-v5 dataset"):
             dataset_export.load_v5_dataset(res["out"])
 
     def test_clock_leak_eliminated(self, tmp_path):
         out_parquet = tmp_path / "dataset_v6.parquet"
-        res = dataset_export.export_dataset(out=out_parquet, seeds=[777, 42], schema_version=6)
+        res = dataset_export.export_dataset(
+            out=out_parquet, seeds=[777, 42], schema_version=6
+        )
         df = dataset_export.load_v6_dataset(res["out"])
 
         # In v5, dwell_steps == t + 1 was 100%. In v6, steady-state is < 5% (only initial startup steps match).
-        clock_eq_post = (df[df["t"] >= 25]["dwell_steps"] == (df[df["t"] >= 25]["t"] + 1)).mean()
-        assert clock_eq_post < 0.05, f"Clock shortcut detected: dwell_steps == t + 1 on {clock_eq_post:.2%}"
+        clock_eq_post = (
+            df[df["t"] >= 25]["dwell_steps"] == (df[df["t"] >= 25]["t"] + 1)
+        ).mean()
+        assert clock_eq_post < 0.05, (
+            f"Clock shortcut detected: dwell_steps == t + 1 on {clock_eq_post:.2%}"
+        )
 
-        lag_eq_post = (df[df["t"] >= 25]["cycle_lag"] == (df[df["t"] >= 25]["t"] + 1)).mean()
-        assert lag_eq_post < 0.05, f"Clock shortcut detected: cycle_lag == t + 1 on {lag_eq_post:.2%}"
+        lag_eq_post = (
+            df[df["t"] >= 25]["cycle_lag"] == (df[df["t"] >= 25]["t"] + 1)
+        ).mean()
+        assert lag_eq_post < 0.05, (
+            f"Clock shortcut detected: cycle_lag == t + 1 on {lag_eq_post:.2%}"
+        )
 
     def test_symptom_mask_and_hop_propagation(self, tmp_path):
         out_parquet = tmp_path / "dataset_v6.parquet"

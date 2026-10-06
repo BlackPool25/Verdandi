@@ -2150,7 +2150,7 @@ def run_episode(
             "hop": hop,
             "root_ids": root_ids,
             "sensor_vs_process": classify_sensor_vs_process(family),
-            "sensor_vs_process_unvalidated": False if family else True,
+            "sensor_vs_process_unvalidated": not bool(family),
             "has_warmup_period": True,
             "warmup_steps": WARMUP_STEPS,
             "warmup_window": (0, WARMUP_STEPS - 1),

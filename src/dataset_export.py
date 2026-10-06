@@ -288,7 +288,9 @@ def export(
                     cur_obs = rec["obs"][m_idx][t_step]
                     sigma_m = config.MACHINES[config.MACHINE_NAMES[m_idx]]["sigma"]
                     tol = getattr(config, "SHF_TOL", 1e-9) * sigma_m
-                    if last_obs[m_idx] is not None and abs(cur_obs - last_obs[m_idx]) <= max(1e-9, tol):
+                    if last_obs[m_idx] is not None and abs(
+                        cur_obs - last_obs[m_idx]
+                    ) <= max(1e-9, tol):
                         stale_counts[m_idx] += 1
                         for win_step in range(t_step, min(config.T, t_step + 10)):
                             recent_stale[win_step] += 1
@@ -308,8 +310,12 @@ def export(
                     f_origin = str(f.get("origin", "none"))
                     t0 = int(f.get("t0", 0))
                     dur = int(f.get("dur", 0))
-                    if f.get("class") == "breakdown" and ("mttr_mult" in f.get("extra", {}) or "mttr_mult" in f):
-                        mult = float(f.get("extra", {}).get("mttr_mult", f.get("mttr_mult", 1.0)))
+                    if f.get("class") == "breakdown" and (
+                        "mttr_mult" in f.get("extra", {}) or "mttr_mult" in f
+                    ):
+                        mult = float(
+                            f.get("extra", {}).get("mttr_mult", f.get("mttr_mult", 1.0))
+                        )
                         t1 = t0 + int(np.ceil(dur * mult))
                     else:
                         t1 = int(f.get("t1", t0 + dur))
@@ -323,7 +329,9 @@ def export(
                                 continue
                             hop_dist = twin.compute_hop(f_origin, m_name, max_depth=3)
                             if hop_dist is not None and 1 <= hop_dist <= 3:
-                                m_st = rec["states"][config.MACHINE_INDEX[m_name]][t_step]
+                                m_st = rec["states"][config.MACHINE_INDEX[m_name]][
+                                    t_step
+                                ]
                                 if m_st in ("STARVED", "BLOCKED", "DOWN"):
                                     symptom_hops.append(hop_dist)
                         if symptom_hops:
@@ -345,8 +353,15 @@ def export(
                     if raw_mag is None:
                         raw_mag = win_f.get("sev")
                     mag_sigma_val = float(raw_mag) if raw_mag is not None else 0.0
-                    mag_rung_val = str(win_f.get("mag_rung", "caricature" if mag_sigma_val >= 3.5 else "incipient"))
-                    sensor_vs_process_val = twin.classify_sensor_vs_process(fault_family_val)
+                    mag_rung_val = str(
+                        win_f.get(
+                            "mag_rung",
+                            "caricature" if mag_sigma_val >= 3.5 else "incipient",
+                        )
+                    )
+                    sensor_vs_process_val = twin.classify_sensor_vs_process(
+                        fault_family_val
+                    )
                 elif symptom_candidates:
                     symptom_candidates.sort(key=lambda x: (x[0], x[1]))
                     win_h, _, win_f = symptom_candidates[0]
@@ -363,8 +378,15 @@ def export(
                     if raw_mag is None:
                         raw_mag = win_f.get("sev")
                     mag_sigma_val = float(raw_mag) if raw_mag is not None else 0.0
-                    mag_rung_val = str(win_f.get("mag_rung", "caricature" if mag_sigma_val >= 3.5 else "incipient"))
-                    sensor_vs_process_val = twin.classify_sensor_vs_process(fault_family_val)
+                    mag_rung_val = str(
+                        win_f.get(
+                            "mag_rung",
+                            "caricature" if mag_sigma_val >= 3.5 else "incipient",
+                        )
+                    )
+                    sensor_vs_process_val = twin.classify_sensor_vs_process(
+                        fault_family_val
+                    )
                 else:
                     y_val = 0
                     fault_mask_val = 0
@@ -379,7 +401,11 @@ def export(
 
                 if effective_schema_version == 5:
                     # Legacy v5 root-only window without symptom separation
-                    active_faults = [f for f in faults_list if f.get("t0", 0) <= t_step < f.get("t1", 0)]
+                    active_faults = [
+                        f
+                        for f in faults_list
+                        if f.get("t0", 0) <= t_step < f.get("t1", 0)
+                    ]
                     if active_faults:
                         af = active_faults[0]
                         y_val = 1
@@ -505,11 +531,16 @@ def export(
                     row["hop_step"] = int(hop_step_val)
 
                     # H-state split-head features (v6 root-anchored counters)
-                    if root_id_step_val != "none" and root_id_step_val in config.MACHINE_INDEX:
+                    if (
+                        root_id_step_val != "none"
+                        and root_id_step_val in config.MACHINE_INDEX
+                    ):
                         root_idx = config.MACHINE_INDEX[root_id_step_val]
                         affected_indices = [
-                            m_i for m_i, name in enumerate(config.MACHINE_NAMES)
-                            if twin.compute_hop(root_id_step_val, name, max_depth=2) is not None
+                            m_i
+                            for m_i, name in enumerate(config.MACHINE_NAMES)
+                            if twin.compute_hop(root_id_step_val, name, max_depth=2)
+                            is not None
                         ]
                         row["dwell_steps"] = int(dwell_counts[root_idx])
                         row["cycle_lag"] = int(steps_since_tput[root_idx])
@@ -519,7 +550,11 @@ def export(
                             sum(rec["buffers"][m_i][t_step] for m_i in affected_indices)
                         )
                         row["state_hist_delta"] = float(
-                            sum(1 for m_i in affected_indices if rec["states"][m_i][t_step] == "RUN")
+                            sum(
+                                1
+                                for m_i in affected_indices
+                                if rec["states"][m_i][t_step] == "RUN"
+                            )
                             / max(1, len(affected_indices))
                         )
                     else:
@@ -528,10 +563,18 @@ def export(
                         row["stale_hold_run"] = 0
                         row["down_run"] = 0
                         row["buffer_occ"] = int(
-                            sum(rec["buffers"][m_i][t_step] for m_i in range(config.N_MACHINES)) / 5
+                            sum(
+                                rec["buffers"][m_i][t_step]
+                                for m_i in range(config.N_MACHINES)
+                            )
+                            / 5
                         )
                         row["state_hist_delta"] = float(
-                            sum(1 for m_i in range(config.N_MACHINES) if rec["states"][m_i][t_step] == "RUN")
+                            sum(
+                                1
+                                for m_i in range(config.N_MACHINES)
+                                if rec["states"][m_i][t_step] == "RUN"
+                            )
                             / config.N_MACHINES
                         )
 
@@ -1073,12 +1116,14 @@ def export_contract_dataset_v6(
         incip = [r for r in cls_rows if r.get("mag_rung") == "incipient"]
         caric = [r for r in cls_rows if r.get("mag_rung") == "caricature"]
         target = targets_per_class[cls]
-        n_incip = max(2, int(round(target * config.INCIPIENT_SHARE)))
+        n_incip = max(2, round(target * config.INCIPIENT_SHARE))
         n_caric = target - n_incip
         chosen = list(incip[:n_incip]) + list(caric[:n_caric])
         sampled_faults.extend(chosen)
 
-    assert len(sampled_faults) == n_fault_eps, f"Expected {n_fault_eps} faults, got {len(sampled_faults)}"
+    assert len(sampled_faults) == n_fault_eps, (
+        f"Expected {n_fault_eps} faults, got {len(sampled_faults)}"
+    )
     rng.shuffle(sampled_faults)
 
     seeds = list(range(20001, 20001 + n_episodes))
@@ -1094,7 +1139,9 @@ def export_contract_dataset_v6(
         if "extra" in spec:
             spec["extra"] = dict(spec["extra"])
         if spec.get("class") == "breakdown":
-            mult = float(spec.get("extra", {}).get("mttr_mult", spec.get("mttr_mult", 1.0)))
+            mult = float(
+                spec.get("extra", {}).get("mttr_mult", spec.get("mttr_mult", 1.0))
+            )
             spec["dur"] = min(int(spec["dur"]), int(14 // max(1, math.ceil(mult))))
         spec["dur"] = min(int(spec["dur"]), 14)
         spec["t1"] = spec["t0"] + spec["dur"]
@@ -1124,7 +1171,6 @@ def export_contract_dataset_v6(
         )
 
     return res
-
 
 
 def load_dataset(
@@ -1247,7 +1293,6 @@ def load_v6_dataset(source: Any) -> pd.DataFrame:
             f"v6 reader rejects non-v6 dataset: found schema_version={unique_vers.tolist()}, want 6"
         )
     return df
-
 
 
 def load_v2_dataset(source: Any) -> Any:
