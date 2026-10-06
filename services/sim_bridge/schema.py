@@ -44,7 +44,7 @@ from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
 
 SCHEMA_VERSION = TWIN_SCHEMA  # topology-A; must equal src.config.TWIN_SCHEMA
 assert SCHEMA_VERSION == TWIN_SCHEMA
-assert SCHEMA_VERSION in (4, 5)
+assert SCHEMA_VERSION in (4, 5, 6)
 
 V1_REJECT_MSG = "schema v1 non-comparable, rebaseline"
 

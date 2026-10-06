@@ -18,10 +18,10 @@ N_MACHINES = 26
 N_BUFFERS = 26
 N_STREAMS = 36
 
-# Topology-A schema version: v5 = v4 + M0.2f per-step labels (y, fault_mask, etc.),
-# split-head features, and neutral covering bank export.
-TWIN_SCHEMA = 5
-CODE_VERSION = "twin-2.4.0-topology-A"
+# Topology-A schema version: v6 = v5 + M0.2g root/symptom separation, per-machine counters,
+# exponential tool-wear drift, and SHF tolerance fix.
+TWIN_SCHEMA = 6
+CODE_VERSION = "twin-2.5.0-topology-A"
 WALL_REPORT_SCHEMA = 2
 
 # Rolling 20-seed batch for hermetic funnel gate evaluation (Todo 7).
@@ -95,6 +95,18 @@ WEAR = {
     "BETA": 4.0,
     "GAMMA_SIGMA": 2.0,
 }
+
+# M0.2g exponential tool-wear drift coefficients (Build Spec §7)
+WEAR_EXP = {
+    "ALPHA": 1.0 / 240.0,
+    "TAU": 0.6,
+    "GAMMA_SIGMA": 2.0,
+    "CAP_SIGMA": 0.5,
+}
+
+# Sensor health flag tolerance and causal symptom tail (Build Spec §3, §5)
+SHF_TOL = 1e-9
+SYMPTOM_TAIL = 8
 
 # Fault injection ranges (SIM_SPEC §5): mag 4–7σ, dur 8–25, delay d∈[3,6],
 # loss drop 10–30%, breakdown mttr_mult∈[1,3], quality reject 15–40%.
@@ -303,6 +315,8 @@ MACHINE_INDEX = {
     "ASM2": 24,
     "RWK0": 25,
 }
+MACHINE_NAMES = tuple(MACHINE_INDEX.keys())
+
 
 # Buffer roster (26, SIM_SPEC §2.2 topology-A): 16 line-gap + 5 cell
 # (ASM01, INSP01, INSP02, GA9, GB9) + 3 pkg (C7PKG, PKG01, PKG02)

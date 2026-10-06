@@ -91,6 +91,7 @@ from src.config import (
     WALL_REPORT_SCHEMA,
     WARMUP_STEPS,
     WEAR,
+    WEAR_EXP,
     T,
     resolve_current,
 )
@@ -503,6 +504,27 @@ def _fault_dev(fx, t, sigma):
             elif s["class"] == "bias":
                 dev += s["mag"] * sigma
     return dev
+
+
+def _update_wear_bias(shared: dict, idx: int, st: str, sigma: float) -> float:
+    """M0.2g exponential tool-wear drift (SIM_SPEC §4 / Build Spec §7).
+
+    w_m(t+1) = w_m(t) + ALPHA * exp(min(w_m, CAP_SIGMA) / TAU) when st == 'RUN'.
+    val += GAMMA_SIGMA * min(w_m, CAP_SIGMA) * sigma * (1.0 if st == 'RUN' else 0.5).
+    Deterministic, draws ZERO new RNG streams.
+    """
+    wear_list = shared.setdefault("wear", [0.0] * N_MACHINES)
+    w = wear_list[idx]
+    if st == "RUN":
+        w = min(
+            WEAR_EXP["CAP_SIGMA"],
+            w + WEAR_EXP["ALPHA"] * math.exp(min(w, WEAR_EXP["CAP_SIGMA"]) / WEAR_EXP["TAU"]),
+        )
+        wear_list[idx] = w
+    capped_w = min(w, WEAR_EXP["CAP_SIGMA"])
+    run_mult = 1.0 if st == "RUN" else 0.5
+    return float(WEAR_EXP["GAMMA_SIGMA"] * capped_w * sigma * run_mult)
+
 
 
 def _degrade_at(fx, t):
@@ -932,7 +954,10 @@ def _line_process(env, spec, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        wear_bias = _update_wear_bias(shared, idx, st, sigma)
+        val, _temp, ar = _sample_signal(
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+        )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
@@ -1042,7 +1067,10 @@ def _insp0_process(env, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        wear_bias = _update_wear_bias(shared, idx, st, sigma)
+        val, _temp, ar = _sample_signal(
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+        )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
@@ -1278,7 +1306,10 @@ def _asm0_process(env, asm01, kit, shared):
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
-        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        wear_bias = _update_wear_bias(shared, idx, st, sigma)
+        val, _temp, ar = _sample_signal(
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+        )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
@@ -1413,7 +1444,10 @@ def _asm_mid_process(env, name, up, down, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        wear_bias = _update_wear_bias(shared, idx, st, sigma)
+        val, _temp, ar = _sample_signal(
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+        )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
@@ -1538,7 +1572,10 @@ def _rwk0_process(env, shared):
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
-        val, _temp, ar = _sample_signal(rng, st, t, cfg, ar, _fault_dev(fx, t, sigma))
+        wear_bias = _update_wear_bias(shared, idx, st, sigma)
+        val, _temp, ar = _sample_signal(
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+        )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
@@ -1594,6 +1631,19 @@ def classify_fault_mode(fault_class: str) -> str:
     if cls in _PHYSICAL_CLASSES:
         return _FAULT_MODE_PHYSICAL
     return _FAULT_MODE_OBSERVATION if "sensor" in cls else _FAULT_MODE_PHYSICAL
+
+
+def classify_sensor_vs_process(fault_class: str | None) -> str:
+    """Return sensor vs process: 'sensor' vs 'process' (Schema v6 / Build Spec §3)."""
+    if not fault_class or fault_class in ("clean", "none", "unknown"):
+        return "unknown"
+    cls = STUCK_IS_BREAKDOWN.get(fault_class, fault_class)
+    if cls in _OBSERVATION_CLASSES:
+        return "sensor"
+    if cls in _PHYSICAL_CLASSES:
+        return "process"
+    return "sensor" if "sensor" in cls else "process"
+
 
 
 # Downstream and upstream topology adjacency for propagation derivation (depth <= 3)
@@ -1792,6 +1842,7 @@ def run_episode(
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
         "tput": [[0] * T for _ in range(N_MACHINES)],
+        "wear": [0.0] * N_MACHINES,
         "currents": [[0.0] * T for _ in range(N_MACHINES)],  # W3 in-step hook
         "events": [],
         "agv_waits": [],
@@ -2098,8 +2149,8 @@ def run_episode(
             "root_id": root_id,
             "hop": hop,
             "root_ids": root_ids,
-            "sensor_vs_process": "unknown",
-            "sensor_vs_process_unvalidated": True,
+            "sensor_vs_process": classify_sensor_vs_process(family),
+            "sensor_vs_process_unvalidated": not bool(family),
             "has_warmup_period": True,
             "warmup_steps": WARMUP_STEPS,
             "warmup_window": (0, WARMUP_STEPS - 1),

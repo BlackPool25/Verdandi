@@ -142,7 +142,7 @@ def test_bridge_currents_key_and_energy_header():
     from src.config import N_MACHINES, TWIN_SCHEMA
 
     assert S.SCHEMA_VERSION == TWIN_SCHEMA
-    assert S.SCHEMA_VERSION in (4, 5)
+    assert S.SCHEMA_VERSION in (4, 5, 6)
     tick, rec = good_tick()
     # tick currents: verbatim row passthrough, same machine order as states
     assert "currents" in tick, "tick must carry currents row (W5)"

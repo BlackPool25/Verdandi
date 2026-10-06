@@ -272,6 +272,31 @@ Downstream kit funnel is rebalanced from starve state to >= 30 median sunk kits 
 rolling 20-seed median, p10=28.0, p90=39.0) with zero pile-up violations. Hermetic evaluation
 is tracked in `wall_report.json` under schema_version=2.
 
+4.6. Schema v6 Production Pre-Training Contract (M0.2g Audit-Fix):
+Promoted twin version to `TWIN_SCHEMA = 6` (`CODE_VERSION = "twin-2.5.0-topology-A"`).
+1. Decoupled Ground-Truth Labels:
+   - Root-cause anomaly label `y`: 1 strictly on root-cause machine steps (`hop_step == 0`), 0 otherwise.
+   - Comprehensive fault mask `fault_mask`: 1 on root steps AND downstream physical symptom steps (`hop_step in [1, 2, 3]`).
+   - Symptom mask `symptom_mask`: 1 on downstream propagation symptoms (`fault_mask & ~y`).
+   - `hop_step`: Topological distance from root ($0$ at root, $1..3$ for symptoms, $-1$ clean).
+2. Sensor vs Process Classification:
+   - Observation-only faults (`spike`, `drift`, `bias`, `loss`) mapped to `"sensor"`.
+   - Physical degradation faults (`delay`, `breakdown`, `quality`) mapped to `"process"`.
+   - Clean episodes mapped to `"unknown"`.
+3. Exponential Tool-Wear Drift (Physical Aging):
+   - For all 5 process machines ($A2, A7, B2, C2, C6$):
+     $$\frac{dw_m}{dt} = \alpha_w \exp\left(\frac{\min(w_m, \text{CAP})}{\tau_w}\right) \quad \text{when } state == \text{RUN}$$
+     with parameters $\alpha_w = 1/240$, $\tau_w = 0.60$, $\text{CAP} = 0.50$, and observation bias offset $\Delta = \gamma \cdot \min(w_m, \text{CAP}) \cdot \sigma_m \cdot (1.0 \text{ if RUN else } 0.5)$.
+   - Strictly deterministic, consumes 0 additional RNG draws.
+4. Split-Head Feature Architecture:
+   - $H_{\text{obs}}$: 26 local physical observations (`obs_A0` .. `obs_RWK0`).
+   - $H_{\text{state}}$: Global state dynamics plus 78 per-machine columns (`dwell_<M>`, `tputlag_<M>`, `downrun_<M>` for all 26 machines).
+   - $H_{\text{part}}$: Trailing-15-step `degrade_flag_count` and `reject_flag_count`, `rwk_passes`, `funnel_rate`, `scrapped_total`, and `scrap_flag`.
+5. Telemetry & Sensor Health Integrity:
+   - `SHF_TOL = 1e-9` bound prevents constant baseline measurements from falsely tripping `SUSPECT` / `DROPOUT` flags. Packet dropouts correctly register on communication loss.
+6. Machine Learning Evaluation Protocol:
+   - Complete ban on Point-Adjustment (PA) protocols. All evaluations enforce raw point-wise $F_1$, PR-AUC, and Detection Latency $\Delta t = t_{\text{detect}} - t_0$. Grouped cross-validation enforced via `StratifiedGroupKFold(5)` grouped by `episode_id`.
+
 ## 5. Fault-injection taxonomy (normative, 7 classes × representative machines)
 
 Classes: spike, drift, bias, delay (slow-cycle), loss (drops), breakdown
