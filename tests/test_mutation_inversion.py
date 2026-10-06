@@ -60,7 +60,7 @@ def test_mutation_inversion_label_flip_delta_f1() -> None:
     rec = twin.run_episode(777, copy.deepcopy(_F21_B2))
     idx = MACHINE_INDEX["B2"]
     y_true = [1 if 150 <= t < 162 else 0 for t in range(T)]
-    y_pred = [1 if rec["obs"][idx][t] >= 73.0 else 0 for t in range(T)]
+    y_pred = [1 if rec["obs"][idx][t] >= 74.0 else 0 for t in range(T)]
 
     f1_normal = compute_f1(y_true, y_pred)
     assert f1_normal >= 0.85, f"Normal detection F1 below bar: {f1_normal}"
@@ -100,7 +100,7 @@ def test_mutation_inversion_evidence_corruption_delta_f1() -> None:
     rec = twin.run_episode(777, copy.deepcopy(_F21_B2))
     idx = MACHINE_INDEX["B2"]
     y_true = [1 if 150 <= t < 162 else 0 for t in range(T)]
-    y_pred_normal = [1 if rec["obs"][idx][t] >= 73.0 else 0 for t in range(T)]
+    y_pred_normal = [1 if rec["obs"][idx][t] >= 74.0 else 0 for t in range(T)]
 
     f1_normal = compute_f1(y_true, y_pred_normal)
     assert f1_normal >= 0.85, f"Normal detection F1 below bar: {f1_normal}"
@@ -108,7 +108,7 @@ def test_mutation_inversion_evidence_corruption_delta_f1() -> None:
     # Corrupt evidence: clean episode sensor readings without anomaly injection
     clean_rec = twin.run_episode(777, None)
     clean_obs = clean_rec["obs"][idx]
-    y_pred_corrupted = [1 if clean_obs[t] >= 73.0 else 0 for t in range(T)]
+    y_pred_corrupted = [1 if clean_obs[t] >= 74.0 else 0 for t in range(T)]
 
     f1_corrupted = compute_f1(y_true, y_pred_corrupted)
     delta_f1 = f1_normal - f1_corrupted

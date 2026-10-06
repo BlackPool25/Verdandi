@@ -120,8 +120,12 @@ def test_buffer_roster_caps():
 
 
 def test_schema_version_pins():
-    assert TWIN_SCHEMA in (4, 5)
-    assert CODE_VERSION in ("twin-2.3.0-topology-A", "twin-2.4.0-topology-A")
+    assert TWIN_SCHEMA in (4, 5, 6)
+    assert CODE_VERSION in (
+        "twin-2.3.0-topology-A",
+        "twin-2.4.0-topology-A",
+        "twin-2.5.0-topology-A",
+    )
     assert INSPECT_DELAY_STEPS == 3
 
 

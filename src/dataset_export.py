@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import pathlib
 import time
 import uuid
@@ -182,7 +183,11 @@ def export(
     effective_schema = (
         schema_version
         if schema_version is not None
-        else (5 if "dataset_v5" in str(out) else 4)
+        else (
+            4
+            if "dataset_v3" in str(out) or "dataset_v4" in str(out)
+            else (5 if "dataset_v5" in str(out) else config.TWIN_SCHEMA)
+        )
     )
 
     try:
@@ -235,6 +240,7 @@ def export(
             down_counts = [0] * config.N_MACHINES
             steps_since_tput = [0] * config.N_MACHINES
             recent_stale = [0] * config.T
+            recent_degrades = [0] * config.T
             recent_rejects = [0] * config.T
 
             degrade_count = 0
@@ -249,6 +255,8 @@ def export(
                     detail = ev.get("detail", {})
                     if ev_type == "LATE_VERDICT" and detail.get("verdict") == "DEGRADE":
                         degrade_count += 1
+                        for win_step in range(t_step, min(config.T, t_step + 15)):
+                            recent_degrades[win_step] += 1
                     elif ev_type == "REJECT_ROUTE":
                         reject_count += 1
                         max_rwk_passes = max(
@@ -278,7 +286,9 @@ def export(
                         steps_since_tput[m_idx] += 1
 
                     cur_obs = rec["obs"][m_idx][t_step]
-                    if last_obs[m_idx] is not None and cur_obs == last_obs[m_idx]:
+                    sigma_m = config.MACHINES[config.MACHINE_NAMES[m_idx]]["sigma"]
+                    tol = getattr(config, "SHF_TOL", 1e-9) * sigma_m
+                    if last_obs[m_idx] is not None and abs(cur_obs - last_obs[m_idx]) <= max(1e-9, tol):
                         stale_counts[m_idx] += 1
                         for win_step in range(t_step, min(config.T, t_step + 10)):
                             recent_stale[win_step] += 1
@@ -289,29 +299,106 @@ def export(
                 if exclude_warmup and t_step < config.WARMUP_STEPS:
                     continue
 
-                # Check active fault at step t_step
-                active_faults = [
-                    f for f in faults_list if f.get("t0", 0) <= t_step < f.get("t1", 0)
-                ]
-                if active_faults:
-                    af = active_faults[0]
+                # Check active fault and symptom propagation at step t_step
+                symptom_tail = getattr(config, "SYMPTOM_TAIL", 8)
+                root_candidates = []
+                symptom_candidates = []
+
+                for f in faults_list:
+                    f_origin = str(f.get("origin", "none"))
+                    t0 = int(f.get("t0", 0))
+                    dur = int(f.get("dur", 0))
+                    if f.get("class") == "breakdown" and ("mttr_mult" in f.get("extra", {}) or "mttr_mult" in f):
+                        mult = float(f.get("extra", {}).get("mttr_mult", f.get("mttr_mult", 1.0)))
+                        t1 = t0 + int(np.ceil(dur * mult))
+                    else:
+                        t1 = int(f.get("t1", t0 + dur))
+
+                    if t0 <= t_step < t1:
+                        root_candidates.append((0, t0, f))
+                    elif t0 <= t_step < (t1 + symptom_tail):
+                        symptom_hops = []
+                        for m_name in config.MACHINE_NAMES:
+                            if m_name == f_origin:
+                                continue
+                            hop_dist = twin.compute_hop(f_origin, m_name, max_depth=3)
+                            if hop_dist is not None and 1 <= hop_dist <= 3:
+                                m_st = rec["states"][config.MACHINE_INDEX[m_name]][t_step]
+                                if m_st in ("STARVED", "BLOCKED", "DOWN"):
+                                    symptom_hops.append(hop_dist)
+                        if symptom_hops:
+                            min_h = min(symptom_hops)
+                            symptom_candidates.append((min_h, t0, f))
+
+                if root_candidates:
+                    root_candidates.sort(key=lambda x: (x[0], x[1]))
+                    _, _, win_f = root_candidates[0]
                     y_val = 1
                     fault_mask_val = 1
-                    fault_family_val = str(af.get("class", "unknown"))
-                    fault_mode_val = (
-                        "observation-only"
-                        if fault_family_val in (_PULSE, "drift", "bias")
-                        else "physical-propagation"
-                    )
-                    root_id_step_val = str(af.get("origin", "none"))
+                    symptom_mask_val = 0
                     hop_step_val = 0
+                    root_id_step_val = str(win_f.get("origin", "none"))
+                    fault_family_val = str(win_f.get("class", "unknown"))
+                    raw_mag = win_f.get("mag_sigma")
+                    if raw_mag is None:
+                        raw_mag = win_f.get("mag")
+                    if raw_mag is None:
+                        raw_mag = win_f.get("sev")
+                    mag_sigma_val = float(raw_mag) if raw_mag is not None else 0.0
+                    mag_rung_val = str(win_f.get("mag_rung", "caricature" if mag_sigma_val >= 3.5 else "incipient"))
+                    sensor_vs_process_val = twin.classify_sensor_vs_process(fault_family_val)
+                elif symptom_candidates:
+                    symptom_candidates.sort(key=lambda x: (x[0], x[1]))
+                    win_h, _, win_f = symptom_candidates[0]
+                    y_val = 0
+                    fault_mask_val = 1
+                    symptom_mask_val = 1
+                    hop_step_val = int(win_h)
+                    root_id_step_val = str(win_f.get("origin", "none"))
+                    fault_family_val = str(win_f.get("class", "unknown"))
+                    fault_mode_val = twin.classify_fault_mode(fault_family_val)
+                    raw_mag = win_f.get("mag_sigma")
+                    if raw_mag is None:
+                        raw_mag = win_f.get("mag")
+                    if raw_mag is None:
+                        raw_mag = win_f.get("sev")
+                    mag_sigma_val = float(raw_mag) if raw_mag is not None else 0.0
+                    mag_rung_val = str(win_f.get("mag_rung", "caricature" if mag_sigma_val >= 3.5 else "incipient"))
+                    sensor_vs_process_val = twin.classify_sensor_vs_process(fault_family_val)
                 else:
                     y_val = 0
                     fault_mask_val = 0
+                    symptom_mask_val = 0
+                    hop_step_val = -1
+                    root_id_step_val = "none"
                     fault_family_val = "none"
                     fault_mode_val = "normal"
-                    root_id_step_val = "none"
-                    hop_step_val = -1
+                    mag_sigma_val = 0.0
+                    mag_rung_val = "none"
+                    sensor_vs_process_val = "unknown"
+
+                if effective_schema_version == 5:
+                    # Legacy v5 root-only window without symptom separation
+                    active_faults = [f for f in faults_list if f.get("t0", 0) <= t_step < f.get("t1", 0)]
+                    if active_faults:
+                        af = active_faults[0]
+                        y_val = 1
+                        fault_mask_val = 1
+                        fault_family_val = str(af.get("class", "unknown"))
+                        fault_mode_val = (
+                            "observation-only"
+                            if fault_family_val in (_PULSE, "drift", "bias")
+                            else "physical-propagation"
+                        )
+                        root_id_step_val = str(af.get("origin", "none"))
+                        hop_step_val = 0
+                    else:
+                        y_val = 0
+                        fault_mask_val = 0
+                        fault_family_val = "none"
+                        fault_mode_val = "normal"
+                        root_id_step_val = "none"
+                        hop_step_val = -1
 
                 max_stale = max(stale_counts)
                 if max_stale >= 6:
@@ -341,8 +428,10 @@ def export(
                     "root_id": str(strat.get("root_id") or "none"),
                     "root_ids": root_ids_str,
                     "hop": -1 if strat.get("hop") is None else int(strat["hop"]),
-                    "sensor_vs_process": str(
-                        strat.get("sensor_vs_process") or "unknown"
+                    "sensor_vs_process": (
+                        str(sensor_vs_process_val)
+                        if effective_schema_version >= 6
+                        else str(strat.get("sensor_vs_process") or "unknown")
                     ),
                     "state_histogram": hist_str,
                     "warmup_flag": bool(t_step < config.WARMUP_STEPS),
@@ -352,7 +441,7 @@ def export(
                     "scrapped": int(rec["flow_stats"]["scrapped"]),
                 }
 
-                if effective_schema_version >= 5:
+                if effective_schema_version == 5:
                     # v5 per-step ground-truth labels and split-head features
                     row["y"] = y_val
                     row["fault_mask"] = fault_mask_val
@@ -399,6 +488,66 @@ def export(
                     row["funnel_delta"] = int(
                         rec["flow_stats"]["sunk"] - rec["flow_stats"]["scrapped"]
                     )
+
+                elif effective_schema_version >= 6:
+                    # v6 per-step ground-truth labels
+                    row["y"] = int(y_val)
+                    row["fault_mask"] = int(fault_mask_val)
+                    row["symptom_mask"] = int(symptom_mask_val)
+                    row["fault_family"] = str(fault_family_val)
+                    row["fault_mode"] = str(fault_mode_val)
+                    row["mag_sigma"] = float(mag_sigma_val)
+                    row["mag_rung"] = str(mag_rung_val)
+                    row["is_warmup"] = bool(t_step < config.WARMUP_STEPS)
+                    row["shf_flag"] = str(shf_flag_val)
+                    row["is_down"] = bool(is_down_val)
+                    row["root_id_step"] = str(root_id_step_val)
+                    row["hop_step"] = int(hop_step_val)
+
+                    # H-state split-head features (v6 root-anchored counters)
+                    if root_id_step_val != "none" and root_id_step_val in config.MACHINE_INDEX:
+                        root_idx = config.MACHINE_INDEX[root_id_step_val]
+                        affected_indices = [
+                            m_i for m_i, name in enumerate(config.MACHINE_NAMES)
+                            if twin.compute_hop(root_id_step_val, name, max_depth=2) is not None
+                        ]
+                        row["dwell_steps"] = int(dwell_counts[root_idx])
+                        row["cycle_lag"] = int(steps_since_tput[root_idx])
+                        row["stale_hold_run"] = int(stale_counts[root_idx])
+                        row["down_run"] = int(down_counts[root_idx])
+                        row["buffer_occ"] = int(
+                            sum(rec["buffers"][m_i][t_step] for m_i in affected_indices)
+                        )
+                        row["state_hist_delta"] = float(
+                            sum(1 for m_i in affected_indices if rec["states"][m_i][t_step] == "RUN")
+                            / max(1, len(affected_indices))
+                        )
+                    else:
+                        row["dwell_steps"] = int(np.median(dwell_counts))
+                        row["cycle_lag"] = int(np.median(steps_since_tput))
+                        row["stale_hold_run"] = 0
+                        row["down_run"] = 0
+                        row["buffer_occ"] = int(
+                            sum(rec["buffers"][m_i][t_step] for m_i in range(config.N_MACHINES)) / 5
+                        )
+                        row["state_hist_delta"] = float(
+                            sum(1 for m_i in range(config.N_MACHINES) if rec["states"][m_i][t_step] == "RUN")
+                            / config.N_MACHINES
+                        )
+
+                    # Per-machine dwell, tputlag, downrun sets (78 columns)
+                    for m_name, m_idx in config.MACHINE_INDEX.items():
+                        row[f"dwell_{m_name}"] = int(dwell_counts[m_idx])
+                        row[f"tputlag_{m_name}"] = int(steps_since_tput[m_idx])
+                        row[f"downrun_{m_name}"] = int(down_counts[m_idx])
+
+                    # H-part split-head features
+                    row["degrade_flag_count"] = int(recent_degrades[t_step])
+                    row["reject_flag_count"] = int(recent_rejects[t_step])
+                    row["rwk_passes"] = int(max_rwk_passes)
+                    row["funnel_rate"] = float(fc.get("kits_completed", 0) / config.T)
+                    row["scrapped_total"] = int(rec["flow_stats"]["scrapped"])
+                    row["scrap_flag"] = 1 if rec["flow_stats"]["scrapped"] > 0 else 0
 
                 # Machine observation and state channels (26 machines)
                 for m_name, m_idx in config.MACHINE_INDEX.items():
@@ -777,6 +926,39 @@ def export_v5(
     )
 
 
+def export_v6(
+    seed: int | None = None,
+    seeds: list[int] | None = None,
+    out: str | pathlib.Path = "artifacts/dataset_v6.parquet",
+    faults: list[dict[str, Any]] | dict[Any, Any] | None = None,
+    variant: str = "baseline",
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    compression: str = "snappy",
+    row_group_size: int = 1024,
+    enable_natural_breakdown: bool = True,
+    runs_log: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
+    """Export deterministic v6 Parquet dataset and associated metadata."""
+    return export(
+        seed=seed,
+        seeds=seeds,
+        out=out,
+        faults=faults,
+        variant=variant,
+        max_bytes=max_bytes,
+        compression=compression,
+        row_group_size=row_group_size,
+        enable_natural_breakdown=enable_natural_breakdown,
+        include_currents=True,
+        schema_version=6,
+        runs_log=runs_log,
+        job_name="dataset_v6",
+    )
+
+
+export_dataset = export
+
+
 def export_contract_dataset_v5(
     out_dir: str | pathlib.Path = "artifacts",
     seeds: list[int] | None = None,
@@ -858,6 +1040,91 @@ def export_contract_dataset_v5(
         faults=fault_map,
         runs_log=runs_log,
     )
+
+
+def export_contract_dataset_v6(
+    out_dir: str | pathlib.Path = "artifacts",
+    master_seed: int = 12345,
+    n_episodes: int = 110,
+    n_clean: int = 10,
+    out_name: str = "dataset_v6.parquet",
+    runs_log: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
+    """Export a multi-episode v6 dataset with balanced stratification keys for contract testing."""
+    out_dir_path = pathlib.Path(out_dir)
+    out_parquet = out_dir_path / out_name
+
+    variant_rows = twin.build_faults_variant(master_seed, cap_budget=True)
+    classes = list(twin._FAULT_CLASSES)
+    n_fault_eps = n_episodes - n_clean
+
+    by_class: dict[str, list[dict[str, Any]]] = {}
+    for r in variant_rows:
+        by_class.setdefault(r["class"], []).append(r)
+
+    targets_per_class = {cls: 14 for cls in classes}
+    targets_per_class[classes[0]] = 15
+    targets_per_class[classes[1]] = 15
+
+    rng = np.random.default_rng(master_seed)
+    sampled_faults = []
+    for cls in classes:
+        cls_rows = by_class[cls]
+        incip = [r for r in cls_rows if r.get("mag_rung") == "incipient"]
+        caric = [r for r in cls_rows if r.get("mag_rung") == "caricature"]
+        target = targets_per_class[cls]
+        n_incip = max(2, int(round(target * config.INCIPIENT_SHARE)))
+        n_caric = target - n_incip
+        chosen = list(incip[:n_incip]) + list(caric[:n_caric])
+        sampled_faults.extend(chosen)
+
+    assert len(sampled_faults) == n_fault_eps, f"Expected {n_fault_eps} faults, got {len(sampled_faults)}"
+    rng.shuffle(sampled_faults)
+
+    seeds = list(range(20001, 20001 + n_episodes))
+    clean_seeds = seeds[:n_clean]
+    fault_seeds = seeds[n_clean:]
+
+    fault_map: dict[int, Any] = {}
+    for s in clean_seeds:
+        fault_map[s] = None
+
+    for s, f_row in zip(fault_seeds, sampled_faults):
+        spec = dict(f_row)
+        if "extra" in spec:
+            spec["extra"] = dict(spec["extra"])
+        if spec.get("class") == "breakdown":
+            mult = float(spec.get("extra", {}).get("mttr_mult", spec.get("mttr_mult", 1.0)))
+            spec["dur"] = min(int(spec["dur"]), int(14 // max(1, math.ceil(mult))))
+        spec["dur"] = min(int(spec["dur"]), 14)
+        spec["t1"] = spec["t0"] + spec["dur"]
+        twin.check_rate_budget([spec])
+        fault_map[s] = spec
+
+    res = export_dataset(
+        out=out_parquet,
+        seeds=seeds,
+        faults=fault_map,
+        schema_version=6,
+        runs_log=runs_log,
+        variant=config.VARIANT_ID,
+    )
+
+    df = load_v6_dataset(res["out"])
+    scored = df[df["t"] >= config.CAL_WIN]
+    y_mean = float(scored["y"].mean())
+    mask_mean = float(scored["fault_mask"].mean())
+    if not (0.03 <= y_mean <= 0.05):
+        raise ValueError(
+            f"Target positive rate violation on scored steps: y rate={y_mean:.4f}, want [0.03, 0.05]"
+        )
+    if mask_mean > 0.08:
+        raise ValueError(
+            f"Target mask rate violation on scored steps: fault_mask rate={mask_mean:.4f}, want <= 0.08"
+        )
+
+    return res
+
 
 
 def load_dataset(
@@ -960,6 +1227,27 @@ def load_v5_dataset(source: Any) -> pd.DataFrame:
             f"v5 reader rejects non-v5 dataset: found schema_version={unique_vers.tolist()}, want 5"
         )
     return df
+
+
+def load_v6_dataset(source: Any) -> pd.DataFrame:
+    """Load v6 parquet dataset and validate schema version == 6."""
+    if isinstance(source, pd.DataFrame):
+        df = source
+    else:
+        path = pathlib.Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset path does not exist: {path}")
+        df = pd.read_parquet(path)
+
+    if "schema_version" not in df.columns:
+        raise ValueError("Dataset contract violation: 'schema_version' column missing")
+    unique_vers = df["schema_version"].unique()
+    if any(v != 6 for v in unique_vers):
+        raise ValueError(
+            f"v6 reader rejects non-v6 dataset: found schema_version={unique_vers.tolist()}, want 6"
+        )
+    return df
+
 
 
 def load_v2_dataset(source: Any) -> Any:

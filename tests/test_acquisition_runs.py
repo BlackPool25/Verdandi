@@ -93,7 +93,7 @@ def test_calibrate_run_vector_emission_library_and_cli(tmp_path: pathlib.Path) -
         assert data["peak_rss_kb"] > 0
         assert isinstance(data["peak_rss_mb"], (int, float))
         assert data["peak_rss_mb"] > 0
-        assert data["schema_version"] in (4, 5)
+        assert data["schema_version"] in (4, 5, 6)
         assert len(data["run_id"]) > 0
         # Valid ISO timestamp
         dt = datetime.fromisoformat(data["timestamp"])

@@ -50,7 +50,7 @@ V5_REQUIRED_PART_HEAD_COLS = {
 
 class TestDatasetV5Contract:
     def test_schema_version_is_5(self):
-        assert config.TWIN_SCHEMA == 5
+        assert config.TWIN_SCHEMA in (5, 6)
 
     def test_v5_export_columns_and_contract(self, tmp_path):
         out_parquet = tmp_path / "dataset_v5.parquet"

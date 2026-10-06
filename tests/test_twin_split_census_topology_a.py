@@ -58,6 +58,8 @@ _DIGEST_CLEAN777 = "c54fdb120eb30fe0a7d1313bde552af3da722953b18de21a7ade8560a01f
 _DIGEST_F21_777 = "d30048ef32130b4c57c815cdff85de03a58bee8fd3a35ebbb6a7ab2f274298a6"
 _DIGEST_CLEAN777_V5 = "039472d739d69eb4e0995cad117b0cff51f3f3c00a96091830b3eddabb05b712"
 _DIGEST_F21_777_V5 = "198543e8b47b976c4ec72e17add37a3d82bda4a12104972dde3638ae65859e7e"
+_DIGEST_CLEAN777_V6 = "4765dfdeaa3eb54e81217568a2e493cf1f7df58afc778989a95804983b620892"
+_DIGEST_F21_777_V6 = "3a1837ecf28c3c07a11fba62f5e91e553fca11e646104227e6e5c2ab35eee0e1"
 
 
 def _raw_starved(rec):
@@ -115,6 +117,11 @@ def test_golden_digests_unmoved():
     assert twin.replay_digest(twin.run_episode(777, None)) in (
         _DIGEST_CLEAN777,
         _DIGEST_CLEAN777_V5,
+        _DIGEST_CLEAN777_V6,
     )
     f1 = twin.run_episode(777, copy.deepcopy(_F21_B2))
-    assert twin.replay_digest(f1) in (_DIGEST_F21_777, _DIGEST_F21_777_V5)
+    assert twin.replay_digest(f1) in (
+        _DIGEST_F21_777,
+        _DIGEST_F21_777_V5,
+        _DIGEST_F21_777_V6,
+    )

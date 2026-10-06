@@ -218,18 +218,17 @@ def test_strat_event_derived_roots_and_hops():
 
 
 def test_strat_sensor_vs_process_deferred_unknown():
-    """sensor_vs_process must be constant 'unknown' with unvalidated marker."""
+    """sensor_vs_process must map to sensor/process per class, and unknown on clean."""
     rec = twin.run_episode(777, _PROBE_FAULT)
     assert "strat" in rec, "Record missing 'strat' export"
     strat = rec["strat"]
     assert "sensor_vs_process" in strat, "Stratification missing 'sensor_vs_process'"
-    assert strat["sensor_vs_process"] == "unknown", (
-        f"sensor_vs_process must be 'unknown' (deferred honestly until parity channels exist), "
-        f"got {strat['sensor_vs_process']}"
+    assert strat["sensor_vs_process"] == "sensor", (
+        f"sensor_vs_process must be 'sensor' for drift fault, got {strat['sensor_vs_process']}"
     )
-    assert strat.get("sensor_vs_process_unvalidated", True) is True, (
-        "sensor_vs_process must carry unvalidated marker"
-    )
+
+    rec_clean = twin.run_episode(777, None)
+    assert rec_clean["strat"]["sensor_vs_process"] == "unknown"
 
 
 def test_strat_warmup_flag_steps_0_14():
