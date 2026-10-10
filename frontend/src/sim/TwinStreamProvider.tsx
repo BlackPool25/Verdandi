@@ -105,6 +105,14 @@ export function TwinStreamProvider({
     }),
   );
 
+  // Periodic badge flushing so StripChart captions and status stay live
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      chartStore.flushBadges();
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [chartStore]);
+
   const source = useTickSource({ episodeId });
   const ingestedStep = useRef(-1);
 

@@ -46,6 +46,7 @@ export interface MinMaxSpec extends Viewport {
   readonly pairs: Float32Array;
   readonly min: number;
   readonly max: number;
+  readonly totalSteps?: number | undefined;
 }
 
 export function paintMinMax(ctx: StripCtx, spec: MinMaxSpec): number {
@@ -54,21 +55,39 @@ export function paintMinMax(ctx: StripCtx, spec: MinMaxSpec): number {
   const max = spec.max;
   const w = spec.w;
   const h = spec.h;
+  const total = spec.totalSteps ?? 300;
   ctx.clearRect(0, 0, w, h);
-  const cols = Math.floor(pairs.length / 2);
-  if (cols === 0 || w <= 0 || h <= 0) return 0;
+  if (pairs.length === 0 || w <= 0 || h <= 0) return 0;
   const span = max - min || 1;
+
+  if (pairs.length >= w * 2) {
+    const cols = Math.floor(pairs.length / 2);
+    ctx.beginPath();
+    let segs = 0;
+    for (let x = 0; x < cols && x < w; x += 1) {
+      const lo = pairs[x * 2];
+      const hi = pairs[x * 2 + 1];
+      if (lo === undefined || hi === undefined) continue;
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+      const y1 = Math.max(0, Math.min(h, h - ((lo - min) / span) * h));
+      const y2 = Math.max(0, Math.min(h, h - ((hi - min) / span) * h));
+      ctx.moveTo(x, y1);
+      ctx.lineTo(x, y2);
+      segs += 1;
+    }
+    if (segs > 0) ctx.stroke();
+    return segs;
+  }
+
   ctx.beginPath();
   let segs = 0;
-  for (let x = 0; x < cols && x < w; x += 1) {
-    const lo = pairs[x * 2];
-    const hi = pairs[x * 2 + 1];
-    if (lo === undefined || hi === undefined) continue;
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
-    const y1 = h - ((lo - min) / span) * h;
-    const y2 = h - ((hi - min) / span) * h;
-    ctx.moveTo(x, y1);
-    ctx.lineTo(x, y2);
+  for (let i = 0; i < pairs.length; i += 1) {
+    const v = pairs[i];
+    if (v === undefined || !Number.isFinite(v)) continue;
+    const x = Math.min(w, (i / Math.max(1, total - 1)) * w);
+    const y = Math.max(0, Math.min(h, h - ((v - min) / span) * h));
+    if (segs === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
     segs += 1;
   }
   if (segs > 0) ctx.stroke();

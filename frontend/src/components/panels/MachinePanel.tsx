@@ -114,91 +114,153 @@ export function MachinePanel(props: MachinePanelProps): React.JSX.Element {
   // the CH8 motor-current strip for the same machine.
   const faceId =
     selectedId !== null && MACHINE_META[selectedId] !== undefined ? selectedId : "B2";
+
+  const meta = selectedId !== null ? MACHINE_META[selectedId] : undefined;
+  const obsMin = meta !== undefined ? Math.max(0, Math.floor(meta.base - 4 * meta.sigma)) : 0;
+  const obsMax = meta !== undefined ? Math.ceil(meta.base + 4 * meta.sigma) : 100;
+
   const sparkline =
     store === undefined || store === null ? null : (
-      <div className="machine-panel__sparkline">
-        <div className="sparkline-title">OBSERVATION TELEMETRY (RING BUFFER)</div>
+      <div className="machine-panel__sparklines">
         <StripChart
           store={store}
           machineId={faceId}
-          width={328}
-          height={64}
+          title="OBSERVATION TELEMETRY (RING BUFFER)"
+          width={280}
+          height={68}
+          min={obsMin}
+          max={obsMax}
+          unit="units"
         />
-        <div className="sparkline-title">MOTOR CURRENT, A (CH8)</div>
         <StripChart
           store={store}
           machineId={faceId}
-          width={328}
-          height={64}
+          title="MOTOR CURRENT, A (CH8)"
+          width={280}
+          height={68}
           min={0}
           max={20}
           source="current"
           testidSuffix="-current"
+          unit="Amps (A)"
         />
       </div>
     );
+
   if (tick === null || selectedId === null) {
     return (
       <section aria-label="machine panel" data-testid="machine-panel" className="sim-box px-panel machine-detail-panel">
-        <h2 className="px-h2 panel-title">Machine Inspector</h2>
-        {nav}
+        <div className="faceplate-header-sticky">
+          <h2 className="px-h2 panel-title">Machine Inspector</h2>
+          {nav}
+        </div>
         <p data-testid="machine-panel-empty" className="empty-selection-note">No machine selected.</p>
         {sparkline}
       </section>
     );
   }
+
   if (selectedId === "SBUF") {
     const sbuf = sbufPanelFor(tick);
+    const sbufSparkline =
+      store === undefined || store === null ? null : (
+        <div className="machine-panel__sparklines">
+          <StripChart
+            store={store}
+            machineId="SBUF"
+            title="SBUF OCCUPANCY (BUFFER STORE)"
+            width={280}
+            height={68}
+            min={0}
+            max={30}
+            source="buffer"
+            unit="parts"
+          />
+        </div>
+      );
+
     return (
       <section aria-label="machine panel" data-testid="machine-panel" className="sim-box px-panel machine-detail-panel">
-        <h2 className="px-h2 panel-title">Machine SBUF</h2>
-        {nav}
+        <div className="faceplate-header-sticky">
+          <div className="machine-panel-header">
+            <h2 className="px-h2 panel-title">Machine SBUF</h2>
+            <span className={`px-badge ${sbuf.high ? "px-badge-down" : "px-badge-run"}`}>
+              {sbuf.high ? "HIGH UTIL" : "NORMAL"}
+            </span>
+          </div>
+          {nav}
+        </div>
         <dl className="machine-specs-grid">
           <div><dt>level</dt><dd data-testid="machine-panel-sbuf-level" style={WRAP}>{sbuf.level}</dd></div>
           <div><dt>cap</dt><dd data-testid="machine-panel-sbuf-cap" style={WRAP}>{sbuf.cap}</dd></div>
           <div><dt>high-util</dt><dd data-testid="machine-panel-sbuf-high" style={WRAP}>{sbuf.high ? "high" : "ok"}</dd></div>
+          <div><dt>occupancy</dt><dd style={WRAP}>{Math.round((sbuf.level / sbuf.cap) * 100)}%</dd></div>
         </dl>
-        <p data-testid="machine-panel-sbuf-label">{sbuf.noSeriesLabel}</p>
+        <p data-testid="machine-panel-sbuf-label" className="path-note">{sbuf.noSeriesLabel}</p>
         <p className="path-note">Path: SBUF-divert store (process/finish/inspect-tail only).</p>
-        {sparkline}
+        {sbufSparkline ?? sparkline}
       </section>
     );
   }
+
   const panel = machinePanelFor(tick, selectedId);
   if (!panel.found) {
     return (
       <section aria-label="machine panel" data-testid="machine-panel" className="sim-box px-panel machine-detail-panel">
-        <h2 className="px-h2 panel-title">Machine {selectedId}</h2>
-        {nav}
+        <div className="faceplate-header-sticky">
+          <h2 className="px-h2 panel-title">Machine {selectedId}</h2>
+          {nav}
+        </div>
         <p data-testid="machine-panel-empty" className="empty-selection-note">Unknown machine id — no data.</p>
         {sparkline}
       </section>
     );
   }
+
   if (panel.kind === "c7tail") {
     return (
       <section aria-label="machine panel" data-testid="machine-panel" className="sim-box px-panel machine-detail-panel">
-        <h2 className="px-h2 panel-title">Machine _C7TAIL</h2>
-        {nav}
-        <p data-testid="machine-panel-c7tail-final">
-          final: {panel.c7tailFinal === null ? "no episode yet" : panel.c7tailFinal}
-        </p>
-        <p data-testid="machine-panel-c7tail-label">{panel.noSeriesLabel}</p>
+        <div className="faceplate-header-sticky">
+          <div className="machine-panel-header">
+            <h2 className="px-h2 panel-title">Machine _C7TAIL</h2>
+            <span className="px-badge px-badge-run">STORE TAIL</span>
+          </div>
+          {nav}
+        </div>
+        <dl className="machine-specs-grid">
+          <div>
+            <dt>final output</dt>
+            <dd data-testid="machine-panel-c7tail-final" style={WRAP}>
+              {panel.c7tailFinal === null ? "no episode yet" : panel.c7tailFinal}
+            </dd>
+          </div>
+          <div><dt>drain method</dt><dd style={WRAP}>AGV transport</dd></div>
+          <div><dt>source</dt><dd style={WRAP}>Station C7</dd></div>
+          <div><dt>status</dt><dd style={WRAP}>ACCUMULATING</dd></div>
+        </dl>
+        <p data-testid="machine-panel-c7tail-label" className="path-note">{panel.noSeriesLabel}</p>
         <p className="path-note">Path: AGV-drained store (C7 tail).</p>
         {sparkline}
       </section>
     );
   }
+
+  const machineIdx = tick.machineOrder.indexOf(panel.id);
+  const currentVal = machineIdx >= 0 && tick.currents ? tick.currents[machineIdx] : null;
+
   return (
     <section aria-label="machine panel" data-testid="machine-panel" className="sim-box px-panel machine-detail-panel">
-      <div className="machine-panel-header">
-        <h2 className="px-h2 panel-title">Machine {panel.id}</h2>
-        <span className={`px-badge px-badge-${panel.state.toLowerCase()}`}>{panel.state}</span>
+      <div className="faceplate-header-sticky">
+        <div className="machine-panel-header">
+          <h2 className="px-h2 panel-title">Machine {panel.id}</h2>
+          <span className={`px-badge px-badge-${panel.state.toLowerCase()}`}>{panel.state}</span>
+        </div>
+        {nav}
       </div>
-      {nav}
       <dl className="machine-specs-grid">
         <div><dt>state</dt><dd data-testid="machine-panel-state" style={WRAP}>{panel.state}</dd></div>
         <div><dt>obs</dt><dd data-testid="machine-panel-obs" style={WRAP}>{typeof panel.obs === "number" ? panel.obs.toFixed(2) : panel.obs}</dd></div>
+        <div><dt>current</dt><dd data-testid="machine-panel-current" style={WRAP}>{typeof currentVal === "number" ? `${currentVal.toFixed(2)} A` : "—"}</dd></div>
         <div><dt>envelope</dt><dd data-testid="machine-panel-envelope" style={WRAP}>{panel.envelopeNote}</dd></div>
         <div><dt>tput</dt><dd data-testid="machine-panel-tput" style={WRAP}>{panel.tput}</dd></div>
         <div>
