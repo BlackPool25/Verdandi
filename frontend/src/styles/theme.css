@@ -258,6 +258,22 @@
   color: var(--vd-text-primary);
 }
 
+.px-machine-state.state-run {
+  color: var(--vd-state-run-border, #005e44);
+}
+
+.px-machine-state.state-starved {
+  color: var(--vd-state-starved-border, #0a567e);
+}
+
+.px-machine-state.state-blocked {
+  color: var(--vd-state-blocked-border, #7d5200);
+}
+
+.px-machine-state.state-down {
+  color: var(--vd-state-down-border, #8a3800);
+}
+
 .px-machine-tput-row {
   display: flex;
   align-items: center;

@@ -91,7 +91,10 @@ export const MachineNode = memo(function MachineNode({
           <use href={`${spriteUrl}#${spriteId}`} />
         </svg>
         <div className="px-machine-metrics">
-          <div data-testid={`node-state-${data.label}`} className="px-machine-state">
+          <div
+            data-testid={`node-state-${data.label}`}
+            className={`px-machine-state ${data.state ? `state-${data.state.toLowerCase()}` : ""}`}
+          >
             {data.state ?? "—"}
           </div>
           <div className="px-machine-tput-row">

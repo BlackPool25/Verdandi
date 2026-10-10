@@ -66,8 +66,26 @@ function TopologyInner({
   onSelect,
   panelTick,
 }: TopologyViewProps): React.JSX.Element {
-  const { updateNodeData, fitView, setCenter } = useReactFlow();
+  const { fitView, setCenter } = useReactFlow();
   const [direction, setDirection] = useState<RankDir>("FLOOR");
+
+  // Active patch: use tick if present, or derive from panelTick fallback
+  const activePatch = useMemo<TickPatch | null>(() => {
+    if (tick !== null) return tick;
+    if (panelTick !== null && panelTick !== undefined) {
+      const states: Record<string, string> = {};
+      const tput: Record<string, number> = {};
+      for (let i = 0; i < panelTick.machineOrder.length; i++) {
+        const id = panelTick.machineOrder[i];
+        if (id !== undefined) {
+          states[id] = panelTick.states[i] ?? "—";
+          tput[id] = panelTick.throughput[i] ?? 0;
+        }
+      }
+      return { step: panelTick.step, states, tput };
+    }
+    return null;
+  }, [tick, panelTick]);
 
   // Dagre re-layout on direction toggle ONLY (never per tick). Positions
   // recompute; node data is untouched (setNodes maps positions, see below).
@@ -76,45 +94,70 @@ function TopologyInner({
     [direction],
   );
 
-  // Base roster: layout positions + pinned datum, rebuilt on toggle only.
+  // Base roster: layout positions + pinned datum with initial live status
   const { baseNodes } = useMemo(() => {
     const pos = new Map(layoutPos.map((n) => [n.id, n] as const));
-    const baseNodes: Node[] = PINNED_NODES.map((n) => {
+    const specs = faults ?? [];
+    const baseNodes: Node<MachineNodeDatum>[] = PINNED_NODES.map((n) => {
       const p = pos.get(n.id);
+      let state = activePatch?.states[n.id];
+      if (state === undefined) {
+        if (n.id === "SBUF" && panelTick !== null && panelTick !== undefined) {
+          state = `${panelTick.sbuf_level}/30`;
+        } else if (n.id === "_C7TAIL" && panelTick?.c7tailFinal != null) {
+          state = `FIN ${panelTick.c7tailFinal}`;
+        }
+      }
+      const tput = activePatch?.tput[n.id] ?? 0;
+      const anomaly = activePatch ? anomalyFor(n.id, activePatch.step, specs, activePatch.states) : undefined;
       return {
         id: n.id,
         type: "machine",
+        selected: n.id === selectedId,
         position: { x: p?.x ?? 0, y: p?.y ?? 0 },
-        data: { ...n.data } satisfies MachineNodeDatum,
+        data: {
+          ...n.data,
+          state,
+          tput,
+          anomaly,
+        } satisfies MachineNodeDatum,
       };
     });
     assertTopologyCounts(baseNodes.length, PINNED_EDGES.length);
     return { baseNodes };
-  }, [layoutPos]);
+  }, [layoutPos, activePatch, faults, selectedId, panelTick]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<MachineNodeDatum>>(baseNodes);
 
   // Toggle path: new positions onto live nodes, data (state/tput/anomaly)
   // and selection spread through untouched.
   useEffect(() => {
     const pos = new Map(layoutPos.map((n) => [n.id, n] as const));
-    setNodes((nds) =>
-      nds.map((n) => {
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
         const p = pos.get(n.id);
-        return p === undefined ? n : { ...n, position: { x: p.x, y: p.y } };
-      }),
-    );
+        if (!p || (n.position.x === p.x && n.position.y === p.y)) return n;
+        changed = true;
+        return { ...n, position: { x: p.x, y: p.y } };
+      });
+      return changed ? next : nds;
+    });
   }, [layoutPos, setNodes]);
 
   // Selection path: flag-only patch, datum untouched (memo nodes keep
   // their per-tick identity; only the two flipped nodes re-render).
   useEffect(() => {
-    setNodes((nds) =>
-      nds.map((n) => {
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
         const want = n.id === selectedId;
-        return n.selected === want ? n : { ...n, selected: want };
-      }),
-    );
+        if (n.selected === want) return n;
+        changed = true;
+        return { ...n, selected: want };
+      });
+      return changed ? next : nds;
+    });
   }, [selectedId, setNodes]);
 
   const onConnect = useCallback(() => undefined, []);
@@ -183,20 +226,21 @@ function TopologyInner({
     return () => cancelAnimationFrame(raf);
   }, [fitView]);
 
-  // Per-tick path: RAF-coalesced updateNodeData (T6 render throttle).
+  // Per-tick path: RAF-coalesced state update directly onto nodes (T6 render throttle).
   // Last-write-wins: ticks arriving faster than a frame (4x = 62.5ms, still
   // >16ms, but burst catch-ups coalesce) keep only the latest patch.
-  // If-changed guard: per-node flat signature skips nodes whose
-  // state/tput/anomaly are identical, so unchanged nodes never re-render.
-  // Datum stays small/flat ({state, tput, anomaly}); layout untouched.
+  // If-changed guard: unchanged nodes return identical reference, so memo
+  // nodes never re-render.
   const pendingRef = useRef<TickPatch | null>(null);
   const rafRef = useRef<number>(0);
-  const appliedRef = useRef<Map<string, string>>(new Map());
   const faultsRef = useRef(faults);
   faultsRef.current = faults;
+  const panelTickRef = useRef(panelTick);
+  panelTickRef.current = panelTick;
+
   useEffect(() => {
-    if (tick === null) return;
-    pendingRef.current = tick;
+    if (activePatch === null) return;
+    pendingRef.current = activePatch;
     if (rafRef.current !== 0) return;
     rafRef.current = window.requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -204,19 +248,43 @@ function TopologyInner({
       pendingRef.current = null;
       if (latest === null) return;
       const specs = faultsRef.current ?? [];
-      const applied = appliedRef.current;
-      for (const [id, state] of Object.entries(latest.states)) {
-        const tput = latest.tput[id] ?? 0;
-        const anomaly = anomalyFor(id, latest.step, specs, latest.states);
-        // Flat signature: anomaly is a small object or null; JSON is cheap
-        // here vs a wasted updateNodeData + node re-render downstream.
-        const sig = `${state}|${tput}|${anomaly === null || anomaly === undefined ? "" : JSON.stringify(anomaly)}`;
-        if (applied.get(id) === sig) continue;
-        applied.set(id, sig);
-        updateNodeData(id, { state, tput, anomaly });
-      }
+      const pt = panelTickRef.current;
+      setNodes((nds: Node<MachineNodeDatum>[]) => {
+        let changed = false;
+        const next = nds.map((n) => {
+          let state = latest.states[n.id];
+          if (state === undefined) {
+            if (n.id === "SBUF" && pt !== null && pt !== undefined) {
+              state = `${pt.sbuf_level}/30`;
+            } else if (n.id === "_C7TAIL" && pt?.c7tailFinal != null) {
+              state = `FIN ${pt.c7tailFinal}`;
+            }
+          }
+          const tput = latest.tput[n.id] ?? 0;
+          const anomaly = anomalyFor(n.id, latest.step, specs, latest.states);
+          const sameAnomaly =
+            (!n.data.anomaly && !anomaly) ||
+            (n.data.anomaly?.gt === anomaly?.gt &&
+              n.data.anomaly?.neighbor === anomaly?.neighbor &&
+              n.data.anomaly?.down === anomaly?.down);
+          if (n.data.state === state && n.data.tput === tput && sameAnomaly) {
+            return n;
+          }
+          changed = true;
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              state,
+              tput,
+              anomaly: anomaly ?? undefined,
+            },
+          };
+        });
+        return changed ? next : nds;
+      });
     });
-  }, [tick, faults, updateNodeData]);
+  }, [activePatch, faults, setNodes]);
   useEffect(
     () => () => {
       if (rafRef.current !== 0) window.cancelAnimationFrame(rafRef.current);

@@ -51,17 +51,17 @@ export interface MachineNodeDatum extends Record<string, unknown> {
    * T1 sprite contract: cls mirrors MACHINE_META cls verbatim; spriteId is
    * `sprite-${cls}` via spriteFor(). Absent = unresolved (patched per-tick).
    */
-  readonly cls?: SpriteClass;
-  readonly spriteId?: SpriteId;
+  readonly cls?: SpriteClass | undefined;
+  readonly spriteId?: SpriteId | undefined;
   /** Live per-tick fields, patched via updateNodeData (T10 wires the stream). */
-  readonly state?: string;
-  readonly tput?: number;
-  readonly obs?: number;
+  readonly state?: string | undefined;
+  readonly tput?: number | undefined;
+  readonly obs?: number | undefined;
   /**
    * T9-owned anomaly overlay (additive: absent = plain node). Patched via
    * updateNodeData from anomalyFor(); TopologyView layout untouched.
    */
-  readonly anomaly?: AnomalyDatum;
+  readonly anomaly?: AnomalyDatum | undefined;
 }
 
 /** T9 anomaly overlay datum: GT outline, depth-1 neighbor, DOWN kind. */
