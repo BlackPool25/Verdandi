@@ -1,64 +1,93 @@
 # Verdandi — every factory alarm ships with its proof
 
-Verdandi, Norn of *what-is*: a 32-machine factory twin where every alarm arrives with a ranked upstream cause (≤3 steps + gateway), a why-explanation (≥95% triple-grounded sentences), and a seeded replay proving it — on one CPU laptop, end-to-end demo under 10 minutes.
+![Python](https://img.shields.io/badge/python-3.14-blue?logo=python)
+![SimPy](https://img.shields.io/badge/simpy-4.1.2-green)
+![React](https://img.shields.io/badge/react-19-61dafb?logo=react)
+![CPU-only](https://img.shields.io/badge/compute-CPU--only-orange)
+![Status](https://img.shields.io/badge/status-CONDITIONAL_GO-yellow)
 
-**Status: CONDITIONAL GO** (Crucible stress-tested, pre-build). K1/K3/K4/K5 survive · K2 mandates quantile · F1 ~0.73 < 0.85 bar (→ M0b sensitivity first) · zero known pre-build holes.
+A 26-machine factory twin where every alarm arrives with a ranked upstream cause, a why-explanation, and a seeded replay proving it, on one CPU laptop in under 10 minutes.
 
-## Bars (ship thresholds — NEVER soften without L1 reclassification)
-F1 ≥ 0.85 · AC@1 ≥ 70% intra+cross-partition · latency ≤ 3 steps · demo < 10 min ·
-grounding ≥ 95% · flip < 40% per partition · 0-diverge. K1 AC@1<30%/flip>40%→cut learning ·
-K2 F1-drop>30pts→quantile mandatory · K3 >5% ungrounded→chain-cards · K4 diverge→subgraph-only ·
-K5 ROCm>1wk→CPU-baseline. Twin NEVER issues safety-restart clearance.
+**Status: CONDITIONAL GO** (Crucible stress-tested, pre-build). K1/K3/K4/K5 survive. F1 ~0.73 sits below the 0.85 bar, so M0b detector-sensitivity is the one open item. See `PLAN.md` addendum 2026-09-11.
+
+## Ship bars
+
+Thresholds from `scripts/check_gates.py` defaults. Never soften without L1 reclassification.
+
+| Metric | Bar | Current | Gate |
+|---|---|---|---|
+| F1 | >= 0.85 | ~0.73 (32-fault totals 0.725, `PLAN.md`) | **M0b open** |
+| AC@1 | >= 70% intra+cross | 0.8125 (32-fault), 0.80 battery (`PLAN.md`) | pass |
+| Flip | < 40% per partition | 14.4-30.3% line-scale (`docs/ARCHITECTURE.md`) | pass |
+| Detection latency | <= 3 steps | per `ELENCHUS_DISCOVERY.md` bar | pass |
+| p99 | <= 3s (`check_gates.py` default) | 3.7ms/fault (`PLAN.md`) | pass |
+| Wall | < 600s | 17.7s battery (`PLAN.md`) | pass |
+| Grounding | >= 95% | 1.00 harness (`PLAN.md`) | pass |
+| Diverge | 0 (same-seed x5) | 0-diverge (K4 gate) | pass |
+
+Kill triggers: K1 AC@1<30%/flip>40% cuts learning. K2 F1-drop>30pts makes quantile mandatory. K3 >5% ungrounded falls back to chain-cards. K4 diverge forces subgraph-only replay. K5 ROCm>1wk keeps the CPU baseline. The twin never issues safety-restart clearance.
+
+## Quickstart (CPU-only)
+
+```bash
+docker compose up --build        # web viewer at http://localhost:19104, api on :8000
+python -m pytest tests/ -m "k1 or k2 or k3 or k4 or k5 or battery" -n auto -q
+python scripts/check_gates.py --csv artifacts/battery.csv
+bash demo/run.sh                  # headless alarm-lifecycle check, seed 777
+```
+
+Ports come from `.env` (`WEB_PORT=19104`, `API_PORT=8000`). The frontend runs `npm --prefix frontend run gates` plus `pytest services/sim_bridge/tests -q` (see `docs/FRONTEND.md`).
+
+## Architecture
+
+Batch pipeline, single laptop, CPU-only:
+
+`Twin -> Detect -> Veto-mask -> Walk -> Narrate+Verify -> Replay -> Waterfall UI + viva trail`
+
+Hand-rolled SimPy twin, per-machine quantile/IQR detection, fixed ASM2 veto-mask, depth<=3 walk, template+verifier narration with chain-cards fallback, subgraph-only seeded replay, React/Zustand waterfall viewer. Full story in `docs/MDA.md` (CIM/PIM/PSM views) and `docs/ARCHITECTURE.md`.
+
+## Data contract
+
+Schema v6, `CODE_VERSION=twin-2.5.0-topology-A` (`src/config.py`). 26 machines x 300 ticks per episode, calibration window 120, warmup 15. Offline store is Parquet, there is no SQL database. Live transport is SSE tick frames from the FastAPI bridge. Frozen tick/header keys in `services/sim_bridge/SCHEMA.md`.
+
+## Testing
+
+300+ tests across 34 files in `tests/`, markers `k1-k5/battery/adversarial/mutation` (`pytest.ini`). CI runs lint-type, battery with 80% coverage floor, brutal gates (`scripts/check_gates.py`), 10/10 hostile-input rejection, and mutation non-vacuity (see `docs/CI.md`). Viewer has its own vitest suite (`frontend/package.json`).
+
+## Docs map
+
+| Doc | One line |
+|---|---|
+| `docs/MDA.md` | CIM/PIM/PSM models with Mermaid |
+| `docs/ARCHITECTURE.md` | Pipeline, contracts, ATAM scenarios |
+| `docs/SIM_SPEC.md` | Normative 26-machine plant spec (topology-A) |
+| `docs/SDD.md` | IEEE 1016 design, 8 viewpoints |
+| `docs/SRS.md` | IEEE 29148 requirements REQ-001-010 |
+| `docs/TEST_PLAN.md` / `TEST_CASES.md` | IEEE 829 plan TST-001-010, cases TC-001-011 |
+| `ELENCHUS_DISCOVERY.md` | Validated problem brief |
+| `PLAN.md` | Build order M0-M5, stack, acceptance |
+| `docs/CI.md` | Pipeline gates |
+| `docs/FRONTEND.md` | Twin viewer spec |
+| `docs/CARRY_THROUGH.md` | ADR-0001-0012, RFC, PR/FAQ |
+
+## Roadmap
+
+| Milestone | Scope (`PLAN.md`) | Status |
+|---|---|---|
+| M0 | Echo-aware attribution to F1>=0.85 | done (killed per ADR-0011, rescoped) |
+| M0b | Detector sensitivity, missed-fault analysis first | in progress |
+| M1 | Detection hardening, quantile-refit artifact | backlog |
+| M2 | Narration + model wiring, grounding>=95% | backlog |
+| M3 | Replay + demo harness, 0-diverge + <600s | backlog |
+| M4 | Waterfall UI + viva trail | backlog |
+| M5 | Viva dry-run + calibration | backlog |
+
+## Scope boundaries
+
+Fixed-per-semester topology; drift/noise/trust curve unmeasured. Real-plant drift, noise, and wear beyond the twin's models are unmeasured and no operator trust curve is claimed (see `docs/SIM_SPEC.md` section 13.4). No live stream, no blind discovery, no pretrained weights, no GPU-dependent demo, no safety-clearance authority.
 
 ## Links
+
 - GitHub: https://github.com/BlackPool25/Verdandi
-- Linear: Verdandi project (team MCP, milestones M0–M5, issues MCP-10–18)
-- Playbooks: docs/LINEAR_PLAYBOOK.md (team habits) · docs/CI.md (brutal gates)
-
-## Map
-- `ELENCHUS_DISCOVERY.md` — validated problem brief (V1 payload; slug anomaly-twin-trace frozen in Crucible sources).
-- `PLAN.md` — verified goal, build order M0→M5, stack, reuse, acceptance, HANDOFF.
-- `docs/SRS.md` — IEEE 29148 requirements (REQ-001–010).
-- `docs/SDD.md` — IEEE 1016 design (8 viewpoints + module specs + data dictionary + mermaid).
-- `docs/SIM_SPEC.md` — normative 32-machine plant spec (lines A/B/C + assembly + rework + AGV, true coupling, 7 fault classes, 7 channels).
-- `docs/TEST_PLAN.md` — IEEE 829 plan (TST-001–010). `docs/TEST_CASES.md` — concrete cases TC-001–011.
-- `docs/CHARTER.md` + `docs/REGISTERS.md` — PMBOK charter, stakeholders, risks.
-- `docs/CARRY_THROUGH.md` — ADR-0001–0012 verbatim + RFC + PR/FAQ. `docs/SPRINT_PACK.md` + `docs/BACKLOG_DETAIL.md` — stories + task backlog.
-- `docs/MCP_EXPORT.md` — dry-run export envelopes. `docs/CI.md` — pipeline gates. `docs/FRONTEND.md` — /sim twin viewer (topology, panels, controls, feed, charts, gates). `docs/LINEAR_PLAYBOOK.md` — collaboration habits.
-- `docs/PR_FAQ.md`, `docs/RFC.md`, `docs/ARCHITECTURE.md`, `docs/SPEC.md`, `docs/TECHNICAL.md`, `docs/PROBLEM.md`, `docs/RESEARCH.md`, `docs/SPIKES.md`, `docs/CONTRADICTIONS.md`, `docs/DIAGRAMS.md`, `docs/SCORECARD.md`, `docs/BUILD_BACKLOG.md` — Crucible dossier (frozen evidence).
-- `.opencode/blackboard/anomaly-twin-trace/` — Crucible memory (ADR ledger, evidence, contradictions map).
-- `spike/` — QUARANTINE (never merge, never import from `src/`; CI enforces): 5 harnesses + reports + JSONL traces.
-- `.github/workflows/ci.yml` — brutal gates (lint-type/battery/killbars-security/e2e-demo/adversarial/docs-links/notify).
-- `src/` — build root (created in M0; modules per SDD §2.2). `scripts/check_gates.py` + `scripts/linear_update.sh` + `demo/run.sh` — created with first build issues.
-
-## Topology-A Twin Baseline & Schema v3 (M0.2e)
-
-- **Schema & Version Pin**: `TWIN_SCHEMA = 3`, `CODE_VERSION = 'twin-2.2.0-topology-A'`. Atomic flag-day migration from v2.
-- **Stratification Keys (M0.2e Contract)**: 9 exported stratification fields in `rec["strat"]` and Parquet columns:
-  1. `wear_endpoint`: End-of-episode max machine wear scalar via minimal C3 wear-lite equation on active run/degraded steps without adding RNG streams.
-  2. `maint_flag`: Boolean maintenance intervention indicator (honest deferral with unvalidated marker).
-  3. `family`: Fault family classification (`clean`, `drift`, `delay`, `loss`, `spike`, `breakdown`, `quality`).
-  4. `mode`: Operational degradation mode (`normal`, `observation_only`, `physical_propagation`).
-  5. `root_id`: Primary injection root machine identifier resolved from event graph (depth <= 3).
-  6. `root_ids`: Canonical collection of distinct root origins for multi-fault injections.
-  7. `hop`: Shortest causal graph distance from root to detection (0 at root, -1 if clean).
-  8. `sensor_vs_process`: Honest deferral to `'unknown'` with `sensor_vs_process_unvalidated=True`.
-  9. `state_histogram`: Per-machine operational state time proportions obeying the strict denominator rule.
-  - Auxiliary stratification context: `warmup_flag` (masks first 15 steps) and `funnel_census` (production throughput metrics).
-- **Kit Funnel Rebalancing**: Rebalanced downstream kit assembly from starve state (13% yield, 22 median kits) to >= 30 median sunk kits via gated buffer unfreezing and AGV-priority variants. Rolling 20-seed evaluation achieves median sunk of **36.5** (p10=28.0, p90=39.0) with zero duty-cycle pile-up violations.
-- **Zero-Join Dataset Export Contract (`src/dataset_export.py`)**:
-  - Deterministic Parquet export with sorted column keys and bit-identical reproducibility.
-  - Generates `window_config.json` (`schema_version=3`, `cal_win=120`, `T=300`, `warmup_steps=15`, owned field declarations).
-  - Generates `metadata.json` / `ingestion_metadata.json` with dataset SHA-256 hash and funnel census summaries.
-  - **Zero `scaler.pkl` Law**: Export-time scaling is strictly forbidden by TF1 leakage law to eliminate cross-fold data snooping.
-  - Legacy v2 reader (`load_v2_dataset`) loudly raises `ValueError` on v3 records/datasets.
-- **Hermetic Funnel Gate & Wall Report v2**:
-  - Environment-pinned evaluation (`PYTHONHASHSEED=7`, `OMP_NUM_THREADS=1`).
-  - `wall_report.json` schema v2 embeds funnel metrics (`median_sunk >= 30`).
-  - Full-marker CI suite (`k1 or k2 or k3 or battery`) passes in ~14s (wall total < 600s budget).
-  - Bit-identical jobs invariance across `--jobs 1` and `--jobs 4` (`d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5`).
-
-## Verify (CPU-only; after M0 lands)
-- Battery: `python scripts/run_battery.py` (gates via `scripts/check_gates.py`)
-- Replay determinism: same `--seed 7` twice -> byte-identical (CI asserts)
-- Docs: stale-token grep + lychee (CI asserts)
+- Linear: Verdandi project (team PRISSUE, milestones M0-M5)
+- Playbooks: `docs/LINEAR_PLAYBOOK.md` (team habits), `docs/CI.md` (brutal gates)
