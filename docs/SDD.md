@@ -261,6 +261,44 @@ def validate_trail(record: dict) -> bool: ...
 Inputs: Alarm, RankCause, Explanation, Replay, evidence dict. Outputs: validated trail record (JSON-serializable).
 Error paths: harness-green-on-corrupt → vacuous-reject (never export green on invalid triple); RSS>5% → KILL export, flag run; schema fail → reject with reason, 0 file write.
 
+### 4.12 window_export.py (from M0.2f multiscale export)
+Responsibilities: Multiscale window export for training piles: detrended global-envelope + prefix/range features per channel, rolling-bank features, base-window derivation with scale lengths, extended window-config section (`build_m0_2f_window_config_section`, `write_extended_window_config`), cover + multiscale export (`export_cover`, `export_multiscale`, `run_m0_2f_export`). Warm-up rows excluded at export (`step >= 15`, `warmup_flag == False`).
+
+```python
+def export_multiscale(windows: np.ndarray, config: dict) -> dict: ...
+def export_cover(windows: np.ndarray, config: dict) -> dict: ...
+def run_m0_2f_export(seed: int, config: dict) -> dict: ...
+```
+
+Inputs: episode windows + window config. Outputs: exported window tensors + `window_config.json` section.
+Error paths: warm-up leak (any row `step < 15`) → reject export, 0 file write; scale-length mismatch vs base window → ValueError, episode skipped, logged.
+
+### 4.13 train_pipeline.py (leakage-law training entry)
+Responsibilities: Zero-join stratified training pile only: window building, per-machine median/IQR fit on calibration piles only, transform, grouped CV, raw point-wise F1. Export-time fitting or emission of scalers is forbidden (TF1 leakage law); `StratifiedGroupKFold` grouped by `episode_id`.
+
+```python
+def build_windows(episodes: list[dict], config: dict) -> np.ndarray: ...
+def fit_per_machine_median_iqr(cal: np.ndarray) -> dict[int, tuple[float, float]]: ...
+def transform_per_machine(windows: np.ndarray, scales: dict) -> np.ndarray: ...
+def create_grouped_cv(episode_ids: list[int], n_splits: int = 5) -> list[tuple]: ...
+def compute_raw_pointwise_f1(y_true: np.ndarray, y_pred: np.ndarray) -> float: ...
+```
+
+Inputs: episode dicts + calibration windows. Outputs: window tensors, per-machine scales, CV splits, raw F1 float.
+Error paths: fit on non-calibration piles → refuse, 0 scaler emitted; point-adjusted scoring requested → reject (inadmissible, raw point-wise only); group leak (same `episode_id` across folds) → AssertionError, run aborted.
+
+### 4.14 calibration.py (PLANNED — PRISSUE-19)
+Responsibilities (planned): fixed-percentile calibration owner (per M0B_PREREG fixed-percentile rule); distinct from `src/calibrate.py` run-vector plumbing. Not built; no caller may import it until the owning issue lands.
+Error paths: planned-only — any import today fails ModuleNotFound, by design.
+
+### 4.15 causal_complement.py (PLANNED — PRISSUE-28)
+Responsibilities (planned): causal-complement evidence job (partition-scoped, evidence-only, never production edges). Not built; walk falls back to topology+stats where complement edges are absent.
+Error paths: planned-only — any import today fails ModuleNotFound, by design.
+
+### 4.16 envelope_harness.py (PLANNED — PRISSUE-27)
+Responsibilities (planned): envelope acceptance harness (T7 §11: §8 ranges, `base ± 3σ` clean envelope, channel-1 `base ± 6σ` clamp). Not built; envelope claims rest on twin-side asserts until the harness lands.
+Error paths: planned-only — any import today fails ModuleNotFound, by design.
+
 ## 5. Data dictionary
 
 | Entity | Key fields | Producer → Consumer | Persisted in |
@@ -278,6 +316,9 @@ Error paths: harness-green-on-corrupt → vacuous-reject (never export green on 
 | Replay | alarm_id, seed, subgraph, diverge_bool, trace_hash, runs=5 | replay → ui/trail | traces/timing.json, v0–v6 vectors |
 | Trail record | alarm_id, rank_cause, explanation, replay{seed,subgraph,diverge,runs}, evidence{F1,AC@1,flip,p99,spike_ids} | trail → grader/viva | trail JSONL export |
 | Caps ledger | tokens_used, usd, iters, shed_flags | narrate/verify/walk → trail | S1{}, K3{}, overall{} |
+
+### 5.4 Dataset keys (SIM_SPEC §4.5/§4.6 strat contract, schema v6)
+Owned stratification keys in `rec["strat"]` + Parquet columns: `episode_id` (group key for `StratifiedGroupKFold`), `wear_endpoint` (C3 wear-lite end-of-episode max, SIM_SPEC §4.7), `maint_flag` (unvalidated deferral), `family`, `mode` (`observation_only` | `physical_propagation`), `root_id`, `root_ids`, `hop`, `sensor_vs_process` (`sensor` | `process` | `unknown`), `state_histogram`, `y` (1 strictly on root-cause steps, `hop_step == 0`), `fault_mask` (1 on root + symptom steps, `hop_step` in [0..3]), `symptom_mask` (1 on `fault_mask & ~y`), `hop_step` (0 root, 1..3 symptom, -1 clean), `warmup_flag` + warmup keys (`step >= 15`, `warmup_flag == False` enforced by `assert_warmup_excluded`), `funnel_census`, `window_config.json` (owned field declarations), `wall_report.json` (schema_version=2), and `wstate_per_machine` (shipped — PRISSUE-23; per-machine endpoints in `rec["wstate"]` + `wstate_<M>` Parquet columns).
 
 Thresholds: Q_DET=max(q0.99,Q3+1.5·IQR) per machine; VETO_ASM2 only (ASM2-test 2× margin, no other mask); WALK depth≤3/top-k intra-partition + 1 gateway hop exempt from depth (fan-out cap 8 per SIM_SPEC §7.3; line-scale fan-out-5 carried as baseline only, plant fan-out re-measured at M0 exit); PCMCI tau_max=2/pc_alpha=0.05/α=0.01/N_FLOOR=800 per partition, tau=3 evidence-only never production (complexity O(P²×tau) per partition, P≈6–8; full-plant N=32 banned); ECHO_W=5 (echo suppression) vs GAP_MIN=5 (min inter-window gap same machine, SIM_SPEC §4.3); NARR_DEADLINE≤8s; CAPS $0.005/2.5k tok/iter; SHED_AT 80% richness-first. Multi-channel taxonomy: every fault/alarm/triple carries channel ∈ {vibration, thermal, throughput, quality, state, buffer, event} per SIM_SPEC §8 (detector thresholds on channels 1–2 only); coverage matrix is partition × channel × class (7 classes incl. breakdown/quality).
 

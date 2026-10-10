@@ -121,7 +121,7 @@ jobs:
       - name: probe §5.4 dataset keys in SIM_SPEC
         run: 'grep -n "episode_id\|wear_endpoint\|maint_flag\|root_id" docs/SIM_SPEC.md || echo "SKIP: §5.4 keys live in MINIPRO-25 scope, spec unamended"'
       - name: extended stale-token grep (CURRENT/WEAR/AIR/THERMAL/IMPULSE)
-        run: '! grep -rnE "CURRENT|WEAR|AIR|THERMAL|IMPULSE" docs/SRS.md docs/SDD.md docs/SIM_SPEC.md 2>/dev/null'
+        run: '! grep -rnE "CURRENT|WEAR|AIR|THERMAL|IMPULSE|ALPHA|BETA|KNEE|I_RATED|K_BY_GROUP|I_IDLE|STEP_SECONDS|VOLT|WEAR_EXP|SYMPTOM_TAIL" docs/SRS.md docs/SDD.md docs/SIM_SPEC.md docs/TEST_PLAN.md docs/TEST_CASES.md 2>/dev/null'
   notify:
     runs-on: ubuntu-22.04
     needs: [lint-type, battery, killbars-security, e2e-demo, adversarial, docs-links]

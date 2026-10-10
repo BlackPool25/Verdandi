@@ -15,15 +15,17 @@ Bars restated, never softened (§11).
 > commit lands on main. Detector thresholds (§7.1–§7.2) and MINIPRO-34/35
 > sections are untouched by this amendment.
 
-Topology-A lineage (normative pins): TWIN_SCHEMA=3,
-CODE_VERSION='twin-2.2.0-topology-A' (exact literal, never '2.x'),
+Topology-A lineage (normative pins): TWIN_SCHEMA=6,
+CODE_VERSION='twin-2.5.0-topology-A' (exact literal, never '2.x'),
 INSPECT_DELAY_STEPS=3. Battery IDs 'topology-A-quick16' (16-row smoke) +
-'topology-A-full182' (full manifest); F-21-on-B2 seed-777 digest
-`f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5`;
-joined battery digest
-`d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5`;
-quick16 digest
-`44c43483d596b6b3e64f55750151964679c6d5d41623a77d97dabc2615f1b26b`.
+'topology-A-full182' (full manifest); v3 battery digests (F-21-on-B2
+seed-777 `f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5`,
+joined
+`d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5`,
+quick16
+`44c43483d596b6b3e64f55750151964679c6d5d41623a77d97dabc2615f1b26b`)
+are NON_COMPARABLE against v6, never asserted equal; v6 digests pin on
+re-measurement (PRISSUE-30).
 v1 and v2 baselines are legacy non-comparable schemas, never asserted equal.
 Retime (owner-approved option C, bounded MINIPRO-24): AGV_CAP 3, TAKT5
 single-takt line balance (cycles below), AGV drain grace 8
@@ -157,9 +159,10 @@ Every coefficient below is traceable to `src/config.py` (`_MACHINE_ROWS` /
 | ASM2 | test | 45.0 | 2.0 | 5 | 1200 | 10 | — (sink + rework tap) | — |
 | RWK0 | rework | 62.0 | 1.6 | 8 | 900 | 18 | return 10 | 5 |
 
-TWIN_SCHEMA=3, CODE_VERSION='twin-2.2.0-topology-A' (exact literal),
+TWIN_SCHEMA=6, CODE_VERSION='twin-2.5.0-topology-A' (exact literal),
 INSPECT_DELAY_STEPS=3 — all in `src/config.py`; every battery number is
-logged with (schema_version=3, battery_id).
+logged with (schema_version=6, battery_id). v3-era pins are
+NON_COMPARABLE, never asserted equal (§4.4).
 
 TAKT5 retime note (owner-approved option C, bounded MINIPRO-24): single-takt
 line balance at takt=5 (the form/kit cadence). Feed 4→5, process 6→5,
@@ -239,8 +242,8 @@ real plant historian provides.
 overlap across episodes, never within one episode on the same machine
 (≥5-step gap between windows on the same machine). B2 hosting F-21 (drift
 [150,162)) + F-25 (breakdown [190,202)) satisfies the gap rule.
-4.4. Episode record: `{seed, T: 300, cal_win: 120, schema_version: 3,
-code_version: 'twin-2.2.0-topology-A', machines: Table 3.1,
+4.4. Episode record: `{seed, T: 300, cal_win: 120, schema_version: 6,
+code_version: 'twin-2.5.0-topology-A', machines: Table 3.1,
 obs[26][300], states[26][300], buffers[26][300], agv_waits[], parts[],
 faults[], strat: {wear_endpoint, maint_flag, family, mode, root_id, hop,
 root_ids, sensor_vs_process, warmup_flag, state_histogram, funnel_census}}`.
@@ -249,8 +252,17 @@ t0, dur, mag_sigma, extra:{d | drop_rate | mttr_mult | reject_rate}}`.
 The replay digest canonical payload INCLUDES schema_version + code_version
 alongside the partition subgraph obs (sorted keys, existing wall-clock
 exclusions kept), so version tampering mismatches the digest by
-construction. The twin bridge runs v3-only with an explicit legacy-reject
-error ('legacy schema non-comparable, rebaseline').
+construction. The twin bridge runs v6-only with an explicit legacy-reject
+error ('legacy schema non-comparable, rebaseline'). Schema v3 pins
+(`schema_version: 3`, `code_version: 'twin-2.2.0-topology-A'`, F-21-on-B2
+seed-777 digest
+`f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5`,
+joined digest
+`d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5`,
+quick16 digest
+`44c43483d596b6b3e64f55750151964679c6d5d41623a77d97dabc2615f1b26b`)
+are NON_COMPARABLE against v6, never asserted equal; no v6 replacement
+digest is pinned here until measured (PRISSUE-30 re-measures at battery).
 
 4.5. Stratification keys & zero-join dataset export (M0.2e contract):
 The twin emits 9 owned stratification keys in `rec["strat"]` enabling downstream
@@ -297,6 +309,30 @@ Promoted twin version to `TWIN_SCHEMA = 6` (`CODE_VERSION = "twin-2.5.0-topology
 6. Machine Learning Evaluation Protocol:
    - Complete ban on Point-Adjustment (PA) protocols. All evaluations enforce raw point-wise $F_1$, PR-AUC, and Detection Latency $\Delta t = t_{\text{detect}} - t_0$. Grouped cross-validation enforced via `StratifiedGroupKFold(5)` grouped by `episode_id`.
 
+4.7. C3 wear-lite scalar (normative equation; canonical coefficients live
+in `src/config.py` and are never duplicated as code elsewhere):
+Per-machine wear scalar $w_m$, $w_m(0) = 0$, stepped on RUN steps only:
+
+```
+w_m(t+1) = w_m(t) + alpha * L_m * (1 + beta * 1[w_m(t) > knee])
+```
+
+with `alpha = 1/240`, `knee = 0.8`, `beta = 4.0`, and `L_m` the load
+factor from the `k_by_group` table for the machine's group (§8 channel
+8). `wear_endpoint` (§4.5 key 1) is the end-of-episode max over `m` of
+$w_m$.
+MAINT_EVENT reset semantics: at the step a `MAINT_EVENT` fires for
+machine `m`, $w_m$ resets to 0 (w -> 0 at the event step); wear
+re-accumulates from 0 afterwards. `MAINT_EVENT` emission shipped
+(PRISSUE-23): pass `maintenance=[{machine, t}, ...]` to `run_episode`;
+episodes without it carry no `MAINT_EVENT` and `maint_flag` stays False
+with its unvalidated marker (§4.5 key 2).
+Coexistence with §4.6 item 3: the M0.2g in-step exponential drift is the
+in-loop physical-aging observation bias on the 5 process machines, while
+the C3 wear-lite scalar above is the post-hoc stratification census
+feature (`wear_endpoint`). Distinct roles, both deterministic, neither
+consumes RNG draws.
+
 ## 5. Fault-injection taxonomy (normative, 7 classes × representative machines)
 
 Classes: spike, drift, bias, delay (slow-cycle), loss (drops), breakdown
@@ -339,6 +375,31 @@ superseded: every class above lists its own mandatory origins.
 Rate-budget constraints enforce that fault duration cannot overwhelm an episode. The rate budget enforces a maximum fault occupancy (nominally 8% or 14.4 steps) evaluated over the 180-step scored interval (steps 120–300, where steps 0–120 represent the calibration window). For breakdown faults, the mechanism forces an extended-down operational state whose actual downtime spans `ceil(dur * mttr_mult)` steps rather than nominal duration alone; rate budget checking calculates union-over-t of occupied time per origin machine across multiple fault windows to prevent cumulative over-saturation. Enforcement is split between builder capping (`cap_budget=True`, bounding `dur <= 14` and `dur * mttr_mult <= 14`) and runtime verification (`check_rate_budget`). Oracle representative pin F-25 (breakdown on B2 with nominal dur=12 and mttr_mult=2.0 yielding 24 steps > 14.4) is explicitly exempted to preserve exact baseline oracle comparability.
 
 Warm-up isolation guarantees that startup dynamics do not leak into downstream evaluation or training datasets. The initial 15 simulation steps (`WARMUP_STEPS = 15`) contain non-stationary startup transients. In episode outputs, warm-up keys are cleanly distinguished: `warmup_pool` and `transient_pool` are maintained as distinct objects, with `transient_pool` providing a full-channel clean-transient baseline extracted under unperturbed conditions. Downstream datasets enforce a strict filtering contract via `dataset_export.assert_warmup_excluded`, ensuring all exported rows satisfy `step >= 15` and `warmup_flag == False`. Export provenance is recorded in `manifest.json` with `exclude_warmup=True` and `warmup_steps=15` metadata, guaranteeing that calibration, feature scaling, and model training piles operate exclusively on post-transient steady-state operations.
+
+Effect-mode taxonomy (normative): every fault class runs in exactly one
+effect mode. Observation-only (spike, drift, bias, loss): the fault
+perturbs the origin observation; downstream machines observe consequences
+only via flow (§4.1). Physical-propagation (delay, breakdown, quality):
+the fault changes the physical process (cycle time, availability, part
+quality) and propagates via WIP, buffers, states, and part-carried flags.
+Mode is carried in `rec["strat"].mode` (`observation_only` |
+`physical_propagation`, §4.5 key 4).
+
+Multi-root attribution kinds (normative): single-root episodes carry
+`root_id` with `hop` 0 at the root (`hop_step == 0`, §4.6 item 1).
+CASCADE_CHILD: a downstream symptom attribution carrying (`root_id`,
+`hop`) with `hop` in 1..3 (`symptom_mask`, `hop_step` in 1..3).
+MULTI_ROOT: a multi-origin episode carrying `root_ids[]`, the canonical
+collection of distinct injection roots (§4.5 key 6); `root_id` names the
+primary origin. SENSOR_VS_PROCESS pairs: a multi-origin episode whose
+roots span both classifications, carried as per-root
+(sensor-vs-process) pairs alongside `root_ids[]`.
+
+Sensor-vs-process mapping (normative, mirrors §4.6 item 2):
+observation-only classes (spike, drift, bias, loss) map to `sensor`;
+physical-propagation classes (delay, breakdown, quality) map to
+`process`; clean episodes map to `unknown` (carried in
+`rec["strat"].sensor_vs_process`, §4.5 key 8).
 
 ## 6. RNG discipline (normative, K4)
 
@@ -417,7 +478,7 @@ plus rework return edge; INSP0 late verdicts walk ASM2→INSP0→ASM1 in cell.
 
 ## 8. Data taxonomy (normative, multi-channel)
 
-Every machine emits channels 1–5 per step; channels 6–7 are plant-level.
+Every machine emits channels 1–5 plus 8–10 per step; channels 6–7 are plant-level.
 Detector thresholds (§7.1) apply to channels 1–2 only.
 
 | # | Channel | Type | Range | Rate | Per machine-class notes |
@@ -429,9 +490,14 @@ Detector thresholds (§7.1) apply to channels 1–2 only.
 | 5 | machine state | enum {RUN, BLOCKED, STARVED, DOWN} | — | 1/step + on-change event | BLOCKED = downstream full; STARVED = upstream empty (ASM0: any kit input empty); DOWN = breakdown |
 | 6 | buffer level | int parts | 0–cap | 1/step per buffer (26 buffers) | includes SBUF + rework return buffer |
 | 7 | event log | structured `{t, machine, event, detail}` | — | on-change | events: FAULT_START/END, BLOCK_ON/OFF, STARVE_ON/OFF, DOWN/UP, AGV_WAIT, REJECT_ROUTE, DIVERT_SBUF, FAILOVER, PACK_FORK, LATE_VERDICT |
+| 8 | motor current | float A | `>= 0` (idle draw `0.15 * i_rated`) | 1/step | per-class rated current `i_rated` from `src/config.py` (`i_rated_by_class`), load factor `L_m` from `k_by_group`; 1 tick = 1 s (`step_seconds`) |
+| 9 | energy | header-only kVAh | — | per episode header | mains 400 V (`volt`), `step_seconds = 1`; header-only aggregate, no per-step series |
+| 10 | air | — | — | — | PROBATION per PRISSUE-21, non-normative until probation exits; no thresholds or gates may cite it |
 
-Sampling: twin step = 1 sample for channels 1–3, 5–6. Channel 4 sampled
-per part completion. Channel 7 is sparse/event-driven. No sub-step
+Sampling: twin step = 1 sample for channels 1–3, 5–6, 8. Channel 4 sampled
+per part completion. Channel 7 is sparse/event-driven. Channel 9 is a
+per-episode header value, not a series. Channel 10 emits nothing normative
+while on probation. No sub-step
 sampling; SDD may downsample channels 1–2 (not 6–7) for PCMCI partitions
 under the §10 budget.
 
@@ -444,14 +510,11 @@ edge, buffer/AGV hops named e.g. `"A9~AGV~ASM0"`, rework `"ASM2~RWK0~ASM0"`,
 fork/join `"B2->B7P"`, `"B7P->B8"`, packaging `"PKG0->PKG1"`).
 One running example: fault `F-21` (drift, B2, t0=150, dur=12, mag=5.2σ).
 
-Re-baselined pin (topology-A schema v3, battery `topology-A-full182`):
-seed 777 F-21-on-B2 digest
-`f5c976bfe679861873e92e9e5ecdc4e8dc24a35aa6ed83cb0bf412463c3660e5`
-(`code_version` 'twin-2.2.0-topology-A', `schema_version` 3, GT window
-exact (150,162)). Detector peak/threshold figures in the examples below
-are illustrative of the triple and contract format, not measured twin
-output; the digest, GT window, schema, and code version are measured.
-Legacy v1 and v2 digests are NON_COMPARABLE, never asserted equal.
+Re-baselined pin (topology-A schema v6, battery `topology-A-full182`):
+version pins `code_version` 'twin-2.5.0-topology-A', `schema_version` 6;
+v3-era digest + GT-window pins below are NON_COMPARABLE illustrative
+contract format, never asserted equal to v6 output. Legacy v1, v2, and v3
+digests are NON_COMPARABLE, never asserted equal.
 
 ### 9.1. Alarm
 
@@ -542,8 +605,8 @@ NARR_DEADLINE ≤8s. `sentence.triple` is `object|null`.
   "partition": "line-B",
   "diverge_bool": false,
   "runs": 5,
-  "schema_version": 3,
-  "code_version": "twin-2.2.0-topology-A",
+  "schema_version": 6,
+  "code_version": "twin-2.5.0-topology-A",
   "replay_hash": "sha256:f5c976bfe67986…"
 }
 ```
@@ -582,8 +645,8 @@ byte-identical obs on the partition subgraph → `diverge_bool: false`
   "replay": {"seed": 777, "fault": "F-21-drift-B2",
              "subgraph": {"nodes": ["B2", "B7P", "B8"], "edges": ["B2->B7P", "B7P->B8"]},
              "diverge": false, "runs": 5, "replay_hash": "sha256:f5c976bfe67986…",
-             "schema_version": 3, "code_version": "twin-2.2.0-topology-A"},
-  "evidence": {"battery": {"battery_id": "topology-A-full182", "schema_version": 3,
+             "schema_version": 6, "code_version": "twin-2.5.0-topology-A"},
+  "evidence": {"battery": {"battery_id": "topology-A-full182", "schema_version": 6,
                            "joined_digest": "d910d61123dfa80b87ef225b5be36e7a165d950be3ad1cc869370f36453976f5",
                            "manifest_rows": 182, "F1": 0.725, "AC@1": 0.8125,
                            "flip_tau2": 0.144, "p99_s": 0.0026},
@@ -646,6 +709,41 @@ K2 (F1-drop>30pts → quantile mandatory, fired: MP rejected), K3 (>5%
 ungrounded → fallback stays), K4 (any diverge → partition-scoped pinned
 replay), CAPS ($0.005 / 2.5k tok / iter cap per run).
 
+T5 flow-semantics acceptance (TC-006b asserts, per episode): every
+tail-to-ASM0 transfer holds one AGV for `agv_steps` in [4,8] with
+`agv_waits[]` logged and no transfer without a hold; rejected parts route
+ASM2→RWK0→ASM0 with pass count capped (no infinite rework loop);
+tail-full divert to SBUF allowed only for process/finish classes
+(feed/form never, packaging-sink tails never) with SBUF occupancy logged
+and draining to ASM0 on free AGV; BLOCKED iff downstream full (holds
+part, emits 0 throughput), STARVED iff upstream empty (ASM0: any kit
+input empty), DOWN preempts BLOCKED/STARVED, natural-breakdown steps
+flagged and excluded from fault ground-truth windows; 10x surge sheds
+rich sentences only, detection/provenance intact, walk result served.
+T6 manifest-182 coverage (TC-006d): 182 rows (26 machines × 7 classes),
+zero empty cells, 7 rep pins (F-21 B2, F-22 A7, F-23 C2, F-24 B7P, F-25
+B2, F-26 B9, F-06 A0); joined digest stable across jobs 1 vs auto; wall
+<600s.
+T7 envelope acceptance: every channel emits within its §8 range (channel
+1 clamped at `base ± 6σ`); the clean operating envelope is `base ± 3σ`
+(§3 notes); detector thresholds (§7.1) apply to channels 1–2 only.
+T8 reason-code/sensor-health acceptance (TC-010/010b): every alarm
+carries its fault-class reason code plus the §5 sensor-vs-process
+classification (`sensor` | `process` | `unknown`); per-class observables
+hold (breakdown → BLOCKED upstream + STARVED downstream with origin
+throughput zero; quality → rework-buffer surge + ASM0 kitting starve +
+sink throughput dip); flip <40% per partition per class incl.
+breakdown/quality (K1 partition-pivot on breach, bars unsoftened);
+carried per-class references DELAY F1≈0.670 R=1.00 AC@1 5/6 lat3 0.83
+flip 24.2%, LOSS F1≈0.739 AC@1 5/6 lat3 0.83 flip 30.3%, 32-fault totals
+F1≈0.725 AC@1 0.8125 — references only, never bars.
+T9 duty-cycle rebalance: plant-mean RUN ≥80%, STARVED ≤15% on the
+24-machine standby-excluded mean (standby scope {B7S, RWK0} excluded),
+BLOCKED reported, `xfer_open == 0` at T via drain accounting (grace 8),
+pile-up bound held (no gap buffer at cap ≥30 consecutive steps while
+downstream STARVED), green on seeds [777,1234,999,42,2026] (TC-006c;
+measured RUN 0.850–0.891, STARVED 0.107–0.138).
+
 ## 12. REQ-010 coverage checklist (TST-003)
 
 - [x] 26/26 machines + 26/26 buffers + AGV pool (cap 3) + flow/fork/failover/
@@ -659,9 +757,9 @@ replay), CAPS ($0.005 / 2.5k tok / iter cap per run).
       share ≥80%, STARVED share ≤15% (24-machine mean, standby scope
       {B7S,RWK0} excluded), BLOCKED reported, xfer_open==0 at T via drain
       accounting (grace 8), pile-up bound held.
-- [x] Versioned schema: every battery number carries schema_version=3 +
+- [x] Versioned schema: every battery number carries schema_version=6 +
       battery_id; episode record + replay digest bind schema_version +
-      code_version 'twin-2.2.0-topology-A'; legacy v1 and v2 baselines marked
+      code_version 'twin-2.5.0-topology-A'; legacy v1, v2, and v3 baselines marked
       NON_COMPARABLE, never asserted equal.
 - [ ] No `0.45^lag` signal copy anywhere; propagation via WIP/buffers/
       states/part flags only (§4.2 audit note addressed).
@@ -688,3 +786,35 @@ prior to the topology-A reshape commits, not here. v1 baselines are
 V1_NON_COMPARABLE against schema-v2 numbers by construction (§4.4 digest
 binding). MINIPRO-30 owns ratification of any scale-arm claim built on
 this appendix.
+
+## 13. Advisory actions, claim boundaries, brownfield disclosure
+
+13.1. Advisory action vocabulary (PLANNED — PRISSUE-30, all advisory-only,
+none actuated by the twin): A1 acknowledge (operator takes ownership of
+the alarm); A2 inspect-queue (advisory inspection priority for the ranked
+machine); A3 schedule-maintenance (advisory work-order request, feeds the
+future `MAINT_EVENT`, §4.7); A4 quarantine-hold (advisory hold of suspect
+parts at the inspect tail); A5 reroute-flow (advisory AGV/SBUF dispatch
+preference); A6 escalate-human (advisory handoff with trail export
+attached); A7 clear-alarm (advisory resolution note citing the replay
+hash). No action executes without a human; the twin emits recommendations
+with provenance, never commands.
+13.2. Actuation boundary (normative): the twin never issues
+safety-restart clearance (human-only, §1.2 SPEC FR-9), never commands any
+actuator, interlock, or restart, and never clears an alarm on its own
+authority. Twin outputs are ranked causes, triple-grounded explanations,
+and seeded replays for human decision. Any downstream system that treats
+a twin output as a clearance violates this spec.
+13.3. Claim boundaries for §9 contracts (normative): §9 examples fix the
+contract shape (keys, types, ranges, triple format), not measured twin
+output values unless pinned as measured with schema + code version
+(§4.4). Detector peak/threshold figures are illustrative of the triple
+and contract format. No claim extends beyond partition-scoped replay
+(§9.4): cross-partition attribution is allowed only via the §10
+boundary checks. No contract carries safety authority (§13.2).
+13.4. OQ-5 brownfield disclosure (normative note): topology is fixed per
+semester (topology-A frozen for this build); real-plant drift, noise, and
+wear beyond the twin's AR1 + wear models (§4.1, §4.6 item 3, §4.7) are
+unmeasured; no operator trust curve (reliance on twin outputs over time)
+is claimed or measured. Brownfield deployment must re-disclose these
+three gaps before any reliance claim.
