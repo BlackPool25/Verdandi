@@ -162,14 +162,14 @@ describe("breakdown GT vs DOWN duration split", () => {
   });
 
   it("natural DOWN during a clean window never gets the fault outline", () => {
-    expect(isGtOutline("A3", 155, [F21])).toBe(false);
-    expect(downKindFor("A3", 155, [F21], "DOWN")).toBe("natural");
-    expect(isDownState("A3", 155, [F21], "DOWN")).toBe(true);
+    expect(isGtOutline("A7", 155, [F21])).toBe(false);
+    expect(downKindFor("A7", 155, [F21], "DOWN")).toBe("natural");
+    expect(isDownState("A7", 155, [F21], "DOWN")).toBe(true);
   });
 
   it("no fault, no DOWN state -> null kind, no outline", () => {
-    expect(downKindFor("A3", 10, [], "RUN")).toBe(null);
-    expect(isGtOutline("A3", 10, [])).toBe(false);
+    expect(downKindFor("A7", 10, [], "RUN")).toBe(null);
+    expect(isGtOutline("A7", 10, [])).toBe(false);
   });
 });
 
@@ -177,7 +177,7 @@ describe("DOWN/UP disambiguation", () => {
   const nat: TwinEvent = {
     event: "DOWN",
     t: 40,
-    machine: "A3",
+    machine: "A7",
     detail: {},
     natural: true,
     gt_excluded: true,
@@ -186,7 +186,7 @@ describe("DOWN/UP disambiguation", () => {
   const inj: TwinEvent = {
     event: "DOWN",
     t: 150,
-    machine: "B5",
+    machine: "B7P",
     detail: {},
     natural: false,
     gt_excluded: false,
@@ -200,7 +200,7 @@ describe("DOWN/UP disambiguation", () => {
   });
 
   it("non-DOWN/UP events carry no kind", () => {
-    expect(downKindOf({ event: "BLOCK_ON", t: 1, machine: "B6", detail: {} })).toBe(null);
+    expect(downKindOf({ event: "BLOCK_ON", t: 1, machine: "C6", detail: {} })).toBe(null);
   });
 
   it("allowlist maps all 14 twin names, rejects unknown", () => {
@@ -228,14 +228,14 @@ describe("DOWN/UP disambiguation", () => {
 
 describe("feed pure logic", () => {
   const evs: readonly TwinEvent[] = [
-    { event: "FAULT_START", t: 150, machine: "B5", detail: {} },
-    { event: "DOWN", t: 150, machine: "B5", detail: {} },
-    { event: "BLOCK_ON", t: 151, machine: "B6", detail: {} },
+    { event: "FAULT_START", t: 150, machine: "B7P", detail: {} },
+    { event: "DOWN", t: 150, machine: "B7P", detail: {} },
+    { event: "BLOCK_ON", t: 151, machine: "C6", detail: {} },
   ];
 
   it("per-machine filter keeps only that machine", () => {
-    expect(filterEvents(evs, { machine: "B5" })).toHaveLength(2);
-    expect(filterEvents(evs, { machine: "B6" })).toHaveLength(1);
+    expect(filterEvents(evs, { machine: "B7P" })).toHaveLength(2);
+    expect(filterEvents(evs, { machine: "C6" })).toHaveLength(1);
     expect(filterEvents(evs, {})).toHaveLength(3);
   });
 

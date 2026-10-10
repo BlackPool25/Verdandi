@@ -8,6 +8,7 @@ import {
   SBUF_HIGH,
   TAILS,
 } from "./machineMeta";
+import type { FaultSpec, TwinEvent } from "../events/types";
 
 export interface PanelTick {
   readonly step: number;
@@ -18,6 +19,12 @@ export interface PanelTick {
   readonly sbuf_level: number;
   readonly quality: Readonly<Record<string, unknown>>;
   readonly currents: readonly number[];
+  // Per-tick event channels parsed from the payload row (never fabricated:
+  // empty means the tick carried none). Energy is header-only by contract
+  // (schema.py energy dict, never per-tick) so it rides EpisodeLiveHeader,
+  // not PanelTick.
+  readonly events_at_k: readonly TwinEvent[];
+  readonly faults: readonly FaultSpec[];
   readonly machineOrder: readonly string[];
   readonly bufferOrder: readonly string[];
   readonly c7tailFinal?: number | null;
@@ -111,6 +118,15 @@ export interface EpisodeHeader {
   readonly sbuf_stats?: Readonly<Record<string, unknown>> | null | undefined;
   readonly flow_stats?: Readonly<Record<string, unknown>> | null | undefined;
   readonly c7tail_final?: unknown;
+  // Full 9-key SSE header passthrough (sse.py build_header): seed/T/faults/
+  // replay_digest ride here from the controller's liveHeader. No selector
+  // consumes replay_digest yet — kept with a null-gate (dropped key:
+  // replay_digest has no consumer; episode_id never enters this type, the
+  // controller keys the stream by its connect() arg).
+  readonly seed?: number | null | undefined;
+  readonly T?: number | null | undefined;
+  readonly faults?: readonly unknown[] | null | undefined;
+  readonly replay_digest?: string | null | undefined;
 }
 
 export interface EpisodeStats {

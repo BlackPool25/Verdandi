@@ -1,9 +1,9 @@
-"""T3 frozen tick schema v4 (contract lock, cross-team reuse) — topology-A only.
+"""T3 frozen tick schema v6 (contract lock, cross-team reuse) — topology-A only.
 
 Twin-mirror verbatim; bridge-strict labeled. Locks the tick JSON the
 bridge replays (T2) and the frontend consumes (T4+):
 
-- v4-only: N_MACHINES=26 / N_BUFFERS=26 (topology-A roster) + TICK
+- v6 contract (accepts 4/5 legacy): N_MACHINES=26 / N_BUFFERS=26 (topology-A roster) + TICK
   `currents` row (CH8 motor-current index, twin _record_current) +
   header `energy` dict (CH9 apparent-energy index, twin _energy_header,
   header-only, never per-tick) + `strat` block (stratification keys,

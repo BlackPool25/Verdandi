@@ -27,6 +27,7 @@
   "devDependencies": {
     "@playwright/test": "1.55.0",
     "@types/dagre": "0.7.52",
+    "@types/node": "^26.6.5",
     "@types/react": "19.1.12",
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "4.7.0",

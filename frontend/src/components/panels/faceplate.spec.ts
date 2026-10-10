@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import fixture from "../../test/fixtures/ticks-777.json";
+import fixture from "../../test/fixtures/ticks-A-777.json";
 import { FACEPLATE_IDS } from "./MachinePanel";
 import {
   machinePanelFor,
@@ -7,6 +7,10 @@ import {
   tailPathFor,
   type PanelTick,
 } from "./selectors";
+import { toFaultSpec } from "../events/anomaly";
+import type { FaultSpec } from "../events/types";
+import { STREAM_MACHINE_ORDER, parseFeedEvents } from "../../sim/streamCodec";
+import { BUFFER_IDS } from "../../store/tick";
 import { SBUF_CAP, SBUF_HIGH } from "./machineMeta";
 
 // L4 faceplate rail: the 9 class probes resolve against the live tick row
@@ -14,26 +18,43 @@ import { SBUF_CAP, SBUF_HIGH } from "./machineMeta";
 const EXPECTED_IDS = ["A0", "A2", "A8", "A9", "B2", "C7", "ASM1", "ASM2", "RWK0"];
 
 interface FixtureShape {
-  readonly machine_order: readonly string[];
-  readonly buffer_order: readonly string[];
-  readonly ticks: Readonly<Record<string, {
+  readonly header: {
+    readonly seed: number;
+    readonly T: number;
+    readonly c7tail_final: number;
+  };
+  readonly ticks: ReadonlyArray<{
     readonly step: number;
     readonly states: readonly string[];
     readonly obs: readonly number[];
     readonly throughput: readonly number[];
     readonly buffers: readonly number[];
     readonly sbuf_level: number;
+    readonly events_at_k: readonly unknown[];
+    readonly faults: ReadonlyArray<Readonly<Record<string, unknown>>>;
     readonly quality: Readonly<Record<string, unknown>>;
     readonly currents: readonly number[];
-  }>>;
-  readonly c7tail_final: number;
+  }>;
 }
 
 const F = fixture as unknown as FixtureShape;
 
-function panelTickAt(step: number): PanelTick {
-  const t = F.ticks[String(step)];
+function tickAt(step: number) {
+  const t = F.ticks.find((k) => k.step === step);
   if (t === undefined) throw new Error(`fixture missing step ${step}`);
+  return t;
+}
+
+function panelTickAt(step: number): PanelTick {
+  const t = tickAt(step);
+  const faults: FaultSpec[] = [];
+  for (const f of t.faults) {
+    try {
+      faults.push(toFaultSpec(f));
+    } catch {
+      continue;
+    }
+  }
   return {
     step: t.step,
     states: t.states,
@@ -43,9 +64,11 @@ function panelTickAt(step: number): PanelTick {
     sbuf_level: t.sbuf_level,
     quality: t.quality,
     currents: t.currents,
-    machineOrder: F.machine_order,
-    bufferOrder: F.buffer_order,
-    c7tailFinal: F.c7tail_final,
+    events_at_k: parseFeedEvents(t),
+    faults,
+    machineOrder: STREAM_MACHINE_ORDER,
+    bufferOrder: BUFFER_IDS,
+    c7tailFinal: F.header.c7tail_final,
   };
 }
 
@@ -62,8 +85,8 @@ describe("L4 faceplate rail", () => {
       const panel = machinePanelFor(tick, id);
       expect(panel.found, `${id} found`).toBe(true);
       if (!panel.found || panel.kind !== "machine") continue;
-      const i = F.machine_order.indexOf(id);
-      const raw = F.ticks["150"];
+      const i = STREAM_MACHINE_ORDER.indexOf(id);
+      const raw = tickAt(150);
       expect(panel.state).toBe(raw?.states[i]);
       expect(panel.obs).toBe(raw?.obs[i]);
       expect(panel.tput).toBe(raw?.throughput[i]);
@@ -93,10 +116,10 @@ describe("L4 faceplate rail", () => {
     const sbuf = sbufPanelFor(panelTickAt(150));
     // Then: level equals payload, cap 30, threshold ≥80%
     expect(sbuf.id).toBe("SBUF");
-    expect(sbuf.level).toBe(F.ticks["150"]?.sbuf_level);
+    expect(sbuf.level).toBe(tickAt(150).sbuf_level);
     expect(sbuf.cap).toBe(SBUF_CAP);
     expect(SBUF_HIGH).toBeGreaterThanOrEqual(24);
-    expect(sbuf.high).toBe((F.ticks["150"]?.sbuf_level ?? 0) >= 24);
+    expect(sbuf.high).toBe(tickAt(150).sbuf_level >= 24);
     expect(sbuf.noSeriesLabel).toBe("no per-step series");
   });
 
@@ -104,7 +127,7 @@ describe("L4 faceplate rail", () => {
     const panel = machinePanelFor(panelTickAt(299), "_C7TAIL");
     expect(panel.found).toBe(true);
     if (!panel.found || panel.kind !== "c7tail") return;
-    expect(panel.c7tailFinal).toBe(F.c7tail_final);
+    expect(panel.c7tailFinal).toBe(F.header.c7tail_final);
     expect(panel.noSeriesLabel).toBe("no per-step series");
   });
 });

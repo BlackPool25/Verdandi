@@ -1,6 +1,6 @@
 // Task 1 TDD: honest aggregate selectors over the frozen tick payload.
 import { describe, expect, it } from "vitest";
-import fixture from "../../test/fixtures/ticks-777.json";
+import fixture from "../../test/fixtures/ticks-A-777.json";
 import { SBUF_HIGH } from "./machineMeta";
 import {
   episodeStatsFor,
@@ -8,8 +8,11 @@ import {
   type EpisodeHeader,
   type PanelTick,
 } from "./selectors";
+import { toFaultSpec } from "../events/anomaly";
+import type { FaultSpec } from "../events/types";
 import { toPatch, type LiveTick } from "../../sim/streamCodec";
-import { STREAM_MACHINE_ORDER } from "../../sim/streamCodec";
+import { STREAM_MACHINE_ORDER, parseFeedEvents } from "../../sim/streamCodec";
+import { BUFFER_IDS } from "../../store/tick";
 
 interface FixtureTick {
   readonly step: number;
@@ -18,23 +21,42 @@ interface FixtureTick {
   readonly throughput: readonly number[];
   readonly buffers: readonly number[];
   readonly sbuf_level: number;
+  readonly events_at_k: readonly unknown[];
+  readonly faults: ReadonlyArray<Readonly<Record<string, unknown>>>;
   readonly quality: Readonly<Record<string, unknown>>;
   readonly currents: readonly number[];
 }
 
 interface FixtureShape {
-  readonly machine_order: readonly string[];
-  readonly buffer_order: readonly string[];
-  readonly ticks: Readonly<Record<string, FixtureTick>>;
-  readonly c7tail_final: number;
+  readonly header: {
+    readonly seed: number;
+    readonly T: number;
+    readonly c7tail_final: number;
+  };
+  readonly ticks: ReadonlyArray<FixtureTick>;
 }
 
 const F = fixture as unknown as FixtureShape;
-const PROBED = [0, 119, 150, 162, 299] as const;
+// Header+TICK parity: probed steps are the sparse steps the A-777 fixture
+// carries (rows replay in sorted-26 wire order, c7tail_final on the header).
+const PROBED = [0, 150, 299] as const;
+
+function tickAt(step: number): FixtureTick {
+  const t = F.ticks.find((k) => k.step === step);
+  if (t === undefined) throw new Error(`fixture missing step ${step}`);
+  return t;
+}
 
 function panelTickAt(step: number): PanelTick {
-  const t = F.ticks[String(step)];
-  if (t === undefined) throw new Error(`fixture missing step ${step}`);
+  const t = tickAt(step);
+  const faults: FaultSpec[] = [];
+  for (const f of t.faults) {
+    try {
+      faults.push(toFaultSpec(f));
+    } catch {
+      continue;
+    }
+  }
   return {
     step: t.step,
     states: t.states,
@@ -44,9 +66,11 @@ function panelTickAt(step: number): PanelTick {
     sbuf_level: t.sbuf_level,
     quality: t.quality,
     currents: t.currents,
-    machineOrder: F.machine_order,
-    bufferOrder: F.buffer_order,
-    c7tailFinal: F.c7tail_final,
+    events_at_k: parseFeedEvents(t),
+    faults,
+    machineOrder: STREAM_MACHINE_ORDER,
+    bufferOrder: BUFFER_IDS,
+    c7tailFinal: F.header.c7tail_final,
   };
 }
 
@@ -55,7 +79,7 @@ describe("lineStatsFor: honest per-tick aggregates", () => {
     it(`step ${step}: tput sum bounded, state counts sum 26, mean/sbuf honest`, () => {
       // Given: the live tick row at this step
       const tick = panelTickAt(step);
-      const raw = F.ticks[String(step)] as FixtureTick;
+      const raw = tickAt(step);
       // When: aggregating the line
       const s = lineStatsFor(tick);
       // Then: throughput sum equals payload sum within 0..26
