@@ -233,3 +233,58 @@ Conventions: commands run from repo root. Fault IDs F-01..F-20 = 20-fault batter
   4. Read out all eight numbers: F1, AC@1 (intra + cross-partition), flip per partition per class, p99 delay, wall time, grounding, diverge count, full-plant coverage.
   5. No-clearance audit (TST-010/REQ-009): grep twin/UI/trail text for clearance/restart-authority strings = 0 hits.
 - Expected: F1≥0.85 AND AC@1≥70% intra AND cross-partition AND flip<40% per partition per class AND p99≤3 steps AND wall<600s via partitioning AND grounding≥95% AND 0-diverge AND full-plant coverage (partitions × channels × classes), examiner-clickable, trail exported per alarm (rank + sentences+triples + replay hash + battery numbers). Any miss → release blocked, mapped K-pivot fires (K1/K2 per partition, K3/K4/K5 plant-wide).
+
+## TC-012 — T5/T9 flow-semantics + duty acceptance (SIM_SPEC §11 T5/T9)
+
+- TST: TST-003 + TST-003c (REQ-010).
+- Preconditions: topology-A roster (26 machines), `tests/test_twin_duty.py` + `duty_cycle(record)` helper present; episode dicts carry states + SBUF/rework logs.
+- Test data: clean episodes (natural breakdown on, seeds [777,1234,999,42,2026], T=300) + tail-to-ASM0 contention episodes + SBUF-divert + rework-route episodes.
+- Steps:
+  1. `pytest tests/test_twin_duty.py -q` (RUN share ≥80%, STARVED share ≤15% on the 24-machine plant mean with standby scope {B7S,RWK0} excluded, BLOCKED reported, xfer_open==0 at T via drain grace 8, pile-up bound: no gap buffer at cap ≥30 consecutive steps while downstream STARVED).
+  2. Assert per episode: every tail→ASM0 transfer holds one AGV for agv_steps∈[4,8] with `agv_waits[]` logged; rework pass count capped; SBUF divert class-gated (process/finish only); BLOCKED/STARVED/DOWN asserts per TC-006b; 10x surge sheds richness only.
+- Expected: all five seeds green (measured: RUN 0.850–0.891, STARVED 0.107–0.138, xfer_open 0, pileup []) AND all four TC-006b asserts hold per episode. Any red → STOP, owner decision required — gates never silently loosened.
+
+## TC-013 — T6/T7 manifest-182 + envelope acceptance (SIM_SPEC §11 T6/T7)
+
+- TST: TST-003d (REQ-010).
+- Preconditions: oracle relocation landed (F-21 B2, F-22 A7, F-23 C2, F-24 B7P, F-25 B2, F-26 B9, F-06 A0).
+- Test data: `build_faults(777)` full manifest, battery_id='topology-A-full182'.
+- Steps:
+  1. `python -c "from src.twin import build_faults,validate_manifest; m=build_faults(777); assert len(m)==182 and validate_manifest(m)==[] and sum(1 for r in m if r.get('rep'))==7"`.
+  2. `pytest tests/test_twin_battery_topology_a.py -q` (7 tests: manifest size, determinism, wall budget, evidence JSON landed).
+  3. Envelope spot-check: every emitted channel-1 sample within `base ± 6σ` clamp; clean-window envelope `base ± 3σ`; detector thresholds on channels 1–2 only.
+- Expected: 182 rows (26×7), 7 classes × 26 machines, zero empty cells, 7 rep pins; joined digest stable across --jobs 1 vs auto; wall <600s; envelope spot-check 100% in-range.
+
+## TC-014 — T8 reason-code/sensor-health acceptance (SIM_SPEC §11 T8)
+
+- TST: TST-001 + TST-002 + TST-004 per class (REQ-001/006).
+- Preconditions: TC-004/TC-010 artifacts; episode dicts carry states + rework/SBUF logs; `rec["strat"]` carries mode + sensor_vs_process.
+- Test data: BREAKDOWN origins A7, B2, C6, ASM1 (forced DOWN, MTTR×mult mult∈[1,3], dur 8–25); QUALITY origins ASM2, RWK0, A9, B9 (reject-rate 15–40%, dur 8–25); DELAY seed 777 + LOSS seed 999 closeout sets.
+- Steps:
+  1. Run plant battery covering every class ≥1 per representative machine.
+  2. Assert every alarm carries its fault-class reason code + sensor-vs-process (`sensor` for spike/drift/bias/loss, `process` for delay/breakdown/quality, `unknown` for clean).
+  3. Per class per partition compute P/R/F1, AC@1, AC@1-lat3, flip; confirm observables (breakdown → BLOCKED upstream + STARVED downstream, origin throughput zero; quality → rework-buffer surge + ASM0 kitting starve + sink throughput dip).
+- Expected: reason-code + classification present on 100% of alarms; flip<40% per partition per class (K1 partition-pivot on breach, bars unsoftened); carried references DELAY F1≈0.670 R=1.00 AC@1 5/6 lat3 0.83 flip 24.2%, LOSS F1≈0.739 AC@1 5/6 lat3 0.83 flip 30.3%, totals F1≈0.725 AC@1 0.8125 — references only, never bars. Natural-breakdown steps excluded from ground-truth windows.
+
+## TC-015 — leakage unit test (TF1 zero-join law, SDD §4.13/§5.4)
+
+- TST: TST-001 (REQ-001) training-hygiene arm.
+- Preconditions: `src/train_pipeline.py` + `src/dataset_export.py` present; exported Parquet dataset with `episode_id` column.
+- Test data: one exported dataset pile (windows + `episode_id` + `y` labels).
+- Steps:
+  1. Assert no `scaler.pkl` (or equivalent fitted-scaler artifact) is emitted at export time; `fit_per_machine_median_iqr` consumes calibration piles only.
+  2. Assert CV splits come from `create_grouped_cv` grouped by `episode_id` (no shared `episode_id` across folds).
+  3. Assert scoring via `compute_raw_pointwise_f1` (raw point-wise; point-adjusted inadmissible).
+- Expected: zero scaler artifact at export; zero shared `episode_id` across folds; F1 reported raw point-wise. Any leak → sev-1, training claim void.
+
+## TC-016 — boundary audit (SIM_SPEC §13 actuation + claim boundaries)
+
+- TST: TST-010 (REQ-009).
+- Preconditions: twin + UI + trail export wired; SIM_SPEC §13.1 vocabulary (PLANNED — advisory-only).
+- Test data: full twin/UI/trail text surface (twin logs, UI strings, trail exports, §9 contract examples).
+- Steps:
+  1. Grep twin/UI/trail text for clearance/restart-authority strings = 0 hits (safety-restart clearance never issued, §13.2).
+  2. Assert every advisory action (A1–A7, where surfaced) is labeled advisory-only with provenance; none commands an actuator, interlock, or restart.
+  3. Assert §9 contract consumers never assert legacy-schema equality (v1/v2/v3 NON_COMPARABLE) and no claim extends beyond partition-scoped replay.
+  4. Record the OQ-5 brownfield disclosure (fixed-per-semester topology, unmeasured drift/noise/trust curve) in the release notes.
+- Expected: 0 clearance strings; 100% of surfaced actions advisory-labeled; 0 cross-schema equality asserts; OQ-5 note present in release notes. Any miss → release blocked.

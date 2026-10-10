@@ -28,6 +28,11 @@ RSK-001–008 (see REGISTERS.md); top: K1 causal instability, K2 threshold colla
 | REQ-007 | TST-008 shed-richness-first | 10x surge → shed rich sentences first, detection/provenance intact; PASS walk result served, no detection drop → TC-006b, TC-009 |
 | REQ-008 | TST-009 per-run-caps | caps $0.005/2.5k tok/iter enforced; breach aborts rich first then hard-abort to chain-cards; PASS ledger audited → TC-007, TC-009 |
 | REQ-009 | TST-010 no-clearance | twin/UI/trail never issue safety-restart clearance; PASS text audit 0 clearance strings → TC-011 |
+| REQ-010 | TST-003 flow/duty acceptance | T5 flow-semantics asserts + T9 duty gates (RUN≥80%, STARVED≤15%, xfer_open==0, pile-up bound) → TC-012 |
+| REQ-010 | TST-003d manifest/envelope | T6 182-row coverage + T7 envelope acceptance (ch-1 clamp, base±3σ envelope) → TC-013 |
+| REQ-001/006 | TST-001/002/004 reason-code | T8 reason-code + sensor-vs-process on every alarm, per-class observables, flip<40% → TC-014 |
+| REQ-001 | TST-001 leakage-hygiene | TF1 zero-join law: no export-time scaler, grouped CV by episode_id, raw point-wise F1 → TC-015 |
+| REQ-009 | TST-010 boundary-audit | §13 actuation boundary + claim boundaries + OQ-5 disclosure in release notes → TC-016 |
 ## 7. features-NOT-tested
 `derived-appendix: from V1-§5` — K1 causal unstable (AC@1<30%/flip>40%) → cut learning, keep topology+stats | reason: deferred-pivot. K2 threshold collapse (F1 drop>30pts) → per-machine quantile mandatory | reason: out-of-scope (global thresholds excluded). K3 ungrounded (>5%) → cut LLM to chain-cards | reason: deferred (free-LLM excluded). K4 diverge → subgraph-only replay | reason: out-of-scope (full-graph stochastic excluded). K5 ROCm sink (>1wk) → CPU-baseline | reason: deferred. Also excluded: blind discovery, Rust/Go core, pretrained reuse, live-streaming (killed, no trigger).
 ## 8. Approach
