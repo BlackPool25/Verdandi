@@ -66,6 +66,7 @@ from src.config import (
     FUNNEL_VARIANTS,
     I_IDLE_RATIO,
     INSPECT_DELAY_STEPS,
+    K_BY_GROUP,
     LOW_RUNG_DELAY_D,
     LOW_RUNG_DROP_RATE,
     LOW_RUNG_MTTR_MULT,
@@ -93,8 +94,11 @@ from src.config import (
     WEAR,
     WEAR_EXP,
     T,
+    _group_for_machine,
     resolve_current,
 )
+
+_MACHINE_ORDER = tuple(sorted(MACHINE_INDEX, key=lambda m: MACHINE_INDEX[m]))
 
 # Obs clamp base ±6σ per SIM_SPEC 8: twice the ±3σ clean envelope.
 _CLAMP_SIGMA = 2.0 * ENVELOPE_SIGMA
@@ -117,8 +121,11 @@ _WALLCLOCK_KEYS = frozenset({"wall_s", "timestamp", "clock", "elapsed"})
 # CH9 header-only energy (flow_stats["energy"]) is likewise pure post-hoc
 # accounting over I_clamped currents — no behavior change — so it is
 # scrubbed too.
+# M0.2c per-machine WSTATE endpoints (record["wstate"]) are likewise a pure
+# deterministic function of states — no RNG/draw/condition path is touched —
+# so they are scrubbed too; golden digests stay bit-identical.
 _DIGEST_SCRUB_FLOW_KEYS = frozenset({"starved_split", "energy"})
-_DIGEST_SCRUB_RECORD_KEYS = frozenset({"strat"})
+_DIGEST_SCRUB_RECORD_KEYS = frozenset({"strat", "wstate"})
 
 # Coverage matrix axes (TC-006): 5 partition groups x 7 channels x 7
 # classes. The class axis reuses _FAULT_CLASSES (runtime-equal to the
@@ -1718,24 +1725,37 @@ def derive_roots_and_hops(
     return root_id, hop, root_ids
 
 
-def compute_wear(states: list[list[str]]) -> list[float]:
+def compute_wear(
+    states: list[list[str]],
+    resets: dict[str, set[int]] | None = None,
+) -> list[float]:
     """Compute minimal C3 wear-lite scalar per machine over episode states.
 
     Equation: w_m(t+1) = w_m(t) + ALPHA * L_m(t) * (1 + BETA * 1[w_m(t) > KNEE])
-    where ALPHA = 1/240, KNEE = 0.8, BETA = 4.0, L_m(t) = 1.0 if state == 'RUN' else 0.0.
-    Stream budget: deterministic given states, draws ZERO new streams.
+    where ALPHA = 1/240, KNEE = 0.8, BETA = 4.0, L_m(t) = K_BY_GROUP load
+    factor if state == 'RUN' else 0.0. states rows are MACHINE_INDEX order.
+    resets maps machine name -> steps where w resets to 0.0 BEFORE that
+    step's accumulation. Stream budget: deterministic given states, draws
+    ZERO new streams.
     """
     alpha = WEAR["ALPHA"]
     knee = WEAR["KNEE"]
     beta = WEAR["BETA"]
     post_mult = 1.0 + beta
+    reset_sets: dict[str, set[int]] = {}
+    if resets:
+        reset_sets = {name: set(steps) for name, steps in resets.items()}
     wear = [0.0] * N_MACHINES
     for m in range(N_MACHINES):
+        load = float(K_BY_GROUP[_group_for_machine(_MACHINE_ORDER[m])])
         w = 0.0
         row = states[m]
-        for st in row:
+        rset = reset_sets.get(_MACHINE_ORDER[m])
+        for t, st in enumerate(row):
+            if rset is not None and t in rset:
+                w = 0.0
             if st == "RUN":
-                w += alpha * (post_mult if w > knee else 1.0)
+                w += alpha * load * (post_mult if w > knee else 1.0)
         wear[m] = float(w)
     return wear
 
@@ -1771,15 +1791,32 @@ def run_episode(
     *,
     enable_natural_breakdown: bool = True,
     variant: str | dict | None = None,
+    maintenance: list[dict] | None = None,
 ) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
     fault is None, one fault dict, a tuple, or a list of fault dicts (multi-fault
-    episodes: same-machine windows need a ≥5-step gap). Returns the full
+    episodes: same-machine windows need a ≥5-step gap). maintenance is None or a
+    list of {machine, t} dicts resetting that machine's WSTATE to 0.0 before
+    step t's accumulation and emitting a MAINT_EVENT. Returns the full
     episode record (seed, T, cal_win, machines, obs, states, buffers, throughput,
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
     """
     fault_list = _validate(seed, fault)
+    maint_entries: list[dict] = []
+    if maintenance is not None:
+        if not isinstance(maintenance, list):
+            raise ValueError("maintenance must be a list of {machine, t} dicts or None")
+        for entry in maintenance:
+            if not isinstance(entry, dict) or "machine" not in entry or "t" not in entry:
+                raise ValueError("maintenance entries must be {machine, t} dicts")
+            name = entry["machine"]
+            t = entry["t"]
+            if name not in MACHINES:
+                raise ValueError(f"unknown maintenance machine {name!r}")
+            if isinstance(t, bool) or not isinstance(t, int) or not 0 <= t < T:
+                raise ValueError(f"maintenance t out of range 0<=t<{T}: {t!r}")
+            maint_entries.append({"machine": name, "t": t})
     noise, place, drop, rng_agv, fail, eta = _spawn_streams(seed)
     specs = _materialize(place, fault_list)
 
@@ -2116,6 +2153,16 @@ def run_episode(
         "buffers": buf_rows,
         "T": T,
     })
+    maint_resets: dict[str, set[int]] = {}
+    for entry in maint_entries:
+        maint_resets.setdefault(entry["machine"], set()).add(entry["t"])
+        shared["events"].append(
+            {"event": "MAINT_EVENT", "t": entry["t"], "machine": entry["machine"], "detail": {}}
+        )
+    if maint_entries:
+        shared["events"].sort(key=lambda e: int(e.get("t", 0)))
+    wstate = compute_wear(shared["states"], maint_resets if maint_entries else None)
+    has_maint = bool(maint_entries)
     return {
         "seed": seed,
         "T": T,
@@ -2139,11 +2186,13 @@ def run_episode(
         "agv_waits": shared["agv_waits"],
         "parts": shared["parts"],
         "faults": specs,
+        "wstate": wstate,
         "strat": {
             "episode_id": seed,
-            "wear_endpoint": float(max(compute_wear(shared["states"]))),
-            "maint_flag": False,
-            "maint_flag_unvalidated": True,
+            "wear_endpoint": float(max(wstate)),
+            "wstate_per_machine": {name: float(wstate[MACHINE_INDEX[name]]) for name in _MACHINE_ORDER},
+            "maint_flag": has_maint,
+            "maint_flag_unvalidated": not has_maint,
             "family": family,
             "mode": mode,
             "root_id": root_id,

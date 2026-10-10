@@ -247,6 +247,15 @@ def export(
             reject_count = 0
             max_rwk_passes = 0
             faults_list = rec.get("faults") or []
+            wstate_vec = rec.get("wstate")
+            if wstate_vec is None:
+                wstate_map = strat.get("wstate_per_machine") or {}
+                wstate_vec = [
+                    float(wstate_map.get(m_name, 0.0)) if m_name in wstate_map else 0.0
+                    for m_name in config.MACHINE_NAMES
+                ]
+                if not wstate_map:
+                    wstate_vec = twin.compute_wear(rec["states"])
 
             for t_step in range(config.T):
                 # Update causal event counters up to t_step
@@ -598,6 +607,7 @@ def export(
                     row[f"state_{m_name}"] = str(rec["states"][m_idx][t_step])
                     row[f"buffer_{m_name}"] = int(rec["buffers"][m_idx][t_step])
                     row[f"tput_{m_name}"] = int(rec["throughput"][m_idx][t_step])
+                    row[f"wstate_{m_name}"] = float(wstate_vec[m_idx])
                     if include_currents:
                         row[f"current_{m_name}"] = float(rec["currents"][m_idx][t_step])
 
