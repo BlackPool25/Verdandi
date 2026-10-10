@@ -40,9 +40,25 @@
   min-width: 0;
   min-height: 0;
   height: calc(100dvh - 48px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
+  overscroll-behavior: contain;
 }
+
+.vd-page-outlet::-webkit-scrollbar {
+  width: 8px;
+}
+
+.vd-page-outlet::-webkit-scrollbar-track {
+  background: var(--paper-200);
+}
+
+.vd-page-outlet::-webkit-scrollbar-thumb {
+  background: var(--ink-700);
+  border: 1px solid var(--ink-950);
+}
+
 
 /* -------------------------------------------------------------
    2. LEFT RAIL (72px Persistent SCADA Rail)

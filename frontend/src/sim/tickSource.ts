@@ -211,8 +211,17 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
   }
 
   function advanceTo(next: number): boolean {
+    if (next >= T_TOTAL) {
+      setPlaying(false);
+      return false;
+    }
     const raw = ctrl.rowJson(next);
-    if (raw === undefined) return false;
+    if (raw === undefined) {
+      if (ctrl.complete() && next >= ctrl.rowCount()) {
+        setPlaying(false);
+      }
+      return false;
+    }
     let data: unknown = null;
     try {
       data = JSON.parse(raw) as unknown;
@@ -233,6 +242,16 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
       setFeedEvents((prev) => [...prev, ...parseFeedEvents(data)]);
     }
     return true;
+  }
+
+  function handleSetPlaying(action: boolean | ((prev: boolean) => boolean)): void {
+    setPlaying((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      if (next && playedRef.current >= T_TOTAL - 1) {
+        advanceTo(0);
+      }
+      return next;
+    });
   }
 
   function stepTo(step: number): boolean {
@@ -278,7 +297,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     episodeHeader: ctrl.episodeHeader(),
     speed: ctrl.speed(),
     setSpeed: (s: number) => ctrl.setSpeed(s),
-    setPlaying,
+    setPlaying: handleSetPlaying,
     stepTo,
     rowJson: (step: number) => ctrl.rowJson(step),
     startEpisode: (id: string) => ctrl.connect(id, base),

@@ -129,7 +129,14 @@ export function TopBar(): React.JSX.Element {
             type="button"
             className={`vd-ctrl-btn vd-play-pause-btn ${playing ? "is-playing" : "is-paused"}`}
             data-testid="topbar-play-pause"
-            onClick={() => source.setPlaying(!playing)}
+            onClick={() => {
+              if (!playing && cursor >= T_TOTAL - 1) {
+                source.stepTo(0);
+                source.setPlaying(true);
+              } else {
+                source.setPlaying(!playing);
+              }
+            }}
             title={playing ? "Pause simulation" : "Play simulation"}
             aria-label={playing ? "Pause" : "Play"}
           >

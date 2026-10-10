@@ -6,13 +6,13 @@
    ========================================================================== */
 
 .sim-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  height: 100%;
-  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  height: auto;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
   background: var(--vd-bg-base, #e6e2d8);
   color: var(--vd-text-primary, #1c2127);
   font-family: var(--font-ui, "Pixelify Sans", sans-serif);
@@ -109,9 +109,17 @@
   stroke-dasharray: 6 3;
 }
 
-.sim-shell__canvas .react-flow__edge-text,
 .sim-shell__canvas .react-flow__edge-textbg {
+  fill: var(--vd-surface-panel, #f2eee5);
+  stroke: var(--vd-border-muted, #b8b3a5);
+  stroke-width: 1px;
+}
+
+.sim-shell__canvas .react-flow__edge-text {
   fill: var(--vd-text-primary, #1c2127);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: bold;
 }
 
 .sim-shell__canvas .react-flow__attribution {
@@ -160,7 +168,9 @@
   gap: 12px;
   padding: 12px 16px;
   min-width: 0;
-  min-height: 0;
+  min-height: 520px;
+  height: 540px;
+  flex-shrink: 0;
   overflow: hidden;
   align-items: stretch;
 }
@@ -223,20 +233,87 @@
 
 .machine-detail-panel {
   min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
 }
 
+.machine-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--ink-900, #1b2430);
+}
+
+.machine-specs-grid,
+.config-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 8px 0 12px 0;
+  padding: 0;
+}
+
+.machine-specs-grid > div,
+.config-specs-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  background: var(--paper-50, #fffbf0);
+  border: 1px solid var(--paper-300, #e2d2ac);
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+.machine-specs-grid dt,
+.config-specs-grid dt {
+  font-family: var(--font-display, "Press Start 2P", monospace);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #5a5347);
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.machine-specs-grid dd,
+.config-specs-grid dd {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--ink-950, #141b26);
+  margin: 0;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bottom dock: 2x2 grid layout with generous height so individual panels are comfortably readable */
 .sim-shell__dock {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr) minmax(280px, 1.2fr) minmax(240px, 1fr);
-  gap: 12px;
-  padding: 8px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 16px;
   align-items: stretch;
   background: var(--vd-surface-sunken, #dad5c7);
   border-top: 2px solid var(--vd-border-dark, #2b303a);
-  max-height: 220px;
-  overflow-y: auto;
   flex-shrink: 0;
+  min-height: 500px;
+}
+
+.sim-shell__dock > * {
+  min-height: 440px;
+  height: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  background: var(--vd-surface-panel, #f2eee5);
+  border: 2px solid var(--vd-border-dark, #2b303a);
+  box-shadow: 2px 2px 0 var(--vd-border-dark, #2b303a);
+  padding: 14px 16px;
 }
 
 /* Loading skeleton */

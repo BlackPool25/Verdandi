@@ -136,11 +136,13 @@ function TopologyInner({
         const buf = bufferIdForEdge(e);
         const w = buf === null ? 1 : widthForUtil(utilByBuffer.get(buf) ?? 0);
         const back = e.data.backEdge === true;
+        const isAgv = e.data.edgeClass === "agv-drain";
         return {
           id: e.id,
           source: e.source,
           target: e.target,
           label: e.data.label,
+          type: isAgv ? "smoothstep" : "default",
           data: { ...e.data },
           className:
             back === true ? `topo-edge ${e.data.edgeClass} back-edge` : `topo-edge ${e.data.edgeClass}`,
@@ -176,7 +178,7 @@ function TopologyInner({
   // to guarantee all 28 nodes / 31 edges are visible after fit.
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
-      void fitView({ padding: 0.25, minZoom: 0.1 });
+      void fitView({ padding: 0.08, minZoom: 0.1 });
     });
     return () => cancelAnimationFrame(raf);
   }, [fitView]);
@@ -251,8 +253,9 @@ function TopologyInner({
         onNodeClick={onNodeClick}
         onConnect={onConnect}
         onlyRenderVisibleElements={false}
+        nodesDraggable={false}
         fitView
-        fitViewOptions={{ padding: 0.25, minZoom: 0.1 }}
+        fitViewOptions={{ padding: 0.08, minZoom: 0.1 }}
         minZoom={0.1}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#ded8cb" />
@@ -282,43 +285,43 @@ function FloorPlanLayer({ direction }: { readonly direction: RankDir }): React.J
       }}
     >
       <g transform={`translate(${x}, ${y}) scale(${zoom})`}>
-        {/* Line A: Machining Bay */}
-        <rect x={40} y={60} width={1470} height={120} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={50} y={78} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
+        {/* Bay 1: Line A [Machining] */}
+        <rect x={35} y={30} width={850} height={95} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={45} y={44} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
           BAY 01 // LINE A [MACHINING] (A0-A9)
         </text>
 
-        {/* Line B: Process Bay */}
-        <rect x={40} y={200} width={1470} height={120} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={50} y={218} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
-          BAY 02 // LINE B [PROCESS] (B0-B9)
+        {/* Bay 2: Line B [Process & Treatment] */}
+        <rect x={35} y={135} width={850} height={170} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={45} y={149} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 02 // LINE B [TREATMENT] (B0-B9, B7P/B7S)
         </text>
 
-        {/* Line C: Stamping Bay */}
-        <rect x={180} y={340} width={1180} height={120} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={190} y={358} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
-          BAY 03 // LINE C [STAMPING] (C1-C7)
+        {/* Bay 3: Line C [Secondary Stamping] */}
+        <rect x={35} y={315} width={850} height={95} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={45} y={329} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 03 // LINE C [STAMPING] (C0-C7)
         </text>
 
-        {/* AGV Corridor & SBUF Logistics */}
-        <rect x={1540} y={60} width={180} height={400} fill="#e5dfd2" stroke="#257179" strokeWidth={1} strokeDasharray="6 3" rx={2} />
-        <text x={1550} y={78} fill="#1b4965" fontSize={10} fontFamily="var(--font-mono, monospace)" fontWeight="bold">
-          AGV FLEET AISLE
-        </text>
-        <text x={1550} y={92} fill="#5e656e" fontSize={9} fontFamily="var(--font-mono, monospace)">
-          TRANSIT: 3-5 STEPS
+        {/* Bay 4: Packaging & Outbound */}
+        <rect x={595} y={420} width={290} height={155} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={605} y={434} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 04 // PACKAGING & OUTBOUND (PKG0-2)
         </text>
 
-        {/* Assembly Cell */}
-        <rect x={1740} y={190} width={440} height={130} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={1750} y={208} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
-          CELL 04 // FINAL ASSEMBLY (ASM0-2)
+        {/* Logistics Corridor & SBUF Depot */}
+        <rect x={895} y={30} width={80} height={380} fill="#e5dfd2" stroke="#257179" strokeWidth={1} strokeDasharray="6 3" rx={2} />
+        <text x={903} y={46} fill="#1b4965" fontSize={9} fontFamily="var(--font-mono, monospace)" fontWeight="bold">
+          LOGISTICS
+        </text>
+        <text x={903} y={58} fill="#5e656e" fontSize={8} fontFamily="var(--font-mono, monospace)">
+          AGV AISLE
         </text>
 
-        {/* Rework Bay */}
-        <rect x={1880} y={340} width={200} height={110} fill="#f4ebd9" stroke="#c28e47" strokeWidth={1} strokeDasharray="4 2" rx={2} />
-        <text x={1890} y={358} fill="#8c632b" fontSize={10} fontFamily="var(--font-mono, monospace)" fontWeight="bold">
-          BAY 05 // REWORK (RWK0)
+        {/* Bay 5: Final Assembly & Testing Cell */}
+        <rect x={985} y={135} width={570} height={255} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={995} y={149} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 05 // FINAL ASSEMBLY & TEST CELL (ASM0-2, INSP0, RWK0)
         </text>
       </g>
     </svg>

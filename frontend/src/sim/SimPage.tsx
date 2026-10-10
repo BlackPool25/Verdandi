@@ -5,7 +5,8 @@ import {
   Legends,
   MachinePanel,
 } from "../components/panels";
-import { LineHeader } from "./LineHeader";
+import { KpiStrip } from "../components/kpi/KpiStrip";
+import { NarrationBar } from "../components/narration/NarrationBar";
 import { TopologyView } from "../topology/TopologyView";
 import { useTwinStream } from "./TwinStreamProvider";
 import "./simShell.css";
@@ -41,9 +42,8 @@ export function SimPage(): React.JSX.Element {
 
   return (
     <div className="sim-shell" data-testid="sim-shell">
-      <header className="sim-shell__header sim-box">
-        <h1 className="px-h2">Verdandi Twin — /sim</h1>
-        <LineHeader
+      <header className="sim-shell__header-kpi">
+        <KpiStrip
           tick={source.panelTick}
           episodeHeader={source.episodeHeader}
           episodeId={source.episodeId}
@@ -93,6 +93,11 @@ export function SimPage(): React.JSX.Element {
           </>
         )}
       </div>
+      <NarrationBar
+        tick={source.panelTick}
+        faults={faults}
+        onSelectMachine={setSelectedId}
+      />
       <footer className="sim-shell__dock sim-box" data-testid="sim-dock" aria-label="control dock">
         <ControlsBar external={{ source, onEpisode: setEpisodeId }} />
         <BufferBars tick={source.panelTick} />

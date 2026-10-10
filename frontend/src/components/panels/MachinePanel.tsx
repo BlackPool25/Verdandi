@@ -198,12 +198,12 @@ export function MachinePanel(props: MachinePanelProps): React.JSX.Element {
       {nav}
       <dl className="machine-specs-grid">
         <div><dt>state</dt><dd data-testid="machine-panel-state" style={WRAP}>{panel.state}</dd></div>
-        <div><dt>obs</dt><dd data-testid="machine-panel-obs" style={WRAP}>{panel.obs}</dd></div>
+        <div><dt>obs</dt><dd data-testid="machine-panel-obs" style={WRAP}>{typeof panel.obs === "number" ? panel.obs.toFixed(2) : panel.obs}</dd></div>
         <div><dt>envelope</dt><dd data-testid="machine-panel-envelope" style={WRAP}>{panel.envelopeNote}</dd></div>
         <div><dt>tput</dt><dd data-testid="machine-panel-tput" style={WRAP}>{panel.tput}</dd></div>
         <div>
           <dt>last flag</dt>
-          <dd data-testid="machine-panel-flag" style={WRAP}>{JSON.stringify(panel.flag)}</dd>
+          <dd data-testid="machine-panel-flag" style={WRAP}>{typeof panel.flag === "string" ? panel.flag : JSON.stringify(panel.flag)}</dd>
         </div>
         <div><dt>cycle</dt><dd data-testid="machine-panel-cycle" style={WRAP}>{panel.meta.cycle}</dd></div>
         <div><dt>mttf</dt><dd data-testid="machine-panel-mttf" style={WRAP}>{panel.meta.mttf}</dd></div>
