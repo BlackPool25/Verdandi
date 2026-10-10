@@ -3,6 +3,9 @@
    Warm Industrial SCADA Terminal Theme — Light Palette
    ========================================================================== */
 
+@import "./tokens.css";
+@import "./fonts.css";
+
 :root {
   /* Surface & Base - Warm Industrial Parchment / Technical SCADA Concrete */
   --vd-bg-base: #e6e2d8;

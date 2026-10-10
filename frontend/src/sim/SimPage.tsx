@@ -1,50 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { ControlsBar } from "../components/controls/ControlsBar";
-import { postEpisode } from "../components/controls/api";
 import { EventFeed } from "../components/events/EventFeed";
-import { toFaultSpec } from "../components/events/anomaly";
-import type { FaultSpec } from "../components/events/types";
-import { createTwinStore } from "../store/twinStore";
-import type { Tick } from "../store/tick";
 import {
   BufferBars,
   Legends,
   MachinePanel,
 } from "../components/panels";
-import { STREAM_MACHINE_ORDER, useTickSource } from "./tickSource";
 import { LineHeader } from "./LineHeader";
-import { BUFFER_IDS } from "../store/tick";
 import { TopologyView } from "../topology/TopologyView";
+import { useTwinStream } from "./TwinStreamProvider";
 import "./simShell.css";
-
-// /sim route: ReactFlow topology + ControlsBar + T8 panels on ONE shared
-// tickSource. Single episode + single EventSource: episode creation (auto
-// seed on mount, or ControlsBar) feeds useTickSource, and topology/panels/
-// controls all render its playback cursor — never divergent streams.
-function initialSelection(): string | null {
-  try {
-    return new URLSearchParams(window.location.search).get("probe");
-  } catch {
-    return null;
-  }
-}
-
-function initialSeed(): number {
-  try {
-    const raw = Number(new URLSearchParams(window.location.search).get("seed") ?? "777");
-    return Number.isInteger(raw) && raw >= 0 ? raw : 777;
-  } catch {
-    return 777;
-  }
-}
-
-function initialEpisode(): string | null {
-  try {
-    return new URLSearchParams(window.location.search).get("episode");
-  } catch {
-    return null;
-  }
-}
 
 // Pixel-style loading skeleton: static block bars on 8px multiples, hard
 // edges, no animation (stays static under prefers-reduced-motion).
@@ -60,104 +24,25 @@ function SimSkeleton(): React.JSX.Element {
 }
 
 export function SimPage(): React.JSX.Element {
-  const [episodeId, setEpisodeId] = useState<string | null>(() => initialEpisode());
-  const [seedError, setSeedError] = useState(false);
-  const source = useTickSource({ episodeId });
-  const [selectedId, setSelectedId] = useState<string | null>(initialSelection);
-  const [chartStore] = useState(() =>
-    createTwinStore({ machineOrder: STREAM_MACHINE_ORDER, bufferOrder: BUFFER_IDS }),
-  );
-  const ingestedStep = useRef(-1);
-
-  // Auto-seed (?seed=, default 777) so panels/topology render without a
-  // click; further episodes come from ControlsBar via onEpisode. A deep
-  // ?episode= link streams that episode directly (T13 storm driver).
-  // A failed seed surfaces the error state with a retry (not silent).
-  function seedNow(): void {
-    setSeedError(false);
-    postEpisode("", initialSeed(), [], true)
-      .then((created) => setEpisodeId(created.episode_id))
-      .catch(() => setSeedError(true));
-  }
-
-  useEffect(() => {
-    if (initialEpisode() !== null) return;
-    let cancelled = false;
-    setSeedError(false);
-    postEpisode("", initialSeed(), [], true)
-      .then((created) => {
-        if (!cancelled) setEpisodeId(created.episode_id);
-      })
-      .catch(() => {
-        if (!cancelled) setSeedError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    ingestedStep.current = -1;
-    chartStore.reset();
-  }, [source.episodeId, chartStore]);
-
-  useEffect(() => {
-    const p = source.panelTick;
-    if (p === null || p.step <= ingestedStep.current) return;
-    ingestedStep.current = p.step;
-    const row: Tick = {
-      step: p.step,
-      states: p.states,
-      obs: p.obs,
-      throughput: p.throughput,
-      buffers: p.buffers,
-      sbuf_level: p.sbuf_level,
-      events_at_k: [...p.events_at_k],
-      faults: p.faults.map((f) => ({ ...f })),
-      quality: p.quality,
-      currents: p.currents,
-    };
-    chartStore.ingest(row);
-  }, [source.panelTick, chartStore]);
-
-  // Faceplate rail owns selection + the selected-machine sparkline via the
-  // shared chartStore (single StripChart mount — no duplicate strip-* ids).
-  // Fault specs for the topology overlay, parsed from the buffered row at
-  // the shared cursor (materialized tick shape via toFaultSpec).
-  const faults: readonly FaultSpec[] = useMemo(() => {
-    const raw = source.rowJson(source.cursor);
-    if (raw === undefined) return [];
-    try {
-      const body: unknown = JSON.parse(raw);
-      if (typeof body !== "object" || body === null || !("faults" in body)) return [];
-      const list = (body as { readonly faults?: unknown }).faults;
-      if (!Array.isArray(list)) return [];
-      return list
-        .filter((f): f is Record<string, unknown> => typeof f === "object" && f !== null && !Array.isArray(f))
-        .map((f) => {
-          try {
-            return toFaultSpec(f);
-          } catch {
-            return null;
-          }
-        })
-        .filter((f): f is FaultSpec => f !== null);
-    } catch {
-      return [];
-    }
-  }, [source, source.cursor]);
+  const {
+    source,
+    store: chartStore,
+    selectedId,
+    setSelectedId,
+    faults,
+    showSkeleton,
+    seedNow,
+    seedError,
+    episodeId,
+    setEpisodeId,
+  } = useTwinStream();
 
   const showSeedError = episodeId === null && seedError;
-  const showSkeleton = episodeId === null && !seedError;
 
   return (
     <div className="sim-shell" data-testid="sim-shell">
       <header className="sim-shell__header sim-box">
         <h1 className="px-h2">Verdandi Twin — /sim</h1>
-        {/* L1 strip: tick KPIs + c7tail_final ride panelTick; episode
-            sbuf/flow finals ride the live SSE header via source.episodeHeader
-            (seed/T/sbuf_stats/flow_stats/faults/replay_digest, sse.py
-            build_header) so sunk/scrapped/reworked/diverted read finals. */}
         <LineHeader
           tick={source.panelTick}
           episodeHeader={source.episodeHeader}

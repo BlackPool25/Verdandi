@@ -92,7 +92,7 @@ test("F-21 GT outline on B2 for t in [150,162), nowhere else", async ({ page }) 
   await startF21(page);
   await scrub(page, 155);
   await expect(page.getByTestId("gt-probe-B2")).toHaveAttribute("data-gt", "true");
-  await expect(page.getByTestId("gt-probe-B7SP")).toHaveAttribute("data-gt", "false");
+  await expect(page.getByTestId("gt-probe-B7P")).toHaveAttribute("data-gt", "false");
   await expect(page.getByTestId("gt-probe-B7S")).toHaveAttribute("data-gt", "false");
   await expect(page.getByTestId("gt-probe-B1")).toHaveAttribute("data-gt", "false");
   // Depth-1 only, live: B1/B7P/B7S share a buffer edge with B2, so each

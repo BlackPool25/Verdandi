@@ -84,7 +84,7 @@ test("ControlsBar visible on /sim and functional", async ({ page }) => {
 test("select one machine per class → panel values render live", async ({ page }) => {
   await page.goto(SIM);
   await page.getByTestId("buffer-bars").waitFor({ timeout: 60_000 });
-  const probes = ["A0", "A1", "B5", "A8", "A9", "ASM0", "ASM1", "ASM2", "RWK0"];
+  const probes = ["A0", "A1", "B2", "A8", "A9", "ASM0", "ASM1", "ASM2", "RWK0"];
   for (const id of probes) {
     await page.getByTestId(`select-${id}`).click();
     await expect(page.getByTestId("machine-panel-state")).not.toBeEmpty({ timeout: 30_000 });
@@ -114,10 +114,10 @@ test("unknown machine id → empty state, no throw (evidence screenshot)", async
   await page.screenshot({ path: resolve(REPO, ".omo/evidence/task-8-unknown-id.png") });
 });
 
-test("B5 selected live screenshot (evidence)", async ({ page }) => {
+test("B2 selected live screenshot (evidence)", async ({ page }) => {
   await page.goto(SIM);
   await page.getByTestId("buffer-bars").waitFor({ timeout: 60_000 });
-  await page.getByTestId("select-B5").click();
+  await page.getByTestId("select-B2").click();
   await expect(page.getByTestId("machine-panel-state")).not.toBeEmpty({ timeout: 30_000 });
   await page.screenshot({ path: resolve(REPO, ".omo/evidence/task-8-verdandi-pixel-twin-frontend.png"), fullPage: true });
 });
