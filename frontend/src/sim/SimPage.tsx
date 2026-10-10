@@ -112,8 +112,8 @@ export function SimPage(): React.JSX.Element {
       throughput: p.throughput,
       buffers: p.buffers,
       sbuf_level: p.sbuf_level,
-      events_at_k: [],
-      faults: [],
+      events_at_k: [...p.events_at_k],
+      faults: p.faults.map((f) => ({ ...f })),
       quality: p.quality,
       currents: p.currents,
     };
@@ -155,11 +155,12 @@ export function SimPage(): React.JSX.Element {
       <header className="sim-shell__header sim-box">
         <h1 className="px-h2">Verdandi Twin — /sim</h1>
         {/* L1 strip: tick KPIs + c7tail_final ride panelTick; episode
-            sbuf/flow finals are not plumbed through TickSource (playback is
-            read-only), so the header passes null and those fields show "—". */}
+            sbuf/flow finals ride the live SSE header via source.episodeHeader
+            (seed/T/sbuf_stats/flow_stats/faults/replay_digest, sse.py
+            build_header) so sunk/scrapped/reworked/diverted read finals. */}
         <LineHeader
           tick={source.panelTick}
-          episodeHeader={null}
+          episodeHeader={source.episodeHeader}
           episodeId={source.episodeId}
           energy={source.energy}
           speed={source.speed}

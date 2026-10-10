@@ -2,7 +2,7 @@
 // from the tick payload row via machinePanelFor — never invented. Sections
 // render verbatim from machinePanelFor (class/signal/timing/reliability/
 // buffer & routing); the sparkline is the shared StripChart for the selected
-// machine (B5 fallback for stores/empty — the rail always mounts one chart).
+// machine (B7P fallback for stores/empty — the rail always mounts one chart).
 import { machinePanelFor, sbufPanelFor, tailPathFor, type PanelTick } from "./selectors";
 import { MACHINE_META } from "./machineMeta";
 import { StripChart } from "../charts/StripChart";

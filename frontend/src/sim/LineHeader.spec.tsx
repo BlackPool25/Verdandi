@@ -4,11 +4,15 @@
 // spec file itself keeps the forbidden-term grep gate empty.
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import fixture from "../test/fixtures/ticks-777.json";
+import fixture from "../test/fixtures/ticks-A-777.json";
 import { createTwinStore } from "../store/twinStore";
+import { BUFFER_IDS } from "../store/tick";
 import { buildBurst } from "../test/synthetic";
 import { SBUF_HIGH } from "../components/panels/machineMeta";
 import { lineStatsFor, type PanelTick } from "../components/panels/selectors";
+import { toFaultSpec } from "../components/events/anomaly";
+import type { FaultSpec } from "../components/events/types";
+import { STREAM_MACHINE_ORDER, parseFeedEvents } from "./streamCodec";
 import { LineHeader } from "./LineHeader";
 
 interface FixtureTick {
@@ -18,22 +22,34 @@ interface FixtureTick {
   readonly throughput: readonly number[];
   readonly buffers: readonly number[];
   readonly sbuf_level: number;
+  readonly events_at_k: readonly unknown[];
+  readonly faults: ReadonlyArray<Readonly<Record<string, unknown>>>;
   readonly quality: Readonly<Record<string, unknown>>;
   readonly currents: readonly number[];
 }
 
 interface FixtureShape {
-  readonly machine_order: readonly string[];
-  readonly buffer_order: readonly string[];
-  readonly ticks: Readonly<Record<string, FixtureTick>>;
-  readonly c7tail_final: number;
+  readonly header: {
+    readonly seed: number;
+    readonly T: number;
+    readonly c7tail_final: number;
+  };
+  readonly ticks: ReadonlyArray<FixtureTick>;
 }
 
 const F = fixture as unknown as FixtureShape;
 
 function panelTickAt(step: number): PanelTick {
-  const t = F.ticks[String(step)];
+  const t = F.ticks.find((k) => k.step === step);
   if (t === undefined) throw new Error(`fixture missing step ${step}`);
+  const faults: FaultSpec[] = [];
+  for (const f of t.faults) {
+    try {
+      faults.push(toFaultSpec(f));
+    } catch {
+      continue;
+    }
+  }
   return {
     step: t.step,
     states: t.states,
@@ -43,9 +59,11 @@ function panelTickAt(step: number): PanelTick {
     sbuf_level: t.sbuf_level,
     quality: t.quality,
     currents: t.currents,
-    machineOrder: F.machine_order,
-    bufferOrder: F.buffer_order,
-    c7tailFinal: F.c7tail_final,
+    events_at_k: parseFeedEvents(t),
+    faults,
+    machineOrder: STREAM_MACHINE_ORDER,
+    bufferOrder: BUFFER_IDS,
+    c7tailFinal: F.header.c7tail_final,
   };
 }
 
@@ -67,7 +85,7 @@ describe("LineHeader: honest KPIs, missing -> —", () => {
         tick={tick}
         episodeHeader={FULL_HEADER}
         episodeId="ep-777"
-        energy={{ sumKVAh: 10774.5, perUnit: 250.6 }}
+        energy={{ sumKVAh: 10774.5, perUnit: 250.6, unit: "kVAh-apparent", note: null, stepSeconds: 1 }}
         speed={2}
         playing={true}
         selectedId="B2"
@@ -152,7 +170,7 @@ describe("LineHeader: honest KPIs, missing -> —", () => {
       />,
     );
     // Then: c7tail_final comes from the tick, flow finals stay "—"
-    expect(html).toContain(`c7tail_final ${F.c7tail_final}`);
+    expect(html).toContain(`c7tail_final ${F.header.c7tail_final}`);
     expect(html).toContain("sunk —");
   });
 

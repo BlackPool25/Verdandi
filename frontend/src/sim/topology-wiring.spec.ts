@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../test/fixtures/ticks-A-777.json";
 import { BUFFER_CAPS } from "../components/panels/machineMeta";
+import { toFaultSpec } from "../components/events/anomaly";
+import type { FaultSpec } from "../components/events/types";
+import { parseFeedEvents } from "./streamCodec";
 import { bufferBarsFor, type PanelTick } from "../components/panels/selectors";
 import { PINNED_EDGES, bufferIdForEdge, widthForUtil } from "../topology/edges";
 
-// Todo 7 bridge fixture shape (schema v2): header carries the buffer census
+// Todo 7 bridge fixture shape (schema v6, twin-2.5.0-topology-A): header carries the buffer census
 // via flow_stats.store_final (26 buffers + _C7TAIL store); ticks is a sparse
 // step list with 26-wide states/obs/throughput/buffers rows.
 interface FixtureShape {
@@ -19,6 +22,8 @@ interface FixtureShape {
     readonly throughput: readonly number[];
     readonly buffers: readonly number[];
     readonly sbuf_level: number;
+    readonly events_at_k: readonly unknown[];
+    readonly faults: ReadonlyArray<Readonly<Record<string, unknown>>>;
     readonly quality: Readonly<Record<string, unknown>>;
     readonly currents: readonly number[];
   }>;
@@ -36,6 +41,15 @@ const MACHINE_ORDER: readonly string[] = Object.keys(F.ticks[0]?.quality ?? {});
 function panelTickAt(step: number): PanelTick {
   const t = F.ticks.find((k) => k.step === step);
   if (t === undefined) throw new Error(`fixture missing step ${step}`);
+  const faults: FaultSpec[] = [];
+  for (const f of t.faults ?? []) {
+    if (typeof f !== "object" || f === null || Array.isArray(f)) continue;
+    try {
+      faults.push(toFaultSpec(f as Record<string, unknown>));
+    } catch {
+      continue;
+    }
+  }
   return {
     step: t.step,
     states: t.states,
@@ -45,6 +59,8 @@ function panelTickAt(step: number): PanelTick {
     sbuf_level: t.sbuf_level,
     quality: t.quality,
     currents: t.currents,
+    events_at_k: parseFeedEvents(t),
+    faults,
     machineOrder: MACHINE_ORDER,
     bufferOrder: BUFFER_ORDER,
     c7tailFinal: F.header.c7tail_final,

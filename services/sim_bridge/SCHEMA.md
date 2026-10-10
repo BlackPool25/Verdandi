@@ -1,17 +1,20 @@
-# sim_bridge frozen tick schema v2 (T3 contract lock, topology-A only)
+# sim_bridge frozen tick schema v6 (T3 contract lock, topology-A only, twin-2.5.0-topology-A)
 
 Twin-mirror verbatim; bridge-strict labeled. This document freezes the
 tick JSON the bridge replays and the frontend consumes. `GET /schema`
 returns the same contract as JSON (`services/sim_bridge/schema.py`
-`FROZEN_SCHEMA`). v1 32-machine ticks are rejected with
+`FROZEN_SCHEMA`): `schema_version` 6, `code_version`
+twin-2.5.0-topology-A. v1 32-machine ticks are rejected with
 `schema v1 non-comparable, rebaseline` (v1 digests flow 962b9c54d022 /
 demo d2b4fb23… retired, never compared).
 
-## Tick keys (frozen)
+## Tick keys (frozen, 10)
 
 `step, states[26], obs[26], throughput[26], buffers[26], sbuf_level,
-events_at_k[], faults[], quality{}`. No other keys. In particular there
-is **no `temperature` key** (temp gap waiver below).
+events_at_k[], faults[], quality{}, currents[26]`. No other keys. In particular there
+is **no `temperature` key** (temp gap waiver below). `currents` is the
+per-tick CH8 motor-current row (26 machines, same order as states);
+`strat` is record-only and never streamed.
 
 ## Waivers
 
@@ -58,6 +61,11 @@ family: `FAILOVER` (B-pair reroute, top-level `from`/`to`/`reason`),
 release, detail `part`/`verdict`). Ten families total (7R: the 6R TAKT5
 retime raised trio volume onto sampled ticks, exposing the 7-family gap).
 
-## Episode header (once per episode, NOT per tick)
+## Episode header (once per episode, NOT per tick, 6 keys)
 
-`seed, T, sbuf_stats, flow_stats, c7tail_final` (full finals live here).
+`seed, T, sbuf_stats, flow_stats, c7tail_final, energy` (full finals live
+here). `energy` is the header-only CH9 apparent-energy dict
+`{sum_kVAh, per_unit, note, unit:'kVAh-apparent', step_seconds}` —
+header-only, never per-tick. The SSE live header (sse.py `build_header`)
+carries 9 keys: `episode_id, seed, T, replay_digest, sbuf_stats,
+flow_stats, c7tail_final, energy, faults`.

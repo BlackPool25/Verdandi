@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { TickPatch } from "../topology/TopologyView";
 import type { TwinEvent } from "../components/events/types";
+import { toFaultSpec } from "../components/events/anomaly";
+import type { FaultSpec } from "../components/events/types";
 import { BUFFER_IDS, parseTick } from "../store/tick";
 import { intervalMs } from "../components/controls/playback";
 import type { PanelTick } from "../components/panels/selectors";
@@ -13,7 +15,7 @@ import {
   type StreamHandle,
 } from "./streamCodec";
 import { TickStreamController } from "./streamController";
-import type { EnergyHeader } from "./streamController";
+import type { EnergyHeader, EpisodeLiveHeader } from "./streamController";
 
 // T10 stream lifecycle: single EventSource, ?from_step=k resume, cursor-only
 // speed, episode switch closes the old stream, byte budget, 300/300 ticks.
@@ -31,6 +33,7 @@ export {
   toPatch,
 } from "./streamCodec";
 export { TickStreamController } from "./streamController";
+export type { EpisodeLiveHeader } from "./streamController";
 export type {
   LiveTick,
   OpenStream,
@@ -55,6 +58,22 @@ export function toPanelTick(raw: string, c7tailFinal: number | null): PanelTick 
   } catch {
     return null;
   }
+  // Per-tick channels travel on the payload row: events via parseFeedEvents
+  // (keeps EventFeed working off the same row) and faults via toFaultSpec
+  // so the chartStore path sees real faults instead of a fabricated [].
+  // Energy is header-only (never streamed per-tick) — it rides the
+  // controller's energyHeader, not PanelTick.
+  const faults: FaultSpec[] = [];
+  if (Array.isArray(tick.faults)) {
+    for (const f of tick.faults) {
+      if (typeof f !== "object" || f === null || Array.isArray(f)) continue;
+      try {
+        faults.push(toFaultSpec(f as Record<string, unknown>));
+      } catch {
+        continue;
+      }
+    }
+  }
   return {
     step: tick.step,
     states: tick.states,
@@ -64,6 +83,8 @@ export function toPanelTick(raw: string, c7tailFinal: number | null): PanelTick 
     sbuf_level: tick.sbuf_level,
     quality: tick.quality,
     currents: tick.currents,
+    events_at_k: parseFeedEvents(data),
+    faults,
     machineOrder: STREAM_MACHINE_ORDER,
     bufferOrder: BUFFER_IDS,
     c7tailFinal,
@@ -83,6 +104,7 @@ export interface TickSource {
   readonly reconnecting: boolean;
   readonly episodeId: string | null;
   readonly energy: EnergyHeader | null;
+  readonly episodeHeader: EpisodeLiveHeader | null;
   readonly speed: number;
   readonly setSpeed: (s: number) => void;
   readonly setPlaying: (p: boolean) => void;
@@ -122,17 +144,26 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
 
   // Bridge probe: same-origin /schema must parse as the bridge schema
   // document (vite SPA fallback serves index.html with 200 — content check).
+  // Pinned to the v6 contract: currents row + schema_version===6 +
+  // twin-2.5.0-topology-A code_version, not just throughput presence.
   useEffect(() => {
     let cancelled = false;
     fetch("/schema", { headers: { accept: "application/json" } })
       .then((r) => r.json())
       .then((j: unknown) => {
         if (cancelled) return;
-        const keys =
-          typeof j === "object" && j !== null && "tick_keys" in j
-            ? (j as { readonly tick_keys?: unknown }).tick_keys
-            : undefined;
-        setProbeOk(Array.isArray(keys) && keys.includes("throughput"));
+        const rec =
+          typeof j === "object" && j !== null ? (j as Record<string, unknown>) : null;
+        const keys = rec?.["tick_keys"];
+        const schemaVersion = rec?.["schema_version"];
+        const codeVersion = rec?.["code_version"];
+        setProbeOk(
+          Array.isArray(keys) &&
+            keys.includes("throughput") &&
+            keys.includes("currents") &&
+            schemaVersion === 6 &&
+            codeVersion === "twin-2.5.0-topology-A",
+        );
       })
       .catch(() => {
         if (!cancelled) setProbeOk(false);
@@ -243,6 +274,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     reconnecting: ctrl.reconnecting(),
     episodeId: ctrl.episodeId(),
     energy: ctrl.energyHeader(),
+    episodeHeader: ctrl.episodeHeader(),
     speed: ctrl.speed(),
     setSpeed: (s: number) => ctrl.setSpeed(s),
     setPlaying,

@@ -3,8 +3,10 @@ import type { DownUpEvent, TwinEvent } from "../components/events/types";
 import { MACHINE_IDS } from "../store/tick";
 
 // Live tick arrays replay in sorted(record["machines"]) order (schema.py
-// _machines). The twin roster sorts lexicographically to A0-A9, ASM0-2,
-// B0-B9, C0-C7, RWK0 — NOT the display order in MACHINE_IDS.
+// _machines). The twin roster sorts lexicographically to A0,A1,A2,A7,A8,A9,
+// ASM0,ASM1,ASM2, B0,B1,B2,B7P,B7S,B8,B9, C0,C1,C2,C6,C7, INSP0, PKG0,PKG1,
+// PKG2, RWK0 — NOT the display order in MACHINE_IDS (PKG0-2 sit after INSP0,
+// INSP0 after C7; ASM0-2 sort before B0 within the A-block).
 export const STREAM_MACHINE_ORDER: readonly string[] = [...MACHINE_IDS].sort();
 
 export const T_TOTAL = 300;
@@ -34,6 +36,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// Live/topology subset is intentional: parseLiveTick gates the four
+// per-step channels the stream replays (step/states/throughput/currents)
+// and toPatch forwards only step/states/tput because TopologyView.tsx:25
+// consumes exactly that 9-key-subset TickPatch (states + tput by machine
+// id). Currents stay on LiveTick/panelTick for panels — topology never
+// reads them, so they are not forwarded into the patch.
 export function parseLiveTick(data: unknown): LiveTick | null {
   if (!isRecord(data)) return null;
   const step = data["step"];

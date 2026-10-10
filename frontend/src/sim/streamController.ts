@@ -15,6 +15,9 @@ export interface ControllerOptions {
 export interface EnergyHeader {
   readonly sumKVAh: number;
   readonly perUnit: number | null;
+  readonly unit: "kVAh-apparent";
+  readonly note: string | null;
+  readonly stepSeconds: number | null;
 }
 
 function parseEnergyHeader(body: unknown): EnergyHeader | null {
@@ -24,9 +27,62 @@ function parseEnergyHeader(body: unknown): EnergyHeader | null {
   const rec = e as Record<string, unknown>;
   const sum = rec["sum_kVAh"];
   const per = rec["per_unit"];
+  // schema.py:317 requires unit==='kVAh-apparent' (header-only CH9
+  // apparent-energy index); anything else is a contract violation, not a
+  // missing header.
+  if (rec["unit"] !== "kVAh-apparent") return null;
+  const note = rec["note"];
+  const stepSeconds = rec["step_seconds"];
   if (typeof sum !== "number" || !Number.isFinite(sum) || sum < 0) return null;
   if (per !== null && per !== undefined && (typeof per !== "number" || !Number.isFinite(per))) return null;
-  return { sumKVAh: sum, perUnit: per == null ? null : (per as number) };
+  if (note !== null && note !== undefined && typeof note !== "string") return null;
+  if (stepSeconds !== null && stepSeconds !== undefined && (typeof stepSeconds !== "number" || !Number.isFinite(stepSeconds))) return null;
+  return {
+    sumKVAh: sum,
+    perUnit: per == null ? null : (per as number),
+    unit: "kVAh-apparent",
+    note: typeof note === "string" ? note : null,
+    stepSeconds: typeof stepSeconds === "number" ? (stepSeconds as number) : null,
+  };
+}
+
+// Full 9-key SSE live header (sse.py build_header): episode_id, seed, T,
+// replay_digest, sbuf_stats, flow_stats, c7tail_final, energy, faults.
+// episode_id is dropped here (the controller already keys the stream by its
+// connect() arg — no consumer reads it back off the header).
+export interface EpisodeLiveHeader {
+  readonly seed: number | null;
+  readonly T: number | null;
+  readonly replay_digest: string | null;
+  readonly sbuf_stats: Readonly<Record<string, unknown>> | null;
+  readonly flow_stats: Readonly<Record<string, unknown>> | null;
+  readonly c7tail_final: number | null;
+  readonly faults: readonly unknown[] | null;
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+function parseLiveHeader(body: unknown): EpisodeLiveHeader | null {
+  const rec = asRecord(body);
+  if (rec === null) return null;
+  const seed = rec["seed"];
+  const T = rec["T"];
+  const digest = rec["replay_digest"];
+  const sbuf = asRecord(rec["sbuf_stats"]);
+  const flow = asRecord(rec["flow_stats"]);
+  const c7 = rec["c7tail_final"];
+  const faults = rec["faults"];
+  return {
+    seed: typeof seed === "number" && Number.isInteger(seed) ? seed : null,
+    T: typeof T === "number" && Number.isInteger(T) ? T : null,
+    replay_digest: typeof digest === "string" ? digest : null,
+    sbuf_stats: sbuf,
+    flow_stats: flow,
+    c7tail_final: typeof c7 === "number" && Number.isFinite(c7) ? c7 : null,
+    faults: Array.isArray(faults) ? faults : null,
+  };
 }
 
 // Framework-free lifecycle controller (unit-tested via injected OpenStream).
@@ -44,6 +100,7 @@ export class TickStreamController {
   private readonly rows = new Map<number, string>();
   private c7tail: number | null = null;
   private energy: EnergyHeader | null = null;
+  private liveHeader: EpisodeLiveHeader | null = null;
   private lastStep = -1;
   private bytes = 0;
   private speedVal = 1;
@@ -89,6 +146,7 @@ export class TickStreamController {
       this.rows.clear();
       this.c7tail = null;
       this.energy = null;
+      this.liveHeader = null;
       this.lastStep = -1;
       this.bytes = 0;
       this.reconnectFlag = false;
@@ -131,6 +189,15 @@ export class TickStreamController {
         }
         const e = parseEnergyHeader(body);
         if (e !== null) this.energy = e;
+        // Full 9-key SSE header plumbed verbatim: seed/T/sbuf_stats/
+        // flow_stats/faults/replay_digest all land in liveHeader (sunk/
+        // scrapped/reworked/diverted read them via episodeHeader — they
+        // showed stale "—" while this was header-null).
+        const h = parseLiveHeader(body);
+        if (h !== null) {
+          this.liveHeader = h;
+          if (h.c7tail_final !== null) this.c7tail = h.c7tail_final;
+        }
       } catch {
         /* header without finals: panels show the no-episode state */
       }
@@ -208,6 +275,10 @@ export class TickStreamController {
 
   energyHeader(): EnergyHeader | null {
     return this.energy;
+  }
+
+  episodeHeader(): EpisodeLiveHeader | null {
+    return this.liveHeader;
   }
 
   totalBytes(): number {

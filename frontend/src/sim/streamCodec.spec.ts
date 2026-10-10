@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { STREAM_MACHINE_ORDER, parseLiveTick, toPatch } from "./streamCodec";
 
 // CH8/CH9 wiring spec (MINIPRO-17): live ticks carry the 26-machine
-// topology-A roster plus a per-tick currents row (bridge schema v4).
+// topology-A roster plus a per-tick currents row (bridge schema v6,
+// twin-2.5.0-topology-A).
 // Failing-first: roster is 26 (not stale-32) and currents survive parsing.
 
 function mkTick(step: number, current = 7.5) {
