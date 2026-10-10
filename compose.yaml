@@ -1,0 +1,53 @@
+name: verdandi
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: services/sim_bridge/Dockerfile
+      target: prod
+    image: verdandi-api:latest
+    env_file:
+      - path: .env
+        required: false
+    expose:
+      - "8000"
+    networks:
+      - app
+    restart: unless-stopped
+    volumes:
+      - verdandi-artifacts:/app/artifacts
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: prod
+    image: verdandi-web:latest
+    ports:
+      - "${WEB_PORT:-19104}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  verdandi-artifacts:

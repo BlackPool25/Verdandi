@@ -35,6 +35,8 @@ export function BufferBars(props: { readonly tick: PanelTick | null }): React.JS
           gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
           gap: "6px 10px",
           maxWidth: "100%",
+          overflowY: "auto",
+          flex: "1 1 auto",
         }}
       >
         {bars.map((b) => (

@@ -59,7 +59,7 @@ export function EventFeed(props: EventFeedProps): React.JSX.Element {
       <ul
         className="evt-feed"
         data-testid="event-feed-list"
-        style={{ maxHeight: 160, overflowY: "auto", minHeight: 0 }}
+        style={{ flex: "1 1 auto", minHeight: 320, maxHeight: 380, overflowY: "auto" }}
       >
         {rows.visible.length === 0 && (
           <li data-testid="feed-empty">No events at this step yet.</li>

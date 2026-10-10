@@ -1,0 +1,348 @@
+/* KPI Strip styles conforming to ISA-101 and pixel design rules */
+
+.vd-kpi-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 58px;
+  padding: 4px 12px;
+  background: var(--paper-100);
+  border-bottom: 2px solid var(--ink-950);
+  box-shadow: 0 2px 0 var(--ink-900);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  z-index: 10;
+}
+
+@media (max-width: 1500px) {
+  .vd-kpi-strip {
+    min-height: 58px;
+    padding: 4px 8px;
+    gap: 6px;
+  }
+}
+
+.vd-kpi-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* Individual KPI Tiles */
+.vd-kpi-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 8px;
+  background: var(--paper-50);
+  border: 2px solid var(--ink-950);
+  box-shadow: 2px 2px 0 var(--ink-900);
+  height: 48px;
+}
+
+.vd-tile-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.vd-tile-label {
+  font-family: var(--font-pixel);
+  font-size: var(--text-xs);
+  font-weight: bold;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.vd-tile-val {
+  font-size: var(--text-sm);
+  color: var(--text);
+  line-height: 1;
+}
+
+.vd-tile-denom {
+  font-size: 10px;
+  color: var(--ink-500);
+}
+
+.vd-tile-unit {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: var(--ink-500);
+  margin-left: 2px;
+}
+
+/* 26-block pixel strip in pipeline order */
+.vd-pixel-strip {
+  display: flex;
+  gap: 2px;
+  margin-top: var(--space-4);
+  background: var(--paper-200);
+  padding: 2px;
+  border: 1px solid var(--ink-900);
+}
+
+.vd-strip-block {
+  width: 6px;
+  height: 10px;
+  background: var(--paper-300);
+  image-rendering: pixelated;
+  transition: background-color 0.1s steps(2);
+}
+
+.vd-strip-block.is-run {
+  background: var(--run);
+}
+
+.vd-strip-block.is-starved {
+  background: var(--starved);
+}
+
+.vd-strip-block.is-blocked {
+  background: var(--blocked);
+}
+
+.vd-strip-block.is-down {
+  background: var(--down);
+}
+
+/* Tile: Waiting / Blocked / Down Counts */
+.vd-tile-states {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+}
+
+.vd-state-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vd-state-indicator {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--ink-950);
+  flex-shrink: 0;
+}
+
+.vd-state-indicator.is-starved {
+  background: var(--starved);
+}
+
+.vd-state-indicator.is-blocked {
+  background: var(--blocked);
+}
+
+.vd-state-indicator.is-down {
+  background: var(--down);
+}
+
+.vd-state-label {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.vd-state-num {
+  font-family: var(--font-display, "Press Start 2P", monospace);
+  font-size: 11px;
+  color: var(--text);
+  margin-left: 3px;
+}
+
+.vd-state-num.is-alert {
+  color: var(--down-ink);
+}
+
+/* Tile: Throughput moving average */
+.vd-tile-spark-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin-top: 2px;
+}
+
+.vd-mini-sparkline {
+  background: var(--paper-200);
+  border: 1px solid var(--ink-700);
+}
+
+/* Tile: SBUF gauge */
+.vd-tile-sbuf {
+  min-width: 140px;
+}
+
+.vd-tile-sbuf.is-warn {
+  border-color: var(--blocked-ink);
+}
+
+.vd-sbuf-gauge-wrap {
+  margin-top: 4px;
+}
+
+.vd-sbuf-gauge-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: var(--paper-200);
+  border: 1px solid var(--ink-900);
+  overflow: visible;
+}
+
+.vd-sbuf-gauge-fill {
+  height: 100%;
+  background: var(--starved);
+  transition: width 0.1s steps(4);
+}
+
+.vd-sbuf-gauge-fill.is-high {
+  background: var(--blocked);
+}
+
+.vd-sbuf-marker-80 {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--down-ink);
+  z-index: 2;
+}
+
+/* Group 2: Run Totals (Final from header) */
+.vd-kpi-totals {
+  position: relative;
+  background: var(--paper-100);
+  border: 2px dashed var(--ink-700);
+  padding: 4px 8px;
+  height: 48px;
+}
+
+.vd-totals-tag {
+  position: absolute;
+  top: -9px;
+  left: 8px;
+  background: var(--paper-200);
+  border: 1px solid var(--ink-700);
+  padding: 0 4px;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--ink-700);
+  letter-spacing: 0.5px;
+}
+
+.vd-total-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 4px;
+  border-right: 1px dotted var(--paper-500);
+}
+
+.vd-total-cell:last-of-type {
+  border-right: none;
+}
+
+.vd-total-label {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.vd-total-val {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.vd-btn-details {
+  background: var(--paper-200);
+  border: 1px solid var(--ink-900);
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 1px 1px 0 var(--ink-900);
+}
+
+.vd-btn-details:hover {
+  background: var(--paper-50);
+}
+
+/* Details Modal / Popover */
+.vd-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 27, 38, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.vd-details-popover {
+  background: var(--paper-50);
+  border: 3px solid var(--ink-950);
+  box-shadow: 6px 6px 0 var(--ink-900);
+  width: 440px;
+  max-width: 90vw;
+  padding: var(--space-16);
+}
+
+.vd-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--ink-950);
+  padding-bottom: var(--space-8);
+  margin-bottom: var(--space-12);
+}
+
+.vd-popover-header h3 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.vd-popover-close {
+  background: none;
+  border: 2px solid var(--ink-950);
+  font-weight: bold;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.vd-popover-close:hover {
+  background: var(--down);
+  color: var(--paper-50);
+}
+
+.vd-details-dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--space-8);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.vd-details-dl dt {
+  color: var(--text-muted);
+  font-weight: bold;
+}
+
+.vd-details-dl dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.vd-digest-code {
+  font-family: monospace;
+  font-size: 11px;
+  background: var(--paper-200);
+  padding: 2px 4px;
+}

@@ -21,47 +21,47 @@ export interface LayoutSize {
 }
 
 const FLOOR_POSITIONS: Readonly<Record<string, { readonly x: number; readonly y: number }>> = {
-  // Line A: 6 machines (Machining Line; A3-A6 cut, A2->A7 gap)
-  A0: { x: 80, y: 100 },
-  A1: { x: 230, y: 100 },
-  A2: { x: 380, y: 100 },
-  A7: { x: 530, y: 100 },
-  A8: { x: 680, y: 100 },
-  A9: { x: 830, y: 100 },
+  // Line A: 6 machines (Machining Line; Row 1: y = 50)
+  A0: { x: 50, y: 50 },
+  A1: { x: 190, y: 50 },
+  A2: { x: 330, y: 50 },
+  A7: { x: 470, y: 50 },
+  A8: { x: 610, y: 50 },
+  A9: { x: 750, y: 50 },
 
-  // Line B: 7 machines (Forming & Treatment Line; B3-B6 cut, B7 -> B7P/B7S pair)
-  B0: { x: 80, y: 240 },
-  B1: { x: 230, y: 240 },
-  B2: { x: 380, y: 240 },
-  B7P: { x: 530, y: 240 },
-  B7S: { x: 530, y: 330 },
-  B8: { x: 680, y: 240 },
-  B9: { x: 830, y: 240 },
+  // Line B: 7 machines (Forming & Treatment Line; Row 2: y = 180; B7P at y = 145, B7S at y = 225)
+  B0: { x: 50, y: 180 },
+  B1: { x: 190, y: 180 },
+  B2: { x: 330, y: 180 },
+  B7P: { x: 470, y: 145 },
+  B7S: { x: 470, y: 225 },
+  B8: { x: 610, y: 180 },
+  B9: { x: 750, y: 180 },
 
-  // Line C: 5 machines (Secondary Stamping Line; C3-C5 cut, C2->C6 gap)
-  C0: { x: 80, y: 420 },
-  C1: { x: 230, y: 420 },
-  C2: { x: 380, y: 420 },
-  C6: { x: 530, y: 420 },
-  C7: { x: 680, y: 420 },
+  // Line C: 5 machines (Secondary Stamping Line; Row 3: y = 330)
+  C0: { x: 50, y: 330 },
+  C1: { x: 190, y: 330 },
+  C2: { x: 330, y: 330 },
+  C6: { x: 470, y: 330 },
+  C7: { x: 610, y: 330 },
 
   // Logistics & Store Nodes
-  _C7TAIL: { x: 830, y: 420 },
-  SBUF: { x: 1610, y: 140 },
+  _C7TAIL: { x: 750, y: 330 },
+  SBUF: { x: 890, y: 105 },
 
-  // Packaging fork (C7PKG feed -> PKG0 -> PKG1/PKG2 sinks)
-  PKG0: { x: 980, y: 420 },
-  PKG1: { x: 1130, y: 420 },
-  PKG2: { x: 1055, y: 540 },
+  // Packaging Fork & Sinks (direct feed from C7 at x=610)
+  PKG0: { x: 610, y: 440 },
+  PKG1: { x: 750, y: 415 },
+  PKG2: { x: 750, y: 495 },
 
-  // Assembly Cell: East of lines (ASM1->INSP0->ASM2; ASM12 retired)
-  ASM0: { x: 1780, y: 240 },
-  ASM1: { x: 1940, y: 240 },
-  INSP0: { x: 2100, y: 240 },
-  ASM2: { x: 2260, y: 240 },
+  // Final Assembly & Test Cell (East of feeder lines: parts converge cleanly into ASM0!)
+  ASM0: { x: 1000, y: 200 },
+  ASM1: { x: 1140, y: 200 },
+  INSP0: { x: 1280, y: 200 },
+  ASM2: { x: 1420, y: 200 },
 
-  // Rework Bay
-  RWK0: { x: 2100, y: 380 },
+  // Rework Bay (under INSP0, clean repair loop)
+  RWK0: { x: 1280, y: 310 },
 };
 
 // Precompute layout on topology change ONLY (never per tick).

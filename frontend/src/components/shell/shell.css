@@ -1,0 +1,536 @@
+/* ==========================================================================
+   VERDANDI APP SHELL, LEFT RAIL & TOP BAR STYLES
+   Ink-900 Chrome, 4px Pixel Grid, 100dvh Locked Layout
+   ========================================================================== */
+
+@import "../../styles/tokens.css";
+@import "../../styles/fonts.css";
+
+/* -------------------------------------------------------------
+   1. ROOT SHELL CONTAINER (Locked Viewport, No Window Scrollbars)
+   ------------------------------------------------------------- */
+.vd-app-shell {
+  display: flex;
+  flex-direction: row;
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--paper-200);
+  color: var(--text-main);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+}
+
+.vd-main-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.vd-page-outlet {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  overscroll-behavior: contain;
+}
+
+.vd-page-outlet::-webkit-scrollbar {
+  width: 8px;
+}
+
+.vd-page-outlet::-webkit-scrollbar-track {
+  background: var(--paper-200);
+}
+
+.vd-page-outlet::-webkit-scrollbar-thumb {
+  background: var(--ink-700);
+  border: 1px solid var(--ink-950);
+}
+
+
+/* -------------------------------------------------------------
+   2. LEFT RAIL (72px Persistent SCADA Rail)
+   ------------------------------------------------------------- */
+.vd-left-rail {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  height: 100%;
+  background: var(--ink-900);
+  border-right: 2px solid var(--ink-950);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  z-index: 40;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.vd-rail-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 40px;
+  background: var(--ink-950);
+  border: 2px solid var(--paper-300);
+  margin-bottom: 12px;
+  box-shadow: 2px 2px 0 var(--ink-950);
+}
+
+.vd-rail-logo-glyph {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--accent-bar);
+  font-weight: bold;
+}
+
+.vd-rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+}
+
+.vd-rail-item {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.vd-rail-btn {
+  width: 64px;
+  height: 56px;
+  background: transparent;
+  border: 2px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--paper-300);
+  cursor: pointer;
+  position: relative;
+  padding: 4px;
+  transition: none;
+  font-family: var(--font-ui);
+}
+
+.vd-rail-btn:hover {
+  background: var(--ink-700);
+  color: var(--paper-50);
+  border: 2px solid var(--ink-500);
+}
+
+.vd-rail-btn.is-active {
+  background: var(--ink-950);
+  color: var(--paper-50);
+  border: 2px solid var(--accent-bar);
+  box-shadow: inset 1px 1px 0 var(--ink-700);
+}
+
+.vd-rail-accent-bar {
+  position: absolute;
+  left: -4px;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  background: var(--accent-bar);
+}
+
+.vd-rail-icon {
+  font-size: 18px;
+  line-height: 20px;
+  margin-bottom: 2px;
+}
+
+.vd-rail-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.2px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+.vd-guide-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  background: var(--accent-bar);
+  border: 1px solid var(--ink-950);
+  animation: pulse-step 1s steps(2, start) infinite;
+}
+
+.vd-rail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 4px;
+}
+
+.vd-rail-version {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--ink-500);
+  letter-spacing: 0.5px;
+}
+
+/* -------------------------------------------------------------
+   3. TOP BAR (48px Fixed SCADA Header & Transport Console)
+   ------------------------------------------------------------- */
+.vd-top-bar {
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
+  background: var(--ink-900);
+  border-bottom: 2px solid var(--ink-950);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  color: var(--text-light);
+  gap: 12px;
+  z-index: 30;
+  box-sizing: border-box;
+}
+
+.vd-top-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vd-top-logo {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--paper-50);
+  letter-spacing: -0.5px;
+}
+
+.vd-top-divider {
+  color: var(--ink-500);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.vd-top-page-title {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-bar);
+  margin: 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Status & Episode Chips */
+.vd-top-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vd-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ink-950);
+  border: 2px solid var(--ink-700);
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--paper-100);
+  white-space: nowrap;
+}
+
+.vd-status-chip.is-live .vd-status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--state-run);
+  border: 1px solid var(--ink-950);
+}
+
+.vd-status-chip.is-offline .vd-status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--state-down);
+  border: 1px solid var(--ink-950);
+}
+
+.vd-status-step {
+  color: var(--paper-300);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.vd-episode-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ink-950);
+  border: 2px solid var(--ink-700);
+  color: var(--paper-100);
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vd-episode-chip:hover {
+  background: var(--ink-700);
+  border-color: var(--paper-300);
+}
+
+.vd-ep-label {
+  color: var(--accent-bar);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.vd-ep-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* -------------------------------------------------------------
+   4. SCADA TRANSPORT BAR
+   ------------------------------------------------------------- */
+.vd-transport-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  max-width: 600px;
+  min-width: 220px;
+  background: var(--ink-950);
+  border: 2px solid var(--ink-700);
+  padding: 2px 6px;
+  box-sizing: border-box;
+}
+
+.vd-transport-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.vd-ctrl-btn {
+  background: var(--ink-900);
+  border: 2px solid var(--ink-700);
+  color: var(--paper-100);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  user-select: none;
+}
+
+.vd-ctrl-btn:hover {
+  background: var(--ink-700);
+  border-color: var(--paper-100);
+}
+
+.vd-ctrl-btn:active {
+  background: var(--ink-950);
+}
+
+.vd-play-pause-btn {
+  width: 32px;
+  height: 26px;
+  background: var(--ink-700);
+  border-color: var(--paper-300);
+  color: var(--accent-bar);
+  font-weight: bold;
+}
+
+/* Timeline Scrubber */
+.vd-scrubber-container {
+  flex: 1 1 auto;
+  min-width: 80px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.vd-scrubber-track-wrap {
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 18px;
+}
+
+.vd-scrubber-slider {
+  width: 100%;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--ink-900);
+  border: 1px solid var(--ink-700);
+  outline: none;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.vd-scrubber-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 18px;
+  background: var(--accent-bar);
+  border: 2px solid var(--ink-950);
+  cursor: ew-resize;
+  box-shadow: 1px 1px 0 var(--paper-50);
+}
+
+.vd-scrubber-slider::-moz-range-thumb {
+  width: 12px;
+  height: 18px;
+  background: var(--accent-bar);
+  border: 2px solid var(--ink-950);
+  cursor: ew-resize;
+}
+
+.vd-scrubber-fault-tick {
+  position: absolute;
+  top: 1px;
+  height: 6px;
+  background: var(--state-down);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Speed Selector */
+.vd-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--ink-900);
+  border: 1px solid var(--ink-700);
+  padding: 1px;
+  flex-shrink: 0;
+}
+
+.vd-speed-btn {
+  background: transparent;
+  border: none;
+  color: var(--paper-300);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+
+.vd-speed-btn:hover {
+  color: var(--paper-50);
+  background: var(--ink-700);
+}
+
+.vd-speed-btn.is-active {
+  background: var(--accent-bar);
+  color: var(--ink-950);
+  font-weight: 800;
+}
+
+/* Top Actions */
+.vd-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vd-action-btn {
+  background: var(--ink-950);
+  border: 2px solid var(--ink-700);
+  color: var(--paper-100);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+}
+
+.vd-action-btn:hover {
+  background: var(--ink-700);
+  border-color: var(--paper-100);
+}
+
+.vd-action-btn.is-active {
+  background: var(--paper-100);
+  color: var(--ink-950);
+  border-color: var(--accent-bar);
+}
+
+.vd-guide-btn {
+  position: relative;
+}
+
+.vd-btn-pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-bar);
+  border: 1px solid var(--ink-950);
+  display: inline-block;
+  animation: pulse-step 1s steps(2, start) infinite;
+}
+
+@keyframes pulse-step {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* -------------------------------------------------------------
+   5. RESPONSIVE COLLAPSE (Under 1440px Viewports)
+   ------------------------------------------------------------- */
+@media (max-width: 1440px) {
+  .vd-top-status .vd-status-step {
+    display: none;
+  }
+  .vd-top-brand .vd-top-divider,
+  .vd-top-brand .vd-top-page-title {
+    display: none;
+  }
+}
+
+@media (max-width: 1200px) {
+  .vd-top-status {
+    display: none;
+  }
+}

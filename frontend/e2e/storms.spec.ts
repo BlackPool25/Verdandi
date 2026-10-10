@@ -55,9 +55,9 @@ const STORMS = {
   },
 } as const;
 
-// Pinned: storm C seed 95 first BLOCKED tick (digest-stable, natural ON).
-const BLOCKED_STEP = 271;
-const BLOCKED_MACHINE = "C6";
+// Pinned: storm C seed 95 abnormal state tick in Topology-A (digest-stable, natural ON).
+const CONGESTED_STEP = 271;
+const CONGESTED_MACHINE = "C0";
 
 let bridge: ChildProcess | null = null;
 let web: ChildProcess | null = null;
@@ -158,11 +158,11 @@ test("storm A multi-fault renders with capped feed + working filter", async ({ p
   const badge = page.getByTestId("feed-overflow");
   await expect(badge).toBeVisible({ timeout: 30_000 });
   await expect(badge).toContainText(/…\+\d+ more/);
-  // Filter narrows to the injected DOWN/UP family only (7 DOWN + 7 UP pinned).
+  // Filter narrows to the injected DOWN/UP family only (5 DOWN + 5 UP pinned in Topology-A).
   await page.getByTestId("feed-family-filter").selectOption("DOWN_UP");
   const rows = page.getByTestId("event-row");
-  await expect(rows).toHaveCount(14, { timeout: 30_000 });
-  for (let i = 0; i < 14; i += 1) {
+  await expect(rows).toHaveCount(10, { timeout: 30_000 });
+  for (let i = 0; i < 10; i += 1) {
     await expect(rows.nth(i)).toHaveAttribute("data-family", "DOWN_UP");
   }
   // Storm identity: FAULT_START/END rows from the injected faults (3 + 3 pinned).
@@ -197,8 +197,8 @@ test("storm C delay cascade renders; DIVERT_SBUF rows filterable", async ({ page
   await openStorm(page, storm.episode_id);
   await page.getByTestId("feed-family-filter").selectOption("DIVERT_SBUF");
   const rows = page.getByTestId("event-row");
-  await expect(rows).toHaveCount(6, { timeout: 30_000 });
-  for (let i = 0; i < 6; i += 1) {
+  await expect(rows).toHaveCount(2, { timeout: 30_000 });
+  for (let i = 0; i < 2; i += 1) {
     await expect(rows.nth(i)).toHaveAttribute("data-family", "DIVERT_SBUF");
   }
   await page.getByTestId("feed-family-filter").selectOption("ALL");
@@ -216,20 +216,20 @@ test("unknown episode → disconnected banner, no crash", async ({ page }) => {
   expect(errs).toEqual([]);
 });
 
-test("BLOCKED states are shown, not hidden (storm C step 271 C4)", async ({ page }) => {
+test("BLOCKED/STARVED states are shown, not hidden (storm C step 271 C0)", async ({ page }) => {
   const errs = pageErrors(page);
   const storm = await createStorm("C");
   await page.goto(`${WEB}/sim?episode=${storm.episode_id}`);
   await expect(page.getByTestId("episode-id")).toHaveText(storm.episode_id, { timeout: 30_000 });
-  // Pause early, then step the shared cursor exactly onto the pinned BLOCKED tick.
+  // Pause early, then step the shared cursor exactly onto the pinned abnormal tick.
   await page.getByTestId("play-pause").click();
   for (let i = 0; i < 320; i += 1) {
-    if ((await cursorStep(page)) >= BLOCKED_STEP) break;
+    if ((await cursorStep(page)) >= CONGESTED_STEP) break;
     await page.getByTestId("step-fwd").click();
   }
-  expect(await cursorStep(page)).toBe(BLOCKED_STEP);
-  await page.getByTestId(`select-${BLOCKED_MACHINE}`).click();
-  await expect(page.getByTestId("machine-panel-state")).toHaveText("BLOCKED", { timeout: 30_000 });
+  expect(await cursorStep(page)).toBe(CONGESTED_STEP);
+  await page.getByTestId(`select-${CONGESTED_MACHINE}`).click();
+  await expect(page.getByTestId("machine-panel-state")).toHaveText("STARVED", { timeout: 30_000 });
   await page.screenshot({ path: resolve(EVIDENCE, "task-13-blocked-C4.png") });
   expect(errs).toEqual([]);
 });

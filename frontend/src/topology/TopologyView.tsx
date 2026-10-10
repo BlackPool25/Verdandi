@@ -66,8 +66,26 @@ function TopologyInner({
   onSelect,
   panelTick,
 }: TopologyViewProps): React.JSX.Element {
-  const { updateNodeData, fitView, setCenter } = useReactFlow();
+  const { fitView, setCenter } = useReactFlow();
   const [direction, setDirection] = useState<RankDir>("FLOOR");
+
+  // Active patch: use tick if present, or derive from panelTick fallback
+  const activePatch = useMemo<TickPatch | null>(() => {
+    if (tick !== null) return tick;
+    if (panelTick !== null && panelTick !== undefined) {
+      const states: Record<string, string> = {};
+      const tput: Record<string, number> = {};
+      for (let i = 0; i < panelTick.machineOrder.length; i++) {
+        const id = panelTick.machineOrder[i];
+        if (id !== undefined) {
+          states[id] = panelTick.states[i] ?? "—";
+          tput[id] = panelTick.throughput[i] ?? 0;
+        }
+      }
+      return { step: panelTick.step, states, tput };
+    }
+    return null;
+  }, [tick, panelTick]);
 
   // Dagre re-layout on direction toggle ONLY (never per tick). Positions
   // recompute; node data is untouched (setNodes maps positions, see below).
@@ -76,45 +94,70 @@ function TopologyInner({
     [direction],
   );
 
-  // Base roster: layout positions + pinned datum, rebuilt on toggle only.
+  // Base roster: layout positions + pinned datum with initial live status
   const { baseNodes } = useMemo(() => {
     const pos = new Map(layoutPos.map((n) => [n.id, n] as const));
-    const baseNodes: Node[] = PINNED_NODES.map((n) => {
+    const specs = faults ?? [];
+    const baseNodes: Node<MachineNodeDatum>[] = PINNED_NODES.map((n) => {
       const p = pos.get(n.id);
+      let state = activePatch?.states[n.id];
+      if (state === undefined) {
+        if (n.id === "SBUF" && panelTick !== null && panelTick !== undefined) {
+          state = `${panelTick.sbuf_level}/30`;
+        } else if (n.id === "_C7TAIL" && panelTick?.c7tailFinal != null) {
+          state = `FIN ${panelTick.c7tailFinal}`;
+        }
+      }
+      const tput = activePatch?.tput[n.id] ?? 0;
+      const anomaly = activePatch ? anomalyFor(n.id, activePatch.step, specs, activePatch.states) : undefined;
       return {
         id: n.id,
         type: "machine",
+        selected: n.id === selectedId,
         position: { x: p?.x ?? 0, y: p?.y ?? 0 },
-        data: { ...n.data } satisfies MachineNodeDatum,
+        data: {
+          ...n.data,
+          state,
+          tput,
+          anomaly,
+        } satisfies MachineNodeDatum,
       };
     });
     assertTopologyCounts(baseNodes.length, PINNED_EDGES.length);
     return { baseNodes };
-  }, [layoutPos]);
+  }, [layoutPos, activePatch, faults, selectedId, panelTick]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<MachineNodeDatum>>(baseNodes);
 
   // Toggle path: new positions onto live nodes, data (state/tput/anomaly)
   // and selection spread through untouched.
   useEffect(() => {
     const pos = new Map(layoutPos.map((n) => [n.id, n] as const));
-    setNodes((nds) =>
-      nds.map((n) => {
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
         const p = pos.get(n.id);
-        return p === undefined ? n : { ...n, position: { x: p.x, y: p.y } };
-      }),
-    );
+        if (!p || (n.position.x === p.x && n.position.y === p.y)) return n;
+        changed = true;
+        return { ...n, position: { x: p.x, y: p.y } };
+      });
+      return changed ? next : nds;
+    });
   }, [layoutPos, setNodes]);
 
   // Selection path: flag-only patch, datum untouched (memo nodes keep
   // their per-tick identity; only the two flipped nodes re-render).
   useEffect(() => {
-    setNodes((nds) =>
-      nds.map((n) => {
+    setNodes((nds) => {
+      let changed = false;
+      const next = nds.map((n) => {
         const want = n.id === selectedId;
-        return n.selected === want ? n : { ...n, selected: want };
-      }),
-    );
+        if (n.selected === want) return n;
+        changed = true;
+        return { ...n, selected: want };
+      });
+      return changed ? next : nds;
+    });
   }, [selectedId, setNodes]);
 
   const onConnect = useCallback(() => undefined, []);
@@ -136,11 +179,13 @@ function TopologyInner({
         const buf = bufferIdForEdge(e);
         const w = buf === null ? 1 : widthForUtil(utilByBuffer.get(buf) ?? 0);
         const back = e.data.backEdge === true;
+        const isAgv = e.data.edgeClass === "agv-drain";
         return {
           id: e.id,
           source: e.source,
           target: e.target,
           label: e.data.label,
+          type: isAgv ? "smoothstep" : "default",
           data: { ...e.data },
           className:
             back === true ? `topo-edge ${e.data.edgeClass} back-edge` : `topo-edge ${e.data.edgeClass}`,
@@ -176,25 +221,26 @@ function TopologyInner({
   // to guarantee all 28 nodes / 31 edges are visible after fit.
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
-      void fitView({ padding: 0.25, minZoom: 0.1 });
+      void fitView({ padding: 0.08, minZoom: 0.1 });
     });
     return () => cancelAnimationFrame(raf);
   }, [fitView]);
 
-  // Per-tick path: RAF-coalesced updateNodeData (T6 render throttle).
+  // Per-tick path: RAF-coalesced state update directly onto nodes (T6 render throttle).
   // Last-write-wins: ticks arriving faster than a frame (4x = 62.5ms, still
   // >16ms, but burst catch-ups coalesce) keep only the latest patch.
-  // If-changed guard: per-node flat signature skips nodes whose
-  // state/tput/anomaly are identical, so unchanged nodes never re-render.
-  // Datum stays small/flat ({state, tput, anomaly}); layout untouched.
+  // If-changed guard: unchanged nodes return identical reference, so memo
+  // nodes never re-render.
   const pendingRef = useRef<TickPatch | null>(null);
   const rafRef = useRef<number>(0);
-  const appliedRef = useRef<Map<string, string>>(new Map());
   const faultsRef = useRef(faults);
   faultsRef.current = faults;
+  const panelTickRef = useRef(panelTick);
+  panelTickRef.current = panelTick;
+
   useEffect(() => {
-    if (tick === null) return;
-    pendingRef.current = tick;
+    if (activePatch === null) return;
+    pendingRef.current = activePatch;
     if (rafRef.current !== 0) return;
     rafRef.current = window.requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -202,19 +248,43 @@ function TopologyInner({
       pendingRef.current = null;
       if (latest === null) return;
       const specs = faultsRef.current ?? [];
-      const applied = appliedRef.current;
-      for (const [id, state] of Object.entries(latest.states)) {
-        const tput = latest.tput[id] ?? 0;
-        const anomaly = anomalyFor(id, latest.step, specs, latest.states);
-        // Flat signature: anomaly is a small object or null; JSON is cheap
-        // here vs a wasted updateNodeData + node re-render downstream.
-        const sig = `${state}|${tput}|${anomaly === null || anomaly === undefined ? "" : JSON.stringify(anomaly)}`;
-        if (applied.get(id) === sig) continue;
-        applied.set(id, sig);
-        updateNodeData(id, { state, tput, anomaly });
-      }
+      const pt = panelTickRef.current;
+      setNodes((nds: Node<MachineNodeDatum>[]) => {
+        let changed = false;
+        const next = nds.map((n) => {
+          let state = latest.states[n.id];
+          if (state === undefined) {
+            if (n.id === "SBUF" && pt !== null && pt !== undefined) {
+              state = `${pt.sbuf_level}/30`;
+            } else if (n.id === "_C7TAIL" && pt?.c7tailFinal != null) {
+              state = `FIN ${pt.c7tailFinal}`;
+            }
+          }
+          const tput = latest.tput[n.id] ?? 0;
+          const anomaly = anomalyFor(n.id, latest.step, specs, latest.states);
+          const sameAnomaly =
+            (!n.data.anomaly && !anomaly) ||
+            (n.data.anomaly?.gt === anomaly?.gt &&
+              n.data.anomaly?.neighbor === anomaly?.neighbor &&
+              n.data.anomaly?.down === anomaly?.down);
+          if (n.data.state === state && n.data.tput === tput && sameAnomaly) {
+            return n;
+          }
+          changed = true;
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              state,
+              tput,
+              anomaly: anomaly ?? undefined,
+            },
+          };
+        });
+        return changed ? next : nds;
+      });
     });
-  }, [tick, faults, updateNodeData]);
+  }, [activePatch, faults, setNodes]);
   useEffect(
     () => () => {
       if (rafRef.current !== 0) window.cancelAnimationFrame(rafRef.current);
@@ -251,8 +321,9 @@ function TopologyInner({
         onNodeClick={onNodeClick}
         onConnect={onConnect}
         onlyRenderVisibleElements={false}
+        nodesDraggable={false}
         fitView
-        fitViewOptions={{ padding: 0.25, minZoom: 0.1 }}
+        fitViewOptions={{ padding: 0.08, minZoom: 0.1 }}
         minZoom={0.1}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#ded8cb" />
@@ -282,43 +353,43 @@ function FloorPlanLayer({ direction }: { readonly direction: RankDir }): React.J
       }}
     >
       <g transform={`translate(${x}, ${y}) scale(${zoom})`}>
-        {/* Line A: Machining Bay */}
-        <rect x={40} y={60} width={1470} height={120} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={50} y={78} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
+        {/* Bay 1: Line A [Machining] */}
+        <rect x={35} y={30} width={850} height={95} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={45} y={44} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
           BAY 01 // LINE A [MACHINING] (A0-A9)
         </text>
 
-        {/* Line B: Process Bay */}
-        <rect x={40} y={200} width={1470} height={120} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={50} y={218} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
-          BAY 02 // LINE B [PROCESS] (B0-B9)
+        {/* Bay 2: Line B [Process & Treatment] */}
+        <rect x={35} y={135} width={850} height={170} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={45} y={149} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 02 // LINE B [TREATMENT] (B0-B9, B7P/B7S)
         </text>
 
-        {/* Line C: Stamping Bay */}
-        <rect x={180} y={340} width={1180} height={120} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={190} y={358} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
-          BAY 03 // LINE C [STAMPING] (C1-C7)
+        {/* Bay 3: Line C [Secondary Stamping] */}
+        <rect x={35} y={315} width={850} height={95} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={45} y={329} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 03 // LINE C [STAMPING] (C0-C7)
         </text>
 
-        {/* AGV Corridor & SBUF Logistics */}
-        <rect x={1540} y={60} width={180} height={400} fill="#e5dfd2" stroke="#257179" strokeWidth={1} strokeDasharray="6 3" rx={2} />
-        <text x={1550} y={78} fill="#1b4965" fontSize={10} fontFamily="var(--font-mono, monospace)" fontWeight="bold">
-          AGV FLEET AISLE
-        </text>
-        <text x={1550} y={92} fill="#5e656e" fontSize={9} fontFamily="var(--font-mono, monospace)">
-          TRANSIT: 3-5 STEPS
+        {/* Bay 4: Packaging & Outbound */}
+        <rect x={595} y={420} width={290} height={155} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={605} y={434} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 04 // PACKAGING & OUTBOUND (PKG0-2)
         </text>
 
-        {/* Assembly Cell */}
-        <rect x={1740} y={190} width={440} height={130} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
-        <text x={1750} y={208} fill="#2b303a" fontSize={11} fontFamily="var(--font-mono, monospace)" letterSpacing="1px" fontWeight="bold">
-          CELL 04 // FINAL ASSEMBLY (ASM0-2)
+        {/* Logistics Corridor & SBUF Depot */}
+        <rect x={895} y={30} width={80} height={380} fill="#e5dfd2" stroke="#257179" strokeWidth={1} strokeDasharray="6 3" rx={2} />
+        <text x={903} y={46} fill="#1b4965" fontSize={9} fontFamily="var(--font-mono, monospace)" fontWeight="bold">
+          LOGISTICS
+        </text>
+        <text x={903} y={58} fill="#5e656e" fontSize={8} fontFamily="var(--font-mono, monospace)">
+          AGV AISLE
         </text>
 
-        {/* Rework Bay */}
-        <rect x={1880} y={340} width={200} height={110} fill="#f4ebd9" stroke="#c28e47" strokeWidth={1} strokeDasharray="4 2" rx={2} />
-        <text x={1890} y={358} fill="#8c632b" fontSize={10} fontFamily="var(--font-mono, monospace)" fontWeight="bold">
-          BAY 05 // REWORK (RWK0)
+        {/* Bay 5: Final Assembly & Testing Cell */}
+        <rect x={985} y={135} width={570} height={255} fill="#ede8dc" stroke="#b8b3a5" strokeWidth={1} strokeDasharray="4 4" rx={2} />
+        <text x={995} y={149} fill="#2b303a" fontSize={10} fontFamily="var(--font-mono, monospace)" letterSpacing="0.5px" fontWeight="bold">
+          BAY 05 // FINAL ASSEMBLY & TEST CELL (ASM0-2, INSP0, RWK0)
         </text>
       </g>
     </svg>

@@ -211,8 +211,17 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
   }
 
   function advanceTo(next: number): boolean {
+    if (next >= T_TOTAL) {
+      setPlaying(false);
+      return false;
+    }
     const raw = ctrl.rowJson(next);
-    if (raw === undefined) return false;
+    if (raw === undefined) {
+      if (ctrl.complete() && next >= ctrl.rowCount()) {
+        setPlaying(false);
+      }
+      return false;
+    }
     let data: unknown = null;
     try {
       data = JSON.parse(raw) as unknown;
@@ -235,6 +244,16 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     return true;
   }
 
+  function handleSetPlaying(action: boolean | ((prev: boolean) => boolean)): void {
+    setPlaying((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      if (next && playedRef.current >= T_TOTAL - 1) {
+        advanceTo(0);
+      }
+      return next;
+    });
+  }
+
   function stepTo(step: number): boolean {
     if (!Number.isInteger(step)) return false;
     return advanceTo(Math.min(T_TOTAL - 1, Math.max(0, step)));
@@ -243,6 +262,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
   // Playback at speed cadence over buffered rows; speed changes only reset
   // the interval — the cursor (played) is never recomputed.
   const cursor = ctrl.cursor();
+  const currentSpeed = ctrl.speed();
   useEffect(() => {
     if (episodeOpt === null || cursor < 0 || !playing) return;
     const id = window.setInterval(() => {
@@ -251,7 +271,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     return () => window.clearInterval(id);
     // advanceTo reads the controller + stable setters only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctrl, episodeOpt, cursor, playing]);
+  }, [ctrl, episodeOpt, cursor, playing, currentSpeed]);
 
   // Stream health derives during render (not in an effect): the controller
   // emits on error with no new tick, the bump re-renders, and the banner
@@ -277,7 +297,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     episodeHeader: ctrl.episodeHeader(),
     speed: ctrl.speed(),
     setSpeed: (s: number) => ctrl.setSpeed(s),
-    setPlaying,
+    setPlaying: handleSetPlaying,
     stepTo,
     rowJson: (step: number) => ctrl.rowJson(step),
     startEpisode: (id: string) => ctrl.connect(id, base),

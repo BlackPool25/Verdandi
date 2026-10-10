@@ -3,6 +3,9 @@
    Warm Industrial SCADA Terminal Theme — Light Palette
    ========================================================================== */
 
+@import "./tokens.css";
+@import "./fonts.css";
+
 :root {
   /* Surface & Base - Warm Industrial Parchment / Technical SCADA Concrete */
   --vd-bg-base: #e6e2d8;
@@ -253,6 +256,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--vd-text-primary);
+}
+
+.px-machine-state.state-run {
+  color: var(--vd-state-run-border, #005e44);
+}
+
+.px-machine-state.state-starved {
+  color: var(--vd-state-starved-border, #0a567e);
+}
+
+.px-machine-state.state-blocked {
+  color: var(--vd-state-blocked-border, #7d5200);
+}
+
+.px-machine-state.state-down {
+  color: var(--vd-state-down-border, #8a3800);
 }
 
 .px-machine-tput-row {

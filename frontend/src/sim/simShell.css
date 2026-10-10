@@ -6,14 +6,16 @@
    ========================================================================== */
 
 .sim-shell {
-  display: grid;
-  grid-template-rows: 52px minmax(0, 1fr) auto;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  height: auto;
+  width: 100%;
   max-width: 100%;
-  overflow-x: clip;
+  overflow: visible;
   background: var(--vd-bg-base, #e6e2d8);
   color: var(--vd-text-primary, #1c2127);
-  font-family: var(--font-mono, "VT323", monospace);
+  font-family: var(--font-ui, "Pixelify Sans", sans-serif);
   box-sizing: border-box;
 }
 
@@ -107,9 +109,17 @@
   stroke-dasharray: 6 3;
 }
 
-.sim-shell__canvas .react-flow__edge-text,
 .sim-shell__canvas .react-flow__edge-textbg {
+  fill: var(--vd-surface-panel, #f2eee5);
+  stroke: var(--vd-border-muted, #b8b3a5);
+  stroke-width: 1px;
+}
+
+.sim-shell__canvas .react-flow__edge-text {
   fill: var(--vd-text-primary, #1c2127);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: bold;
 }
 
 .sim-shell__canvas .react-flow__attribution {
@@ -158,7 +168,10 @@
   gap: 12px;
   padding: 12px 16px;
   min-width: 0;
-  min-height: 0;
+  min-height: 560px;
+  height: clamp(560px, 68vh, 720px);
+  flex-shrink: 0;
+  overflow: hidden;
   align-items: stretch;
 }
 
@@ -167,14 +180,14 @@
   display: flex;
   flex-direction: column;
   height: 100% !important;
-  min-height: 540px;
+  min-height: 360px;
   min-width: 0;
   max-width: 100%;
 }
 
 .sim-shell__canvas [data-testid="topology"] .react-flow {
   flex: 1 1 auto;
-  min-height: 360px;
+  min-height: 300px;
   min-width: 0;
 }
 
@@ -209,19 +222,274 @@
   width: 370px;
   min-width: 0;
   max-width: 100%;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+.machine-detail-panel {
+  min-height: 0;
+  overflow: visible;
+  position: relative;
+}
+
+.faceplate-header-sticky {
+  position: sticky;
+  top: -8px;
+  z-index: 10;
+  background: var(--vd-surface-panel, #f2eee5);
+  margin: -8px -12px 10px -12px;
+  padding: 8px 12px 8px 12px;
+  border-bottom: 2px solid var(--vd-border-dark, #2b303a);
+  box-shadow: 0 2px 4px rgba(43, 48, 58, 0.08);
+}
+
+.machine-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+}
+
+.faceplate-nav__group-label {
+  font-family: var(--font-display, "Press Start 2P", monospace);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #5a5347);
+  margin: 6px 0 3px 0;
+  text-transform: uppercase;
+}
+
+.faceplate-btn {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: bold;
+  padding: 3px 6px;
+  min-width: 28px;
+  text-align: center;
+  background: var(--vd-surface-raised, #faf7f0);
+  border: 1px solid var(--vd-border-dark, #2b303a);
+  color: var(--vd-text-primary, #1c2127);
+  cursor: pointer;
+}
+
+.faceplate-btn:hover {
+  background: var(--vd-surface-hover, #eae5da);
+}
+
+.faceplate-btn.active,
+.faceplate-btn[aria-pressed="true"] {
+  background: var(--vd-text-accent, #1b4965) !important;
+  color: #ffffff !important;
+  border-color: var(--vd-border-dark, #2b303a);
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.machine-specs-grid,
+.config-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 8px 0 12px 0;
+  padding: 0;
+}
+
+.machine-specs-grid > div,
+.config-specs-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  background: var(--paper-50, #fffbf0);
+  border: 1px solid var(--paper-300, #e2d2ac);
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+/* Items that should span both columns for balance */
+.config-specs-grid > div:only-child {
+  grid-column: 1 / -1;
+}
+
+.machine-specs-grid dt,
+.config-specs-grid dt {
+  font-family: var(--font-display, "Press Start 2P", monospace);
+  font-size: 8.5px;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #5a5347);
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.machine-specs-grid dd,
+.config-specs-grid dd {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--ink-950, #141b26);
+  margin: 0;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-section {
+  margin-top: 10px;
+  border-top: 1px dashed var(--paper-300, #e2d2ac);
+  padding-top: 6px;
+}
+
+.config-section .section-title {
+  font-family: var(--font-display, "Press Start 2P", monospace);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--vd-text-primary, #1c2127);
+  margin: 0 0 4px 0;
+  text-transform: uppercase;
+}
+
+/* StripChart Enclosing White Box Card & Calibrated Axes */
+.machine-panel__sparklines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.strip-chart-card {
+  margin: 0;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid var(--vd-border-dark, #2b303a);
+  box-shadow: 2px 2px 0 rgba(43, 48, 58, 0.15),
+              inset 1px 1px 0 rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.strip-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--paper-300, #e2d2ac);
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.strip-chart-title {
+  font-family: var(--font-display, "Press Start 2P", monospace);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: var(--vd-text-primary, #1c2127);
+  text-transform: uppercase;
+}
+
+.strip-chart-scale-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 5px;
+  background: var(--vd-surface-panel, #f2eee5);
+  border: 1px solid var(--vd-border-dark, #2b303a);
+  color: var(--vd-text-primary, #1c2127);
+}
+
+.strip-chart-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.strip-chart-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 1px 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 8.5px;
+  font-weight: bold;
+  color: var(--text-muted, #5a5347);
+  user-select: none;
+  min-width: 28px;
+  flex-shrink: 0;
+}
+
+.strip-chart-y-tick {
+  line-height: 1;
+}
+
+.strip-chart-plot {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.strip-chart-canvas-wrap {
+  position: relative;
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+  background: #ffffff;
+}
+
+.strip-chart-x-axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono, monospace);
+  font-size: 8px;
+  font-weight: bold;
+  color: var(--text-muted, #5a5347);
+  padding: 0 1px;
+  user-select: none;
+}
+
+.strip-chart-caption {
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  color: var(--vd-text-muted, #5e656e);
+  margin-top: 2px;
+  border-top: 1px dashed var(--paper-300, #e2d2ac);
+  padding-top: 3px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Bottom dock: 2x2 grid layout with generous height so individual panels are comfortably readable */
 .sim-shell__dock {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr) minmax(280px, 1.2fr) minmax(240px, 1fr);
-  gap: 12px;
-  padding: 12px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 16px;
   align-items: stretch;
   background: var(--vd-surface-sunken, #dad5c7);
   border-top: 2px solid var(--vd-border-dark, #2b303a);
+  flex-shrink: 0;
+  min-height: 500px;
+}
+
+.sim-shell__dock > * {
+  min-height: 440px;
+  height: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  background: var(--vd-surface-panel, #f2eee5);
+  border: 2px solid var(--vd-border-dark, #2b303a);
+  box-shadow: 2px 2px 0 var(--vd-border-dark, #2b303a);
+  padding: 14px 16px;
 }
 
 /* Loading skeleton */

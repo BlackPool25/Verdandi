@@ -1,0 +1,137 @@
+/* ==========================================================================
+   VERDANDI PIXEL DESIGN SYSTEM — DESIGN TOKENS
+   Calm ISA-101 SCADA Theme: Dark Ink Chrome, Warm Paper Content, Okabe-Ito States
+   Strict 4px pixel grid, zero blur, hard offset shadows, high-contrast WCAG AAA
+   ========================================================================== */
+
+:root {
+  /* -------------------------------------------------------------
+     1. INK TOKENS (SCADA Chrome, Borders, High-Contrast Text)
+     ------------------------------------------------------------- */
+  --ink-950: #141B26; /* Deepest chassis ink / outline / shadow */
+  --ink-900: #1B2430; /* Top bar, rail, primary text ink (12.6:1 on paper-200) */
+  --ink-700: #2E3A4B; /* Inactive tabs, secondary chrome, inner borders */
+  --ink-500: #566275; /* Muted chrome, subtle borders */
+
+  /* -------------------------------------------------------------
+     2. PAPER TOKENS (Warm Industrial Surface & Content Cards)
+     ------------------------------------------------------------- */
+  --paper-50:  #FFFBF0; /* Raised elements, selected card surfaces */
+  --paper-100: #FBF4E2; /* Standard cards, faceplates, inspectors */
+  --paper-200: #F1E6CA; /* Page background, workspace canvas */
+  --paper-300: #E2D2AC; /* Sunken tracks, inactive inputs, borders */
+  --paper-500: #B9A57A; /* Deep bevel shadows, textured lines */
+
+  /* -------------------------------------------------------------
+     3. TYPOGRAPHIC INK TOKENS
+     ------------------------------------------------------------- */
+  --text:       #1B2430; /* Primary body ink (12.6:1 contrast on paper-200) */
+  --text-main:  #1B2430;
+  --text-muted: #5A5347; /* Secondary labels, units (6.1:1 contrast on paper-200) */
+  --text-light: #FBF4E2; /* Paper text on dark ink chrome (14.3:1 on ink-900) */
+
+  /* -------------------------------------------------------------
+     4. OKABE-ITO OPERATIONAL STATE TOKENS (Abnormal salience only)
+     ------------------------------------------------------------- */
+  /* RUN: Normal production */
+  --state-run:       #009E73; /* Emerald glyph/indicator */
+  --state-run-ink:   #005E44; /* Text-safe variant on paper (7.1:1) */
+  --state-run-bg:    #E7F7F0; /* Soft tinted surface for active card */
+
+  /* STARVED: Infeed empty / waiting for parts */
+  --state-starved:     #56B4E9; /* Sky blue glyph/indicator */
+  --state-starved-ink: #0A567E; /* Text-safe variant on paper (7.2:1) */
+  --state-starved-bg:  #EDF7FC; /* Soft tinted surface */
+
+  /* BLOCKED: Output full / nowhere to deposit finished part */
+  --state-blocked:     #E69F00; /* Warm amber glyph/indicator */
+  --state-blocked-ink: #7D5200; /* Text-safe variant on paper (6.2:1) */
+  --state-blocked-bg:  #FCF5E6; /* Soft tinted surface */
+
+  /* DOWN: Machine failure or broken down */
+  --state-down:       #D55E00; /* Vermillion glyph/indicator */
+  --state-down-ink:   #8A3800; /* Text-safe variant on paper (7.2:1) */
+  --state-down-bg:    #FCEEE6; /* Soft tinted surface */
+
+  /* -------------------------------------------------------------
+     5. ANOMALY & FAULT MARKERS
+     ------------------------------------------------------------- */
+  --fault-injected:       #D55E00; /* Solid 3px vermillion outline + bolt */
+  --fault-injected-ink:   #8A3800;
+  --fault-natural:        #0072B2; /* Dashed 3px cobalt outline */
+  --fault-natural-ink:    #004B75;
+  --congestion-border:    #E69F00; /* Dashed 2px amber outline */
+  --accent-bar:           #E69F00; /* Left rail active indicator */
+  --focus-ring:           #0072B2; /* Keyboard focus indicator (2px offset) */
+
+  /* -------------------------------------------------------------
+     6. TELEMETRY DATA SERIES (Strictly Distinct from State)
+     ------------------------------------------------------------- */
+  --series-sensor:  #0072B2; /* Process observation analog signal (Cobalt Blue) */
+  --series-current: #CC79A7; /* Motor current in Amperes (Reddish Purple) */
+
+  /* -------------------------------------------------------------
+     7. TYPOGRAPHY STACKS
+     ------------------------------------------------------------- */
+  --font-display: "Press Start 2P", monospace;
+  --font-ui:      "Pixelify Sans", sans-serif;
+  --font-mono:    "VT323", monospace; /* Strictly raw JSON viewers only */
+
+  /* -------------------------------------------------------------
+     8. PIXEL PRIMITIVES (4px Grid)
+     ------------------------------------------------------------- */
+  --unit: 4px;
+  --border-2px: 2px solid var(--ink-900);
+  --border-4px: 4px solid var(--ink-900);
+  --shadow-card: 4px 4px 0px 0px var(--ink-950);
+  --shadow-sm:   2px 2px 0px 0px var(--ink-950);
+  --shadow-inset: inset 2px 2px 0 var(--paper-50), inset -2px -2px 0 var(--paper-300);
+
+  /* -------------------------------------------------------------
+     9. LEGACY ALIAS BRIDGES (Maintains backward compatibility)
+     ------------------------------------------------------------- */
+  --vd-bg-base: var(--paper-200);
+  --vd-bg-grid: var(--paper-300);
+  --vd-surface-panel: var(--paper-100);
+  --vd-surface-raised: var(--paper-50);
+  --vd-surface-sunken: var(--paper-300);
+  --vd-surface-hover: var(--paper-50);
+  --vd-text-primary: var(--text-main);
+  --vd-text-muted: var(--text-muted);
+  --vd-text-dim: var(--paper-500);
+  --vd-border-dark: var(--ink-900);
+  --vd-border-muted: var(--paper-500);
+  --vd-border-highlight: var(--paper-50);
+  --vd-border-shadow: var(--paper-300);
+  --vd-state-run: var(--state-run);
+  --vd-state-run-bg: var(--state-run-bg);
+  --vd-state-run-border: var(--state-run-ink);
+  --vd-state-idle: var(--ink-500);
+  --vd-state-starved: var(--state-starved);
+  --vd-state-starved-bg: var(--state-starved-bg);
+  --vd-state-starved-border: var(--state-starved-ink);
+  --vd-state-blocked: var(--state-blocked);
+  --vd-state-blocked-bg: var(--state-blocked-bg);
+  --vd-state-blocked-border: var(--state-blocked-ink);
+  --vd-state-down: var(--state-down);
+  --vd-state-down-bg: var(--state-down-bg);
+  --vd-state-down-border: var(--state-down-ink);
+}
+
+/* Base Pixel Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--paper-300);
+  border-left: 2px solid var(--ink-900);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--paper-500);
+  border: 2px solid var(--ink-900);
+  box-shadow: inset 1px 1px 0 var(--paper-50);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-700);
+}

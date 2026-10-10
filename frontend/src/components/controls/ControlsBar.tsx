@@ -68,7 +68,11 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
       ext.source.setPlaying(typeof p === "function" ? p(ext.source.playing) : p);
       return;
     }
-    setPlayingLocal(p);
+    const next = typeof p === "function" ? p(playingLocal) : p;
+    if (next && cursorLocal >= (rowsRef.current.length || T_TOTAL) - 1) {
+      setCursorLocal(0);
+    }
+    setPlayingLocal(next);
   }
 
   function setSpeed(s: number): void {
