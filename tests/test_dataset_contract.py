@@ -351,14 +351,20 @@ def test_grouped_splits_using_stratification_keys_only(tmp_path, strat_key):
 
     # For continuous wear_endpoint, discretize into discrete classes for stratification
     if strat_key == "wear_endpoint":
+        binned = None
         if df["wear_endpoint"].nunique() > 1:
-            df["wear_binned"] = pd.qcut(
-                df["wear_endpoint"], q=2, labels=["low", "high"]
-            )
-        else:
-            df["wear_binned"] = df["wear_endpoint"].apply(
+            try:
+                cand = pd.qcut(df["wear_endpoint"], q=2, labels=["low", "high"])
+                n_eps_per_bin = df.assign(_b=cand).groupby("_b")["episode_id"].nunique()
+                if cand.nunique() > 1 and n_eps_per_bin.min() >= 2:
+                    binned = cand
+            except ValueError:
+                binned = None
+        if binned is None:
+            binned = df["wear_endpoint"].apply(
                 lambda w: "nominal" if w <= 5.0 else "critical"
             )
+        df["wear_binned"] = binned
         key_to_use = "wear_binned"
     else:
         key_to_use = strat_key

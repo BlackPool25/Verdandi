@@ -38,6 +38,7 @@ def test_record_keys():
     # keys (throughput/events reads per TC-006b) on top of the T1 nine.
     # T-B8 adds the Table 3.1 roster snapshot (SIM_SPEC §4.4, Copilot :1161).
     # W7 (CH8): top-level "currents" 26x300 series (schema v4, hashed).
+    # PRISSUE-23 (M0.2c): top-level "wstate" 26-float per-machine WSTATE endpoints.
     assert set(rec) == {
         "seed",
         "T",
@@ -57,6 +58,7 @@ def test_record_keys():
         "faults",
         "currents",
         "strat",
+        "wstate",
     }
 
 
