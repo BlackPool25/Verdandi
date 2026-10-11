@@ -552,14 +552,15 @@ export function AnomalyPage(): React.JSX.Element {
           border: "2px solid var(--ink-900)",
           padding: 14,
           boxShadow: "var(--shadow-card)",
+          fontFamily: "var(--font-mono, 'VT323', monospace)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
           <div>
-            <h3 className="px-h3" style={{ margin: 0 }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 18, fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
               2. Incident Telemetry Ledger ({filteredIncidents.length} Events Showing)
             </h3>
-            <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--text-muted)" }}>
+            <p style={{ margin: "2px 0 0 0", fontSize: 14, color: "var(--text-muted)", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
               Chronological ledger of mechanical wear, injected faults, logistics waits, quality verdicts, and sensor outliers.
             </p>
           </div>
@@ -580,7 +581,8 @@ export function AnomalyPage(): React.JSX.Element {
                 className="px-btn"
                 onClick={() => setSelectedCategory(cat.id)}
                 style={{
-                  fontSize: 10,
+                  fontFamily: "var(--font-mono, 'VT323', monospace)",
+                  fontSize: 13,
                   padding: "2px 6px",
                   background: selectedCategory === cat.id ? "var(--ink-900)" : "var(--paper-100)",
                   color: selectedCategory === cat.id ? "#fff" : "var(--ink-950)",
@@ -594,7 +596,7 @@ export function AnomalyPage(): React.JSX.Element {
         </div>
 
         {filteredIncidents.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          <p style={{ fontSize: 15, color: "var(--text-muted)", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             No events match the selected category filter for this episode.
           </p>
         ) : (
@@ -606,14 +608,14 @@ export function AnomalyPage(): React.JSX.Element {
               background: "var(--paper-50)",
             }}
           >
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
               <thead>
                 <tr style={{ background: "var(--paper-300)", borderBottom: "1px solid var(--ink-900)", textAlign: "left" }}>
-                  <th style={{ padding: "4px 8px" }}>STEP</th>
-                  <th style={{ padding: "4px 8px" }}>STATION</th>
-                  <th style={{ padding: "4px 8px" }}>CATEGORY</th>
-                  <th style={{ padding: "4px 8px" }}>CLASSIFICATION & ROOT CAUSE</th>
-                  <th style={{ padding: "4px 8px" }}>ACTION</th>
+                  <th style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>STEP</th>
+                  <th style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>STATION</th>
+                  <th style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>CATEGORY</th>
+                  <th style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>CLASSIFICATION & ROOT CAUSE</th>
+                  <th style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>ACTION</th>
                 </tr>
               </thead>
               <tbody>
@@ -625,10 +627,10 @@ export function AnomalyPage(): React.JSX.Element {
                       background: inc.machine === selectedId ? "var(--paper-200)" : "transparent",
                     }}
                   >
-                    <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, monospace)" }}>
+                    <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>
                       t={inc.step}
                     </td>
-                    <td style={{ padding: "4px 8px", fontWeight: "bold" }}>
+                    <td style={{ padding: "4px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>
                       {inc.machine}
                     </td>
                     <td style={{ padding: "4px 8px" }}>
@@ -647,13 +649,14 @@ export function AnomalyPage(): React.JSX.Element {
                                     : "var(--ink-700)",
                           color: "#fff",
                           padding: "1px 6px",
-                          fontSize: 9,
+                          fontFamily: "var(--font-mono, 'VT323', monospace)",
+                          fontSize: 13,
                         }}
                       >
                         {inc.categoryLabel}
                       </span>
                     </td>
-                    <td style={{ padding: "4px 8px" }}>{inc.detail}</td>
+                    <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>{inc.detail}</td>
                     <td style={{ padding: "4px 8px" }}>
                       <button
                         type="button"
@@ -662,7 +665,7 @@ export function AnomalyPage(): React.JSX.Element {
                           source.stepTo(inc.step);
                           setSelectedId(inc.machine);
                         }}
-                        style={{ fontSize: 10, padding: "2px 6px" }}
+                        style={{ fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 13, padding: "2px 6px" }}
                         title={`Jump simulation to step ${inc.step}`}
                       >
                         Jump to t={inc.step}
@@ -684,10 +687,11 @@ export function AnomalyPage(): React.JSX.Element {
           border: "2px solid var(--ink-900)",
           padding: 14,
           boxShadow: "var(--shadow-card)",
+          fontFamily: "var(--font-mono, 'VT323', monospace)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <h3 className="px-h3" style={{ margin: 0 }}>
+          <h3 style={{ margin: 0, fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 18, fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
             3. Continuous Sensor Telemetry Integrity (26 Station Channels)
           </h3>
           <span
@@ -696,7 +700,8 @@ export function AnomalyPage(): React.JSX.Element {
               background: summary.sensorAnomalyCount === 0 ? "var(--state-run)" : "var(--state-blocked)",
               color: "#fff",
               border: "1px solid var(--ink-900)",
-              fontSize: 10,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 13,
               padding: "2px 8px",
             }}
           >
@@ -705,7 +710,7 @@ export function AnomalyPage(): React.JSX.Element {
               : `${summary.sensorAnomalyCount} STATISTICAL OUTLIERS (>3σ)`}
           </span>
         </div>
-        <p style={{ fontSize: 13, color: "var(--text-main)", marginTop: 8, lineHeight: 1.4 }}>
+        <p style={{ fontSize: 15, color: "var(--text-main)", marginTop: 8, lineHeight: 1.35, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
           Live process verification across all 26 machine vibration, thermal, and current telemetry streams. Nominal baseline physics maintains calibrated Gaussian variance around baseline. When sensor drift, bias, or cyber-physical anomalies are injected, the real-time detector flags observations deviating beyond the 3-sigma tolerance threshold.
         </p>
       </section>

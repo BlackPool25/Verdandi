@@ -29,6 +29,7 @@ const DEFAULT_BADGE_MS = 100;
 
 export interface TwinStore {
   ingest(tick: Tick): void;
+  seek(step: number, sbufLevel?: number): void;
   subscribeTransient(fn: Listener): Unsub;
   subscribeBadges(fn: Listener): Unsub;
   flushBadges(): void;
@@ -75,6 +76,7 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
   const tickListeners = new Set<Listener>();
   const dirty = new Set<string>();
   let cursor = -1;
+  let activeCursor = -1;
   let ticksSincePaint = 0;
   let dropped = 0;
   let paints = 0;
@@ -94,7 +96,7 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
         if (id === undefined || v === undefined) continue;
         const ring = obsRings.get(id);
         if (ring === undefined) continue;
-        ring.push(v);
+        ring.set(tick.step, v);
         dirty.add(id);
       }
       const c = Math.min(tick.currents.length, mOrder.length);
@@ -104,7 +106,7 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
         if (id === undefined || v === undefined) continue;
         const ring = curRings.get(id);
         if (ring === undefined) continue;
-        ring.push(v);
+        ring.set(tick.step, v);
         dirty.add(`cur:${id}`);
       }
       const m = Math.min(tick.buffers.length, bOrder.length);
@@ -114,12 +116,33 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
         if (id === undefined || v === undefined) continue;
         const ring = bufRings.get(id);
         if (ring === undefined) continue;
-        ring.push(v);
+        ring.set(tick.step, v);
         dirty.add(`buf:${id}`);
       }
-      cursor = tick.step;
+      cursor = Math.max(cursor, tick.step);
+      if (activeCursor < 0 || activeCursor === tick.step - 1 || activeCursor === cursor - 1) {
+        activeCursor = tick.step;
+      }
       lastSbuf = tick.sbuf_level;
       ticksSincePaint += 1;
+      emit(tickListeners);
+    },
+
+    seek(step: number, sbufLevel?: number): void {
+      activeCursor = step;
+      if (sbufLevel !== undefined) {
+        lastSbuf = sbufLevel;
+      }
+      dirty.add("*");
+      ticksSincePaint += 1;
+      const t = now();
+      lastBadgeAt = t;
+      badgeStore.setState({
+        cursor: activeCursor,
+        sbufLevel: lastSbuf,
+        backpressure: dropped,
+        updatedAt: t,
+      });
       emit(tickListeners);
     },
 
@@ -138,7 +161,8 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
       const t = now();
       if (t - lastBadgeAt < badgeMs) return;
       lastBadgeAt = t;
-      badgeStore.setState({ cursor, sbufLevel: lastSbuf, backpressure: dropped, updatedAt: t });
+      const cur = activeCursor >= 0 ? activeCursor : cursor;
+      badgeStore.setState({ cursor: cur, sbufLevel: lastSbuf, backpressure: dropped, updatedAt: t });
     },
 
     paintDirty(): void {
@@ -151,7 +175,7 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
     },
 
     cursor(): number {
-      return cursor;
+      return activeCursor >= 0 ? activeCursor : cursor;
     },
 
     backpressure(): number {
@@ -167,15 +191,18 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
     },
 
     series(id: MachineId | string): Float32Array {
-      return obsRings.get(id)?.snapshot() ?? new Float32Array(0);
+      const cur = activeCursor >= 0 ? activeCursor : cursor;
+      return obsRings.get(id)?.snapshot(cur >= 0 ? cur + 1 : undefined) ?? new Float32Array(0);
     },
 
     currentSeries(id: MachineId | string): Float32Array {
-      return curRings.get(id)?.snapshot() ?? new Float32Array(0);
+      const cur = activeCursor >= 0 ? activeCursor : cursor;
+      return curRings.get(id)?.snapshot(cur >= 0 ? cur + 1 : undefined) ?? new Float32Array(0);
     },
 
     bufferSeries(id: BufferId | string): Float32Array {
-      return bufRings.get(id)?.snapshot() ?? new Float32Array(0);
+      const cur = activeCursor >= 0 ? activeCursor : cursor;
+      return bufRings.get(id)?.snapshot(cur >= 0 ? cur + 1 : undefined) ?? new Float32Array(0);
     },
 
     reset(): void {
@@ -193,6 +220,7 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
       }
       dirty.clear();
       cursor = -1;
+      activeCursor = -1;
       ticksSincePaint = 0;
       dropped = 0;
       paints = 0;

@@ -92,6 +92,11 @@
   background: #2ce8f5;
 }
 
+.scada-event-feed-panel {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+
 .scada-event-feed-panel .panel-title {
   font-family: var(--font-display, monospace);
   font-size: 11px;
@@ -119,6 +124,25 @@
   border: 1px solid var(--vd-border-muted, #b8b3a5);
 }
 
+/* Feed table header */
+.evt-feed-header {
+  display: grid;
+  grid-template-columns: 55px 75px 120px 1fr;
+  padding: 4px 8px;
+  background: var(--paper-300, #ded8c9);
+  border: 1px solid var(--vd-border-dark, #2b303a);
+  border-bottom: none;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--vd-text-primary, #1c2127);
+  letter-spacing: 0.5px;
+}
+
+.evt-th {
+  text-transform: uppercase;
+}
+
 /* Feed rows mirror the node styles so list + topology agree. */
 .evt-feed {
   list-style: none;
@@ -128,9 +152,13 @@
   font-size: 14px;
   border: 1px solid var(--vd-border-dark, #2b303a);
   background: var(--vd-surface-sunken, #dad5c7);
+  overscroll-behavior: auto;
 }
 
 .evt-row {
+  display: grid;
+  grid-template-columns: 55px 75px 120px 1fr;
+  align-items: center;
   padding: 3px 8px;
   border-left: 4px solid transparent;
   color: var(--vd-text-primary, #1c2127);
@@ -154,9 +182,66 @@
   background: #f0f7f8;
 }
 
+.evt-col-step {
+  font-weight: bold;
+  color: var(--vd-text-accent, #1b4965);
+}
+
+.evt-col-station {
+  font-weight: bold;
+  color: var(--vd-text-primary, #1c2127);
+}
+
+.evt-col-event {
+  display: flex;
+  align-items: center;
+}
+
+.evt-col-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.evt-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--vd-border-dark, #2b303a);
+  background: var(--vd-surface-raised, #faf7f0);
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 1.2;
+}
+
+.evt-badge-fault,
+.evt-badge-down_up {
+  background: #fae4e8;
+  color: #7f2737;
+  border-color: #ef3e4a;
+}
+
+.evt-badge-starve {
+  background: #eef6fc;
+  color: #0e7490;
+  border-color: #56b4e9;
+}
+
+.evt-badge-block {
+  background: #fdf6e7;
+  color: #8a6d00;
+  border-color: #e69f00;
+}
+
 .evt-row .row-kind {
   font-weight: bold;
-  margin-left: 6px;
+  margin-left: 0;
+  font-size: 13px;
+}
+
+.evt-empty-row {
+  padding: 8px;
+  color: var(--text-muted, #5a5347);
+  font-style: italic;
 }
 
 /* Reduced motion: static GT outline, zero blink. */
