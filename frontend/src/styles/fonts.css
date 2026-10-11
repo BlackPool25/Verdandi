@@ -16,7 +16,8 @@
   --font-ui: "Pixelify Sans", sans-serif;
   --font-body: "Pixelify Sans", sans-serif;
   --font-mono: "VT323", monospace;
-  --font-data: "Pixelify Sans", monospace;
+  --font-data: "VT323", monospace;
+  --font-pixel: "VT323", monospace;
 }
 
 body {
@@ -25,6 +26,10 @@ body {
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.font-pixel {
+  font-family: var(--font-pixel);
 }
 
 .font-display,

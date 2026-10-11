@@ -266,10 +266,10 @@
 }
 
 .faceplate-btn {
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 14px;
   font-weight: bold;
-  padding: 3px 6px;
+  padding: 2px 6px;
   min-width: 28px;
   text-align: center;
   background: var(--vd-surface-raised, #faf7f0);
@@ -329,8 +329,8 @@
 
 .machine-specs-grid dd,
 .config-specs-grid dd {
-  font-family: var(--font-mono, monospace);
-  font-size: 13px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 15px;
   font-weight: bold;
   color: var(--ink-950, #141b26);
   margin: 0;

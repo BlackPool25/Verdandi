@@ -142,10 +142,10 @@ export function AnomalyPage(): React.JSX.Element {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)" }}>
+          <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>
             EP: {episodeId?.slice(0, 8) ?? "none"}
           </span>
-          <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)" }}>
+          <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>
             STEP: {cursor} / 300
           </span>
           <span
@@ -154,6 +154,8 @@ export function AnomalyPage(): React.JSX.Element {
               background: source.connected ? "var(--state-run)" : "var(--state-down)",
               color: "#fff",
               border: "2px solid var(--ink-900)",
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 14,
             }}
           >
             {source.connected ? "LIVE STREAM" : "OFFLINE"}
@@ -264,20 +266,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             MECHANICAL WEAR
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: summary.naturalBreakdownCount > 0 ? "var(--series-sensor)" : "var(--state-run-ink)",
             }}
           >
             {summary.naturalBreakdownCount}
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             {summary.downTicks} ticks down · Poisson MTTF
           </div>
         </div>
@@ -292,20 +295,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             INJECTED FAULTS
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: summary.injectedFaultCount > 0 ? "var(--state-down-ink)" : "var(--state-run-ink)",
             }}
           >
             {summary.injectedFaultCount}
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             {summary.injectedFaultCount > 0 ? "Synthetic faults active" : "0 faults (Nominal)"}
           </div>
         </div>
@@ -320,20 +324,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             QUALITY & REWORK
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: summary.qualityDefectCount > 0 ? "var(--state-blocked-ink)" : "var(--state-run-ink)",
             }}
           >
             {summary.qualityDefectCount}
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             Inspection & rework loops
           </div>
         </div>
@@ -348,20 +353,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             LOGISTICS AGV WAITS
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: summary.logisticsWaitCount > 0 ? "var(--state-starved-ink, #0072b2)" : "var(--state-run-ink)",
             }}
           >
             {summary.logisticsWaitCount}
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             Aisle corridor transfers
           </div>
         </div>
@@ -376,20 +382,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             SENSOR OUTLIERS (&gt;3σ)
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: summary.sensorAnomalyCount > 0 ? "var(--state-down-ink)" : "var(--state-run-ink)",
             }}
           >
             {summary.sensorAnomalyCount}
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             Continuous telemetry anomalies
           </div>
         </div>
@@ -404,20 +411,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             MATERIAL STARVATION
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: "var(--state-starved-ink, #0072b2)",
             }}
           >
             {summary.starvedRatePct.toFixed(2)}%
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             {summary.starvedTicks} ticks waiting for parts
           </div>
         </div>
@@ -432,20 +440,21 @@ export function AnomalyPage(): React.JSX.Element {
             boxShadow: "var(--shadow-card)",
           }}
         >
-          <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontFamily: "var(--font-mono, 'VT323', monospace)", fontWeight: "bold", letterSpacing: "0.5px" }}>
             PLANT AVAILABILITY
           </div>
           <div
             style={{
-              fontFamily: "var(--font-display, monospace)",
-              fontSize: 20,
+              fontFamily: "var(--font-mono, 'VT323', monospace)",
+              fontSize: 26,
               marginTop: 4,
+              fontWeight: "bold",
               color: "var(--state-run-ink)",
             }}
           >
             {summary.availabilityPct.toFixed(2)}%
           </div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             {summary.runTicks} ticks nominal RUN
           </div>
         </div>
@@ -463,6 +472,7 @@ export function AnomalyPage(): React.JSX.Element {
           display: "flex",
           flexDirection: "column",
           gap: 4,
+          fontFamily: "var(--font-mono, 'VT323', monospace)",
         }}
       >
         <div
@@ -470,21 +480,23 @@ export function AnomalyPage(): React.JSX.Element {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            fontFamily: "var(--font-display, monospace)",
-            fontSize: 11,
+            fontFamily: "var(--font-mono, 'VT323', monospace)",
+            fontSize: 16,
+            fontWeight: "bold",
             color: "var(--ink-950)",
             textTransform: "uppercase",
+            letterSpacing: "0.5px",
           }}
         >
-          <span style={{ color: "var(--state-starved)" }}>ℹ</span> PROCESS PRINCIPLE: INDEPENDENT FAILURES & MATERIAL FLOW PROPAGATION
+          <span style={{ color: "var(--state-starved)" }}>ℹ</span> PROCESS PRINCIPLE: INDEPENDENT FAILURES &amp; MATERIAL FLOW PROPAGATION
         </div>
-        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.4, color: "var(--text-main)" }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.35, color: "var(--text-main)", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
           <strong>No Cascading Mechanical Breakdowns:</strong> Machines in Verdandi fail independently governed by individual Poisson MTTF wear. An upstream failure does <em>not</em> trigger secondary or related mechanical failures on downstream machines.
         </p>
-        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.4, color: "var(--text-main)" }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.35, color: "var(--text-main)", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
           <strong>Downstream Impact is Material Starvation (STARVED):</strong> When an upstream machine halts, downstream stations quickly exhaust their intermediate buffer cells and enter the <strong>STARVED</strong> state (blue). They remain mechanically healthy but idle awaiting material.
         </p>
-        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.4, color: "var(--text-main)" }}>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.35, color: "var(--text-main)", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
           <strong>Upstream Impact is Buffer Blocking (BLOCKED):</strong> When a downstream station halts, parts accumulate in intermediate buffers until capacity is reached, forcing upstream machines into the <strong>BLOCKED</strong> state (amber) to prevent buffer overflow.
         </p>
       </section>
@@ -497,6 +509,7 @@ export function AnomalyPage(): React.JSX.Element {
           border: "2px solid var(--ink-900)",
           padding: 14,
           boxShadow: "var(--shadow-card)",
+          fontFamily: "var(--font-mono, 'VT323', monospace)",
         }}
       >
         <div
@@ -510,16 +523,16 @@ export function AnomalyPage(): React.JSX.Element {
           }}
         >
           <div>
-            <h3 className="px-h3" style={{ margin: 0 }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 18, fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
               1. Multi-Station Operational State Heatmap (26 Machines × 300 Steps)
             </h3>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "2px 0 0 0" }}>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: "2px 0 0 0", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
               Click anywhere on the timeline to scrub the simulation playhead to that step.
             </p>
           </div>
 
           {/* Color Legend */}
-          <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 11 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 14, fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 10, height: 10, background: "#009e73", border: "1px solid #141b26" }} /> RUN
             </span>
@@ -723,67 +736,68 @@ export function AnomalyPage(): React.JSX.Element {
           border: "2px solid var(--ink-900)",
           padding: 14,
           boxShadow: "var(--shadow-card)",
+          fontFamily: "var(--font-mono, 'VT323', monospace)",
         }}
       >
-        <h3 className="px-h3" style={{ margin: "0 0 8px 0" }}>
+        <h3 style={{ margin: "0 0 8px 0", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 18, fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px" }}>
           4. Digital Twin Anomaly &amp; Fault Mode Taxonomy
         </h3>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 10px 0" }}>
+        <p style={{ fontSize: 14, color: "var(--text-muted)", margin: "0 0 10px 0", fontFamily: "var(--font-mono, 'VT323', monospace)" }}>
           Comprehensive reference of all 7 anomaly and disruption modes supported by the Verdandi digital twin architecture:
         </p>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, background: "var(--paper-50)", border: "1px solid var(--ink-900)" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, fontFamily: "var(--font-mono, 'VT323', monospace)", background: "var(--paper-50)", border: "1px solid var(--ink-900)" }}>
             <thead>
               <tr style={{ background: "var(--paper-300)", borderBottom: "1px solid var(--ink-900)", textAlign: "left" }}>
-                <th style={{ padding: "6px 8px" }}>FAULT CLASS</th>
-                <th style={{ padding: "6px 8px" }}>PHYSICAL PHENOMENON</th>
-                <th style={{ padding: "6px 8px" }}>TELEMETRY SIGNATURE</th>
-                <th style={{ padding: "6px 8px" }}>FACTORY LINE IMPACT</th>
+                <th style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>FAULT CLASS</th>
+                <th style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>PHYSICAL PHENOMENON</th>
+                <th style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>TELEMETRY SIGNATURE</th>
+                <th style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 15 }}>FACTORY LINE IMPACT</th>
               </tr>
             </thead>
             <tbody>
               <tr style={{ borderBottom: "1px solid var(--paper-200)" }}>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Mechanical Wear</td>
-                <td style={{ padding: "6px 8px" }}>Component fatigue &amp; motor breakdown (Poisson MTTF)</td>
-                <td style={{ padding: "6px 8px" }}>State transitions to DOWN; motor current drops to 0</td>
-                <td style={{ padding: "6px 8px" }}>Station halts; downstream starved, upstream blocked</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Mechanical Wear</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Component fatigue &amp; motor breakdown (Poisson MTTF)</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>State transitions to DOWN; motor current drops to 0</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Station halts; downstream starved, upstream blocked</td>
               </tr>
               <tr style={{ borderBottom: "1px solid var(--paper-200)" }}>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Sensor Drift</td>
-                <td style={{ padding: "6px 8px" }}>Gradual calibration decay / sensor degradation</td>
-                <td style={{ padding: "6px 8px" }}>Linear slope drift away from baseline (&gt;3σ)</td>
-                <td style={{ padding: "6px 8px" }}>Silent telemetry degradation without immediate line halt</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Sensor Drift</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Gradual calibration decay / sensor degradation</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Linear slope drift away from baseline (&gt;3σ)</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Silent telemetry degradation without immediate line halt</td>
               </tr>
               <tr style={{ borderBottom: "1px solid var(--paper-200)" }}>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Sensor Bias / Spike</td>
-                <td style={{ padding: "6px 8px" }}>Constant DC offset shift or transient electrical pulse</td>
-                <td style={{ padding: "6px 8px" }}>Instantaneous step shift ±4..10σ in observation</td>
-                <td style={{ padding: "6px 8px" }}>False-alarm trips in SCADA threshold monitoring</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Sensor Bias / Spike</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Constant DC offset shift or transient electrical pulse</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Instantaneous step shift ±4..10σ in observation</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>False-alarm trips in SCADA threshold monitoring</td>
               </tr>
               <tr style={{ borderBottom: "1px solid var(--paper-200)" }}>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Process Delay</td>
-                <td style={{ padding: "6px 8px" }}>Thermal friction / mechanical slowdown extending cycle time</td>
-                <td style={{ padding: "6px 8px" }}>Extended cycle time d (+3..6 steps per part)</td>
-                <td style={{ padding: "6px 8px" }}>Throughput bottlenecks, upstream buffer congestion</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Process Delay</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Thermal friction / mechanical slowdown extending cycle time</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Extended cycle time d (+3..6 steps per part)</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Throughput bottlenecks, upstream buffer congestion</td>
               </tr>
               <tr style={{ borderBottom: "1px solid var(--paper-200)" }}>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Material / Yield Loss</td>
-                <td style={{ padding: "6px 8px" }}>In-process workpiece drop or ejection failure</td>
-                <td style={{ padding: "6px 8px" }}>Drop rate 0.10..0.30; parts disappear mid-flow</td>
-                <td style={{ padding: "6px 8px" }}>Downstream stations starved unexpectedly with no breakdown</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Material / Yield Loss</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>In-process workpiece drop or ejection failure</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Drop rate 0.10..0.30; parts disappear mid-flow</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Downstream stations starved unexpectedly with no breakdown</td>
               </tr>
               <tr style={{ borderBottom: "1px solid var(--paper-200)" }}>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Quality Defect &amp; Rework</td>
-                <td style={{ padding: "6px 8px" }}>Machining out-of-tolerance detected at INSP0 / ASM2</td>
-                <td style={{ padding: "6px 8px" }}>Quality verdict REJECT/DEGRADE; routing to RWK0</td>
-                <td style={{ padding: "6px 8px" }}>Defective assemblies routed to RWK0 Rework Bay loop</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Quality Defect &amp; Rework</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Machining out-of-tolerance detected at INSP0 / ASM2</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Quality verdict REJECT/DEGRADE; routing to RWK0</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Defective assemblies routed to RWK0 Rework Bay loop</td>
               </tr>
               <tr>
-                <td style={{ padding: "6px 8px", fontWeight: "bold" }}>Logistics AGV Wait</td>
-                <td style={{ padding: "6px 8px" }}>Automated Guided Vehicle transport corridor contention</td>
-                <td style={{ padding: "6px 8px" }}>AGV_WAIT events emitted with wait and hold timers</td>
-                <td style={{ padding: "6px 8px" }}>Assembly ASM0 starved of kit kits; tail buffers hold parts</td>
+                <td style={{ padding: "6px 8px", fontWeight: "bold", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Logistics AGV Wait</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Automated Guided Vehicle transport corridor contention</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>AGV_WAIT events emitted with wait and hold timers</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>Assembly ASM0 starved of kit kits; tail buffers hold parts</td>
               </tr>
             </tbody>
           </table>
