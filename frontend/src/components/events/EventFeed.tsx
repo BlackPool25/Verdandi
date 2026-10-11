@@ -56,13 +56,19 @@ export function EventFeed(props: EventFeedProps): React.JSX.Element {
           <span data-testid="feed-overflow">…+{rows.overflow} more</span>
         )}
       </div>
+      <div className="evt-feed-header">
+        <span className="evt-th evt-col-step">STEP</span>
+        <span className="evt-th evt-col-station">STATION</span>
+        <span className="evt-th evt-col-event">EVENT</span>
+        <span className="evt-th evt-col-kind">STATUS / CLASSIFICATION</span>
+      </div>
       <ul
         className="evt-feed"
         data-testid="event-feed-list"
         style={{ flex: "1 1 auto", minHeight: 320, maxHeight: 380, overflowY: "auto" }}
       >
         {rows.visible.length === 0 && (
-          <li data-testid="feed-empty">No events at this step yet.</li>
+          <li data-testid="feed-empty" className="evt-empty-row">No events at this step yet.</li>
         )}
         {rows.visible.map((ev, i) => (
           <FeedRow key={`${ev.t}-${ev.event}-${ev.machine}-${i}`} ev={ev} />
@@ -91,12 +97,19 @@ const FeedRow = memo(function FeedRow({ ev }: { readonly ev: TwinEvent }): React
       data-down-kind={kind ?? ""}
       className={rowClass}
     >
-      {labelFor(ev)}
-      {kind !== null && (
-        <span className="row-kind" data-testid="event-kind-glyph">
-          ! {kind === "injected" ? "FAULT" : "NATURAL"}
-        </span>
-      )}
+      <span className="evt-col-step">t={ev.t}</span>
+      <span className="evt-col-station">{ev.machine}</span>
+      <span className="evt-col-event">
+        <span className={`evt-badge evt-badge-${familyAttr.toLowerCase()}`}>{ev.event}</span>
+      </span>
+      <span className="evt-col-kind">
+        {kind !== null && (
+          <span className="row-kind" data-testid="event-kind-glyph">
+            ! {kind === "injected" ? "FAULT" : "NATURAL"}
+          </span>
+        )}
+        <span className="evt-raw-label" style={{ display: "none" }}>{labelFor(ev)}</span>
+      </span>
     </li>
   );
 });

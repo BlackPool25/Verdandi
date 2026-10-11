@@ -181,76 +181,96 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
         </div>
         <details data-testid="details-episode" open>
           <summary>Episode setup</summary>
-          <label>
-            seed
-            <input data-testid="seed-input" inputMode="numeric" value={seedText} onChange={(e) => setSeedText(e.target.value)} />
-          </label>
-          <button type="button" data-testid="new-episode" disabled={submitting} onClick={() => void startEpisode()}>
-            {submitting ? "Starting…" : "Start new episode"}
-          </button>
-          <label>
-            <input
-              data-testid="natural-toggle"
-              type="checkbox"
-              checked={natural}
-              onChange={(e) => setNatural(e.target.checked)}
-            />
-            enable_natural_breakdown
-          </label>
-          <p>
-            episode <span data-testid="episode-id">{episode === null ? (sharedEpisodeId ?? "none") : episode.episode_id}</span>
-          </p>
-          <p>
-            digest <span data-testid="episode-digest">{episode === null ? "none" : episode.replay_digest}</span>
-          </p>
-          <p data-testid="validation-hints">{VALIDATION_HINTS}</p>
-          <p data-testid="form-error">{formError}</p>
+          <div className="ctrl-group ctrl-episode-header">
+            <label className="ctrl-field-inline">
+              <span className="ctrl-label-text">seed</span>
+              <input data-testid="seed-input" inputMode="numeric" value={seedText} onChange={(e) => setSeedText(e.target.value)} />
+            </label>
+            <button type="button" data-testid="new-episode" className="ctrl-btn-primary" disabled={submitting} onClick={() => void startEpisode()}>
+              {submitting ? "Starting…" : "Start new episode"}
+            </button>
+            <label className="ctrl-checkbox-label">
+              <input
+                data-testid="natural-toggle"
+                type="checkbox"
+                checked={natural}
+                onChange={(e) => setNatural(e.target.checked)}
+              />
+              <span>enable_natural_breakdown</span>
+            </label>
+          </div>
+
+          <div className="ctrl-meta-grid">
+            <div className="ctrl-meta-card">
+              <span className="ctrl-meta-title">EPISODE ID</span>
+              <span className="ctrl-meta-value" data-testid="episode-id">{episode === null ? (sharedEpisodeId ?? "none") : episode.episode_id}</span>
+            </div>
+            <div className="ctrl-meta-card">
+              <span className="ctrl-meta-title">REPLAY DIGEST</span>
+              <span className="ctrl-meta-value" data-testid="episode-digest">{episode === null ? "none" : episode.replay_digest}</span>
+            </div>
+          </div>
+
+          <div className="ctrl-spec-box">
+            <div className="ctrl-spec-title">PARAMETER SPECIFICATIONS &amp; LIMITS</div>
+            <p className="ctrl-spec-content" data-testid="validation-hints">{VALIDATION_HINTS}</p>
+          </div>
+
+          {formError && <p className="ctrl-error-banner" data-testid="form-error">{formError}</p>}
           {episode !== null && episode.noop_warning && (
-            <p data-testid="noop-warning">noop_warning: quality fault outside ASM2 has no effect (accepted, silent no-op)</p>
+            <p className="ctrl-warning-banner" data-testid="noop-warning">noop_warning: quality fault outside ASM2 has no effect (accepted, silent no-op)</p>
           )}
         </details>
         <details data-testid="details-playback" open>
           <summary>Playback</summary>
-          <label>
-            speed (1x={STEPS_PER_SEC_AT_1X} steps/s)
-            <select data-testid="speed-select" value={String(speed)} onChange={(e) => setSpeed(Number(e.target.value))}>
-              {SPEEDS.map((s) => (
-                <option key={s} value={String(s)}>
-                  {s}x
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            data-testid="step-back"
-            disabled={!canControl}
-            onClick={() => {
-              setPlaying(false);
-              setCursor((c) => stepBy(c, -1));
-            }}
-          >
-            Step −1
-          </button>
-          <button
-            type="button"
-            data-testid="step-fwd"
-            disabled={!canControl}
-            onClick={() => {
-              setPlaying(false);
-              setCursor((c) => (c + 1 < rowsRef.current.length || ext !== null ? stepBy(c, 1) : c));
-            }}
-          >
-            Step +1
-          </button>
-          <p>
-            rows <span data-testid="row-count">{rowCount}</span>
-          </p>
+          <div className="ctrl-playback-toolbar">
+            <label className="ctrl-field-inline">
+              <span className="ctrl-label-text">speed (1x={STEPS_PER_SEC_AT_1X} steps/s)</span>
+              <select data-testid="speed-select" value={String(speed)} onChange={(e) => setSpeed(Number(e.target.value))}>
+                {SPEEDS.map((s) => (
+                  <option key={s} value={String(s)}>
+                    {s}x
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="ctrl-btn-group">
+              <button
+                type="button"
+                data-testid="step-back"
+                disabled={!canControl}
+                onClick={() => {
+                  setPlaying(false);
+                  setCursor((c) => stepBy(c, -1));
+                }}
+              >
+                Step −1
+              </button>
+              <button
+                type="button"
+                data-testid="step-fwd"
+                disabled={!canControl}
+                onClick={() => {
+                  setPlaying(false);
+                  setCursor((c) => (c + 1 < rowsRef.current.length || ext !== null ? stepBy(c, 1) : c));
+                }}
+              >
+                Step +1
+              </button>
+            </div>
+            <div className="ctrl-stat-badge">
+              <span className="ctrl-stat-label">ROWS</span>
+              <span className="ctrl-stat-value" data-testid="row-count">{rowCount}</span>
+            </div>
+          </div>
         </details>
         <details data-testid="details-faults" open>
           <summary>Faults</summary>
           <FaultForm faults={faults} onAdd={(f) => setFaults((prev) => [...prev, f])} onRemove={(id) => setFaults((prev) => prev.filter((f) => f.id !== id))} />
-          <pre data-testid="episode-faults" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{episode === null ? "[]" : JSON.stringify(episode.faults)}</pre>
+          <div className="ctrl-payload-box">
+            <div className="ctrl-payload-header">ACTIVE INJECTED FAULTS PAYLOAD</div>
+            <pre data-testid="episode-faults" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{episode === null ? "[]" : JSON.stringify(episode.faults)}</pre>
+          </div>
         </details>
         <details data-testid="details-tick">
           <summary>Tick JSON</summary>

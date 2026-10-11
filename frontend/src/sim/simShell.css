@@ -482,8 +482,8 @@
 .sim-shell__dock > * {
   min-height: 440px;
   height: auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: visible;
+  overscroll-behavior: auto;
   display: flex;
   flex-direction: column;
   background: var(--vd-surface-panel, #f2eee5);
@@ -578,9 +578,20 @@
   display: block;
 }
 
+.controls-toolbar details label,
+.controls-toolbar details p,
+.controls-toolbar details button,
+.controls-toolbar details select,
+.controls-toolbar details input,
+.controls-toolbar details li {
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
 .controls-toolbar pre {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 14px;
   background: var(--vd-surface-sunken, #dad5c7);
   padding: 6px;
   border: 1px solid var(--vd-border-dark, #2b303a);
@@ -588,11 +599,269 @@
   overflow-y: auto;
 }
 
+/* Structured SCADA Console Controls (ISA-101 / Retro Layout) */
+.ctrl-episode-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  background: var(--vd-surface-raised, #faf7f0);
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+  margin: 6px 8px;
+}
+
+.ctrl-field-inline {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+}
+
+.ctrl-label-text {
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+
+.ctrl-checkbox-label {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin: 0 !important;
+  user-select: none;
+}
+
+.ctrl-btn-primary {
+  background: var(--vd-surface-panel, #f2eee5) !important;
+  border: 1px solid var(--vd-border-dark, #2b303a) !important;
+  font-weight: bold !important;
+  padding: 4px 10px !important;
+  cursor: pointer;
+}
+
+.ctrl-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  margin: 6px 8px;
+}
+
+.ctrl-meta-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--vd-surface-panel, #f2eee5);
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+}
+
+.ctrl-meta-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-muted, #5a5347);
+  letter-spacing: 0.5px;
+}
+
+.ctrl-meta-value {
+  font-size: 15px;
+  word-break: break-all;
+  color: var(--vd-text-primary, #1c2127);
+  font-weight: bold;
+}
+
+.ctrl-spec-box {
+  margin: 6px 8px;
+  padding: 6px 8px;
+  background: var(--vd-surface-sunken, #dad5c7);
+  border: 1px solid var(--vd-border-dark, #2b303a);
+}
+
+.ctrl-spec-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--vd-text-accent, #1b4965);
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.ctrl-spec-content {
+  margin: 0 !important;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--vd-text-primary, #1c2127);
+}
+
+.ctrl-error-banner {
+  margin: 6px 8px;
+  padding: 4px 8px;
+  background: #fae4e8;
+  border: 1px solid #ef3e4a;
+  color: #7f2737;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.ctrl-warning-banner {
+  margin: 6px 8px;
+  padding: 4px 8px;
+  background: #fff8e6;
+  border: 1px solid #e69f00;
+  color: #8a6d00;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Playback Toolbar */
+.ctrl-playback-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  margin: 6px 8px;
+  background: var(--vd-surface-raised, #faf7f0);
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+}
+
+.ctrl-btn-group {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ctrl-stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 2px 8px;
+  background: var(--vd-surface-panel, #f2eee5);
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+}
+
+.ctrl-stat-label {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-muted, #5a5347);
+}
+
+.ctrl-stat-value {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--vd-text-accent, #1b4965);
+}
+
+/* Faults Form Grid */
+.ctrl-fault-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.ctrl-fault-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.ctrl-field {
+  display: flex !important;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 !important;
+}
+
+.ctrl-field-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--vd-text-primary, #1c2127);
+  letter-spacing: 0.5px;
+}
+
+.ctrl-field-sub {
+  font-size: 10px;
+  font-weight: normal;
+  color: var(--text-muted, #5a5347);
+}
+
+.ctrl-fault-action-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ctrl-field-hint {
+  margin: 0 !important;
+  font-size: 13px;
+  color: var(--text-muted, #5a5347);
+  background: var(--vd-surface-raised, #faf7f0);
+  padding: 2px 6px;
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+}
+
+.ctrl-fault-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ctrl-fault-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--vd-surface-raised, #faf7f0);
+  border: 1px solid var(--vd-border-muted, #b8b3a5);
+}
+
+.ctrl-fault-id {
+  font-weight: bold;
+  color: #ef3e4a;
+}
+
+.ctrl-fault-spec {
+  font-size: 14px;
+  flex: 1;
+}
+
+.ctrl-btn-remove {
+  background: #fae4e8 !important;
+  color: #7f2737 !important;
+  border-color: #ef3e4a !important;
+  padding: 1px 6px !important;
+  font-size: 12px !important;
+}
+
+.ctrl-payload-box {
+  margin: 6px 8px;
+  background: var(--vd-surface-sunken, #dad5c7);
+  border: 1px solid var(--vd-border-dark, #2b303a);
+}
+
+.ctrl-payload-header {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--vd-text-primary, #1c2127);
+  background: var(--vd-surface-panel, #f2eee5);
+  border-bottom: 1px solid var(--vd-border-muted, #b8b3a5);
+  letter-spacing: 0.5px;
+}
+
 /* SBUF/AGV Legend Box */
 .scada-legend-panel {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow: visible;
+  overscroll-behavior: auto;
 }
 
 .scada-legend-panel .panel-title {

@@ -52,49 +52,56 @@ export function FaultForm({ faults, onAdd, onRemove }: FaultFormProps): React.JS
   }
 
   return (
-    <section aria-label="fault form">
-      <label>
-        class (STUCK label→breakdown)
-        <select data-testid="fault-class" value={faultClass} onChange={(e) => setFaultClass(e.target.value)}>
-          {FAULT_CLASS_OPTIONS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        origin
-        <select data-testid="fault-origin" value={origin} onChange={(e) => setOrigin(e.target.value)}>
-          {MACHINES.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        t0 (≥120)
-        <input data-testid="fault-t0" inputMode="numeric" value={t0} onChange={(e) => setT0(e.target.value)} />
-      </label>
-      <label>
-        dur (1–25, bridge-strict 8–25)
-        <input data-testid="fault-dur" inputMode="numeric" value={dur} onChange={(e) => setDur(e.target.value)} />
-      </label>
-      <label>
-        extra JSON
-        <input data-testid="fault-extra" value={extra} onChange={(e) => setExtra(e.target.value)} />
-      </label>
-      <p data-testid="extra-hint">{hint}</p>
-      {extraError !== "" && <p data-testid="extra-error">{extraError}</p>}
-      <button type="button" data-testid="fault-add" onClick={handleAdd}>
-        Add fault
-      </button>
-      <ul data-testid="fault-list">
+    <section aria-label="fault form" className="ctrl-fault-section">
+      <div className="ctrl-fault-grid">
+        <label className="ctrl-field">
+          <span className="ctrl-field-title">CLASS <span className="ctrl-field-sub">(STUCK→breakdown)</span></span>
+          <select data-testid="fault-class" value={faultClass} onChange={(e) => setFaultClass(e.target.value)}>
+            {FAULT_CLASS_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ctrl-field">
+          <span className="ctrl-field-title">ORIGIN</span>
+          <select data-testid="fault-origin" value={origin} onChange={(e) => setOrigin(e.target.value)}>
+            {MACHINES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="ctrl-field">
+          <span className="ctrl-field-title">T0 <span className="ctrl-field-sub">(≥120)</span></span>
+          <input data-testid="fault-t0" inputMode="numeric" value={t0} onChange={(e) => setT0(e.target.value)} />
+        </label>
+        <label className="ctrl-field">
+          <span className="ctrl-field-title">DUR <span className="ctrl-field-sub">(8–25)</span></span>
+          <input data-testid="fault-dur" inputMode="numeric" value={dur} onChange={(e) => setDur(e.target.value)} />
+        </label>
+        <label className="ctrl-field ctrl-field-wide">
+          <span className="ctrl-field-title">EXTRA JSON</span>
+          <input data-testid="fault-extra" value={extra} onChange={(e) => setExtra(e.target.value)} />
+        </label>
+      </div>
+
+      <div className="ctrl-fault-action-row">
+        <button type="button" className="ctrl-btn-primary" data-testid="fault-add" onClick={handleAdd}>
+          + Add fault
+        </button>
+        {hint && <p className="ctrl-field-hint" data-testid="extra-hint">{hint}</p>}
+        {extraError !== "" && <p className="ctrl-error-banner" data-testid="extra-error">{extraError}</p>}
+      </div>
+
+      <ul className="ctrl-fault-list" data-testid="fault-list">
         {faults.map((f) => (
-          <li key={f.id}>
-            {f.id} {f.faultClass}@{f.origin} t0={f.t0} dur={f.dur} extra={JSON.stringify(f.extra)}{" "}
-            <button type="button" data-testid={`fault-remove-${f.id}`} onClick={() => onRemove(f.id)}>
+          <li key={f.id} className="ctrl-fault-item">
+            <span className="ctrl-fault-id">{f.id}</span>
+            <span className="ctrl-fault-spec">{f.faultClass}@{f.origin} t0={f.t0} dur={f.dur} extra={JSON.stringify(f.extra)}</span>
+            <button type="button" className="ctrl-btn-remove" data-testid={`fault-remove-${f.id}`} onClick={() => onRemove(f.id)}>
               Remove
             </button>
           </li>

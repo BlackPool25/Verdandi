@@ -1,7 +1,12 @@
+// Ring buffer – used as a step-indexed flat array (cap >> T_TOTAL=300).
+// `set(step, v)` writes at buf[step] directly; `snapshot(limit)` returns
+// buf[0..limit] so scrubbing backward just passes a smaller limit and the
+// graph automatically trims to the playhead position.
+// `push` appends in order (step 0,1,2,…) and is kept for compatibility.
 export class Ring {
   readonly buf: Float32Array;
-  head = 0;
-  count = 0;
+  head = 0;   // next write index for push()
+  count = 0;  // number of slots written via push() or set()
 
   constructor(cap: number) {
     if (!Number.isInteger(cap) || cap <= 0) throw new RangeError("cap must be positive");
@@ -16,21 +21,34 @@ export class Ring {
     return Math.min(this.count, this.buf.length);
   }
 
+  /** Append the next value (streaming forward playback). */
   push(v: number): void {
-    this.buf[this.head] = v;
-    this.head = (this.head + 1) % this.buf.length;
-    this.count += 1;
+    const idx = this.head;
+    if (idx >= this.buf.length) return; // full
+    this.buf[idx] = v;
+    this.head = idx + 1;
+    this.count = this.head;
   }
 
-  snapshot(): Float32Array {
-    const n = this.length;
-    const out = new Float32Array(n);
-    const start = (this.head - n + this.buf.length * 2) % this.buf.length;
-    for (let i = 0; i < n; i += 1) {
-      const cell = this.buf[(start + i) % this.buf.length];
-      out[i] = cell === undefined ? NaN : cell;
+  /** Write a specific step slot directly (supports out-of-order ingest). */
+  set(step: number, v: number): void {
+    if (step < 0 || step >= this.buf.length) return;
+    this.buf[step] = v;
+    if (step + 1 > this.count) {
+      this.count = step + 1;
+      this.head = this.count;
     }
-    return out;
+  }
+
+  /**
+   * Return buf[0..limit-1] (or all written slots if limit is undefined).
+   * Because data is stored at buf[step], limiting to `step+1` entries gives
+   * exactly the history up to that playback position.
+   */
+  snapshot(limit?: number): Float32Array {
+    const n = this.length;
+    const targetLen = limit === undefined ? n : Math.max(0, Math.min(n, limit));
+    return this.buf.slice(0, targetLen);
   }
 }
 
