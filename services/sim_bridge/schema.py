@@ -40,7 +40,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.config import BUFFERS, CODE_VERSION, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
+from src.config import BUFFERS, CODE_VERSION, MACHINE_INDEX, N_BUFFERS, N_MACHINES, TWIN_SCHEMA
 
 SCHEMA_VERSION = TWIN_SCHEMA  # topology-A; must equal src.config.TWIN_SCHEMA
 assert SCHEMA_VERSION == TWIN_SCHEMA
@@ -160,13 +160,13 @@ def quality_for_machine(
 
 
 def _machines(record: dict[str, Any]) -> list[str]:
-    return sorted(record["machines"])
+    return sorted(record["machines"], key=MACHINE_INDEX.__getitem__)
 
 
 def build_tick(record: dict[str, Any], k: int) -> dict[str, Any]:
     """Build frozen-schema tick k from a run_episode record (no temp)."""
     order = _machines(record)
-    idx = {m: i for i, m in enumerate(order)}
+    idx = MACHINE_INDEX
     sbuf_idx = list(BUFFERS).index("SBUF")
     states = [record["states"][idx[m]][k] for m in order]
     obs = [record["obs"][idx[m]][k] for m in order]

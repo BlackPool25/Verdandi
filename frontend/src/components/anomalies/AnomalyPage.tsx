@@ -60,7 +60,7 @@ const DEMO_PRESETS: readonly DemoPreset[] = [
 ];
 
 export function AnomalyPage(): React.JSX.Element {
-  const { source, episodeId, selectedId, setSelectedId, startNewEpisode } = useTwinStream();
+  const { source, selectedId, setSelectedId, startNewEpisode } = useTwinStream();
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [isLaunchingPreset, setIsLaunchingPreset] = useState<boolean>(false);
 
@@ -74,10 +74,15 @@ export function AnomalyPage(): React.JSX.Element {
       ),
     // Recompute when rowCount or episodeId changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [source.rowCount, episodeId, source.episodeHeader?.faults],
+    [source.rowCount, source.episodeId, source.episodeHeader?.faults],
   );
 
   const cursor = Math.max(0, source.cursor);
+  const canSeek = source.rowCount > 0 && source.rowJson(0) !== undefined;
+  const guardedStepTo = (step: number): void => {
+    if (!canSeek) return;
+    source.stepTo(step);
+  };
 
   const handleLaunchPreset = async (preset: DemoPreset) => {
     setIsLaunchingPreset(true);
@@ -143,7 +148,7 @@ export function AnomalyPage(): React.JSX.Element {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>
-            EP: {episodeId?.slice(0, 8) ?? "none"}
+            EP: {source.episodeId?.slice(0, 8) ?? "none"}
           </span>
           <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>
             STEP: {cursor} / 300
@@ -552,7 +557,7 @@ export function AnomalyPage(): React.JSX.Element {
           summary={summary}
           cursor={cursor}
           selectedId={selectedId}
-          onSeek={source.stepTo}
+          onSeek={guardedStepTo}
           onSelectMachine={setSelectedId}
         />
       </section>
@@ -674,8 +679,9 @@ export function AnomalyPage(): React.JSX.Element {
                       <button
                         type="button"
                         className="px-btn"
+                        disabled={!canSeek}
                         onClick={() => {
-                          source.stepTo(inc.step);
+                          guardedStepTo(inc.step);
                           setSelectedId(inc.machine);
                         }}
                         style={{ fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 13, padding: "2px 6px" }}

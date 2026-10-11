@@ -10,7 +10,8 @@ const ASSEMBLY_IDS = ["ASM0", "ASM1", "INSP0", "ASM2", "RWK0"];
 const PACKAGING_IDS = ["PKG0", "PKG1", "PKG2"];
 
 export function MetricsPage(): React.JSX.Element {
-  const { source, episodeId } = useTwinStream();
+  const { source } = useTwinStream();
+  const episodeId = source.episodeId;
 
   const line = source.panelTick ? lineStatsFor(source.panelTick) : null;
   const ep = episodeStatsFor(source.episodeHeader);
@@ -25,7 +26,7 @@ export function MetricsPage(): React.JSX.Element {
         (source.episodeHeader?.faults as readonly unknown[]) ?? [],
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [source.rowCount, episodeId],
+    [source.rowCount, source.episodeId],
   );
 
   // Compute real line utilization percentages
@@ -106,7 +107,7 @@ export function MetricsPage(): React.JSX.Element {
             EP: {episodeId?.slice(0, 8) ?? "none"}
           </span>
           <span className="px-badge" style={{ background: "var(--paper-100)", border: "2px solid var(--ink-900)", fontFamily: "var(--font-mono, 'VT323', monospace)", fontSize: 14 }}>
-            STEP: {source.cursor} / 300
+            STEP: {Math.max(0, source.cursor)} / 300
           </span>
           <span
             className="px-badge"
