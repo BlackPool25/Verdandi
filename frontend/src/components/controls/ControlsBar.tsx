@@ -62,6 +62,7 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
   // (deep ?episode= links never populate the internal New-episode state).
   const sharedEpisodeId = ext?.source.episodeId ?? null;
   const canControl = ext !== null ? sharedEpisodeId !== null : episode !== null;
+  const canScrub = rowCount > 0;
 
   function setPlaying(p: boolean | ((prev: boolean) => boolean)): void {
     if (ext !== null) {
@@ -238,7 +239,7 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
               <button
                 type="button"
                 data-testid="step-back"
-                disabled={!canControl}
+                disabled={!canControl || !canScrub}
                 onClick={() => {
                   setPlaying(false);
                   setCursor((c) => stepBy(c, -1));
@@ -249,7 +250,7 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
               <button
                 type="button"
                 data-testid="step-fwd"
-                disabled={!canControl}
+                disabled={!canControl || !canScrub}
                 onClick={() => {
                   setPlaying(false);
                   setCursor((c) => (c + 1 < rowsRef.current.length || ext !== null ? stepBy(c, 1) : c));

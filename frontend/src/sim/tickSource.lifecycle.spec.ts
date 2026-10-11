@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MACHINE_IDS } from "../store/tick";
 import {
   BYTE_BUDGET,
   STREAM_MACHINE_ORDER,
@@ -206,12 +207,13 @@ describe("robustness", () => {
 });
 
 describe("wire order + patch mapping", () => {
-  it("STREAM_MACHINE_ORDER is the sorted 26-id roster the bridge replays", () => {
+  it("STREAM_MACHINE_ORDER is the canonical 26-id roster the bridge replays", () => {
     expect(STREAM_MACHINE_ORDER).toHaveLength(26);
-    expect([...STREAM_MACHINE_ORDER].sort()).toEqual([...STREAM_MACHINE_ORDER]);
+    expect([...STREAM_MACHINE_ORDER]).toEqual([...MACHINE_IDS]);
     expect(STREAM_MACHINE_ORDER).toContain("ASM0");
     expect(STREAM_MACHINE_ORDER).toContain("RWK0");
-    expect(STREAM_MACHINE_ORDER.indexOf("ASM0")).toBe(6);
+    expect(STREAM_MACHINE_ORDER.indexOf("B1")).toBe(7);
+    expect(STREAM_MACHINE_ORDER.indexOf("ASM0")).toBe(21);
   });
 
   it("toPatch maps arrays by wire order; parseLiveTick rejects bad rows", () => {

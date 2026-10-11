@@ -226,6 +226,7 @@ export function createTwinStore(opts: TwinStoreOptions = {}): TwinStore {
       paints = 0;
       lastBadgeAt = Number.NEGATIVE_INFINITY;
       badgeStore.setState({ cursor: -1, sbufLevel: 0, backpressure: 0, updatedAt: 0 });
+      emit(tickListeners);
     },
   };
 }

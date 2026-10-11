@@ -35,7 +35,7 @@ export function StripChart({
 
   useEffect(() => {
     dirtyRef.current = true;
-  }, [machineId, source, min, max]);
+  }, [machineId, source, min, max, badges.cursor]);
 
   useEffect(() => {
     return store.subscribeTransient(() => {
