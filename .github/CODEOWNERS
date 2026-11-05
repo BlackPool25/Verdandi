@@ -1,0 +1,6 @@
+# Replace @HANDLEs with real GitHub usernames before enforcing review rules.
+*                             @BlackPool25
+/src/config.py                 @BlackPool25
+/.github/                      @BlackPool25
+/scripts/check_gates.py        @BlackPool25
+/compose*.yaml compose.yaml    @BlackPool25
