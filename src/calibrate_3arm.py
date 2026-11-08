@@ -27,8 +27,11 @@ def fit_gmm_threshold(
     """
     x = np.asarray(scores_clean, dtype=float).reshape(-1, 1)
     n = x.shape[0]
+    # BIC over K beyond the distinct-value count is degenerate (k-means init
+    # warns/fails on duplicate points); cap K at the distinct count.
+    k_cap = max(1, min(max_components, len(np.unique(x))))
     best_k, best_bic = 1, GaussianMixture(n_components=1, random_state=0).fit(x).bic(x)
-    for k in range(2, max_components + 1):
+    for k in range(2, k_cap + 1):
         bic = GaussianMixture(n_components=k, random_state=0).fit(x).bic(x)
         if bic < best_bic:
             best_k, best_bic = k, bic
@@ -36,7 +39,11 @@ def fit_gmm_threshold(
     top = int(np.argmax(gm.means_.ravel()))
     top_samples = x[gm.predict(x) == top].ravel()
     level = 1.0 - fpr_target * n / max(top_samples.size, 1)
-    if top_samples.size <= fpr_target * n or not 0.0 < level < 1.0:
+    if (
+        top_samples.size <= fpr_target * n
+        or not 0.0 < level < 1.0
+        or float(np.var(top_samples)) == 0.0
+    ):
         return fit_quantile_threshold(x.ravel(), fpr_target=fpr_target), best_k
     try:
         shape, loc, scale = stats.gamma.fit(top_samples)
