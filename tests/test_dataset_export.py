@@ -78,6 +78,13 @@ def test_export_excludes_warmup_by_default(tmp_path):
     assert not bool(df["warmup_flag"].any())
 
 
+def test_v6_wrapper_forwards_warmup_opt_out(tmp_path):
+    out_parquet = tmp_path / "dataset_v6.parquet"
+    with pytest.warns(UserWarning, match="exclude_warmup=False"):
+        res = dataset_export.export_v6(seed=7, out=out_parquet, exclude_warmup=False)
+    assert res["row_count"] == 300
+
+
 def test_export_5x_same_seed_bit_identical(tmp_path):
     """5x same-seed export must produce byte-identical Parquet files and metadata."""
     hashes_parquet = []

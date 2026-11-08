@@ -153,3 +153,30 @@ def test_require_post_warmup_rejects_warmup_rows():
 def test_require_post_warmup_accepts_clean_frame():
     df = pd.DataFrame({"step": [15, 16, 299], "warmup_flag": [False, False, False]})
     assert tp.require_post_warmup(df) is df
+
+
+def test_purge_uses_interval_overlap_not_just_starts():
+    # Window [5, 21) overlaps purged span [6, 14) even though start 5 < 6.
+    keep = tp.apply_purge_embargo(
+        np.array([0]), np.array([5]), test_start=8, test_end=12, embargo=2, window_len=16
+    )
+    assert keep == []
+    # Window [14, 30) starts at the gap edge: no overlap, kept.
+    keep = tp.apply_purge_embargo(
+        np.array([0]), np.array([14]), test_start=8, test_end=12, embargo=2, window_len=16
+    )
+    assert keep == [0]
+
+
+def test_grouped_cv_rejects_single_split():
+    with pytest.raises(ValueError, match="n_splits"):
+        tp.create_grouped_cv(n_splits=1)
+
+
+def test_cli_appends_runtable_rows(tmp_path):
+    out = tmp_path / "runtable.csv"
+    assert tp.main(["--out", str(out), "--job", "a"]) == 0
+    assert tp.main(["--out", str(out), "--job", "b"]) == 0
+    with open(out, newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert [r["job"] for r in rows] == ["a", "b"]

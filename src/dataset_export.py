@@ -767,7 +767,7 @@ def export_contract_dataset(
         out_dir: Destination directory for parquet files.
         seeds: Optional list of episode seeds.
         out_name: Parquet filename.
-        exclude_warmup: Whether to exclude transient warm-up steps (default False).
+        exclude_warmup: Whether to exclude transient warm-up steps (default True).
             CONSUMER FILTERING OBLIGATION: Downstream consumers must filter out
             warm-up steps (step < 15 or warmup_flag==True) when training models.
             Enforced via assert_warmup_excluded(df).
@@ -861,7 +861,7 @@ def export_v4(
         row_group_size: Parquet row group size.
         enable_natural_breakdown: Whether natural breakdown is enabled.
         runs_log: Optional path to runs.jsonl log.
-        exclude_warmup: Whether to exclude transient warm-up steps (default False).
+        exclude_warmup: Whether to exclude transient warm-up steps (default True).
             CONSUMER FILTERING OBLIGATION: Downstream consumers must filter out
             warm-up steps (step < 15 or warmup_flag==True) when training models.
             Enforced via assert_warmup_excluded(df).
@@ -898,7 +898,7 @@ def export_contract_dataset_v4(
         seeds: Optional list of episode seeds.
         out_name: Parquet filename.
         runs_log: Optional path to runs.jsonl log.
-        exclude_warmup: Whether to exclude transient warm-up steps (default False).
+        exclude_warmup: Whether to exclude transient warm-up steps (default True).
             CONSUMER FILTERING OBLIGATION: Downstream consumers must filter out
             warm-up steps (step < 15 or warmup_flag==True) when training models.
             Enforced via assert_warmup_excluded(df).
@@ -968,6 +968,7 @@ def export_v5(
     row_group_size: int = 1024,
     enable_natural_breakdown: bool = True,
     runs_log: str | pathlib.Path | None = None,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export deterministic v5 Parquet dataset and associated metadata."""
     return export(
@@ -984,6 +985,7 @@ def export_v5(
         schema_version=5,
         runs_log=runs_log,
         job_name="dataset_v5",
+        exclude_warmup=exclude_warmup,
     )
 
 
@@ -998,6 +1000,7 @@ def export_v6(
     row_group_size: int = 1024,
     enable_natural_breakdown: bool = True,
     runs_log: str | pathlib.Path | None = None,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export deterministic v6 Parquet dataset and associated metadata."""
     return export(
@@ -1014,6 +1017,7 @@ def export_v6(
         schema_version=6,
         runs_log=runs_log,
         job_name="dataset_v6",
+        exclude_warmup=exclude_warmup,
     )
 
 
@@ -1025,6 +1029,7 @@ def export_contract_dataset_v5(
     seeds: list[int] | None = None,
     out_name: str = "dataset_v5.parquet",
     runs_log: str | pathlib.Path | None = None,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export a multi-episode v5 dataset with balanced stratification keys for contract testing."""
     out_dir_path = pathlib.Path(out_dir)
@@ -1100,6 +1105,7 @@ def export_contract_dataset_v5(
         out=out_parquet,
         faults=fault_map,
         runs_log=runs_log,
+        exclude_warmup=exclude_warmup,
     )
 
 
@@ -1110,6 +1116,7 @@ def export_contract_dataset_v6(
     n_clean: int = 10,
     out_name: str = "dataset_v6.parquet",
     runs_log: str | pathlib.Path | None = None,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export a multi-episode v6 dataset with balanced stratification keys for contract testing."""
     out_dir_path = pathlib.Path(out_dir)
@@ -1173,6 +1180,7 @@ def export_contract_dataset_v6(
         schema_version=6,
         runs_log=runs_log,
         variant=config.VARIANT_ID,
+        exclude_warmup=exclude_warmup,
     )
 
     df = load_v6_dataset(res["out"])
