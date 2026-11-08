@@ -563,9 +563,23 @@ def export(
                         row["cycle_lag"] = int(steps_since_tput[root_idx])
                         row["stale_hold_run"] = int(stale_counts[root_idx])
                         row["down_run"] = int(down_counts[root_idx])
-                        row["buffer_occ"] = int(
-                            sum(rec["buffers"][m_i][t_step] for m_i in affected_indices)
-                        )
+                        # Plant-total WIP across gap buffers (causal, no lookahead).
+                        # Gap-level localization lives in the buffer_{gap} columns.
+                        # v6+ only: legacy schemas keep the pinned machine-named roster.
+                        if effective_schema_version >= 6:
+                            row["buffer_occ"] = int(
+                                sum(
+                                    rec["buffers"][j][t_step]
+                                    for j in range(config.N_BUFFERS)
+                                )
+                            )
+                        else:
+                            row["buffer_occ"] = int(
+                                sum(
+                                    rec["buffers"][m_i][t_step]
+                                    for m_i in affected_indices
+                                )
+                            )
                         row["state_hist_delta"] = float(
                             sum(
                                 1
@@ -579,13 +593,21 @@ def export(
                         row["cycle_lag"] = int(np.median(steps_since_tput))
                         row["stale_hold_run"] = 0
                         row["down_run"] = 0
-                        row["buffer_occ"] = int(
-                            sum(
-                                rec["buffers"][m_i][t_step]
-                                for m_i in range(config.N_MACHINES)
+                        if effective_schema_version >= 6:
+                            row["buffer_occ"] = int(
+                                sum(
+                                    rec["buffers"][j][t_step]
+                                    for j in range(config.N_BUFFERS)
+                                )
                             )
-                            / 5
-                        )
+                        else:
+                            row["buffer_occ"] = int(
+                                sum(
+                                    rec["buffers"][m_i][t_step]
+                                    for m_i in range(config.N_MACHINES)
+                                )
+                                / 5
+                            )
                         row["state_hist_delta"] = float(
                             sum(
                                 1
@@ -609,15 +631,22 @@ def export(
                     row["scrapped_total"] = int(rec["flow_stats"]["scrapped"])
                     row["scrap_flag"] = 1 if rec["flow_stats"]["scrapped"] > 0 else 0
 
-                # Machine observation and state channels (26 machines)
+                # Machine observation and state channels (26 machines).
+                # v6+: gap buffer channels (26 BUFFERS-ordered gap buffers, NOT per-machine:
+                # rec["buffers"] is buf_rows in BUFFERS order). Legacy schemas keep the
+                # pinned machine-named roster byte-identical (frozen flag-day contracts).
                 for m_name, m_idx in config.MACHINE_INDEX.items():
                     row[f"obs_{m_name}"] = float(rec["obs"][m_idx][t_step])
                     row[f"state_{m_name}"] = str(rec["states"][m_idx][t_step])
-                    row[f"buffer_{m_name}"] = int(rec["buffers"][m_idx][t_step])
+                    if effective_schema_version < 6:
+                        row[f"buffer_{m_name}"] = int(rec["buffers"][m_idx][t_step])
                     row[f"tput_{m_name}"] = int(rec["throughput"][m_idx][t_step])
                     row[f"wstate_{m_name}"] = float(wstate_vec[m_idx])
                     if include_currents:
                         row[f"current_{m_name}"] = float(rec["currents"][m_idx][t_step])
+                if effective_schema_version >= 6:
+                    for gap_i, gap_name in enumerate(config.BUFFERS):
+                        row[f"buffer_{gap_name}"] = int(rec["buffers"][gap_i][t_step])
 
                 rows.append(row)
 
