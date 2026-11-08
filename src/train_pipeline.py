@@ -170,7 +170,6 @@ def assert_no_scaler_artifact(directory: str | pathlib.Path) -> None:
         raise ValueError(
             f"LEAKAGE VIOLATION: scaler.pkl forbidden on pipeline path ({artifact})"
         )
-    return None
 
 
 def require_post_warmup(df: pd.DataFrame) -> pd.DataFrame:
