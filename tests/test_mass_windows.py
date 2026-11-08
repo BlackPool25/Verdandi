@@ -64,6 +64,16 @@ def test_per_family_thresholds_beat_global_on_shifted_families():
     assert compute_raw_pointwise_f1(y, dec) >= compute_raw_pointwise_f1(y, glob)
 
 
+def test_episode_family_labels_clean_windows_with_episode_family():
+    from scripts.train_windows import episode_family
+
+    ef = episode_family(
+        np.array([1, 1, 1, 2, 2, 2]),
+        np.array(["none", "delay", "none", "none", "none", "none"]),
+    )
+    assert ef.tolist() == ["delay"] * 3 + ["none"] * 3
+
+
 def test_binary_gbm_separates_windows_and_episode_hit():
     from scripts.train_windows import episode_hit_rate, train_binary_gbm
 

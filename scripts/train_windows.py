@@ -25,6 +25,26 @@ def train_binary_gbm(X_tr: np.ndarray, y_tr: np.ndarray) -> object:
     return clf
 
 
+def episode_family(groups: np.ndarray, window_fam: np.ndarray) -> np.ndarray:
+    """Episode-level family per window: the fault family of its episode, else none.
+
+    Window-fam slices of a fault family are all-positive by construction (a window
+    carries the family label iff it overlaps the fault), which makes per-slice
+    max-F1 tuning vacuous. Episode slices include the family's clean windows, so
+    the threshold trades precision against recall honestly.
+    """
+    g = np.asarray(groups)
+    wf = np.asarray(window_fam)
+    out = np.array(["none"] * len(g), dtype=object)
+    for ep in np.unique(g):
+        m = g == ep
+        ff = wf[m]
+        ff = ff[ff != "none"]
+        if len(ff):
+            out[m] = str(ff[0])
+    return out
+
+
 def pick_per_family_thresholds(
     scores: np.ndarray, y_true: np.ndarray, families: np.ndarray
 ) -> dict[str, float]:
@@ -96,10 +116,11 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"window-F1={f1:.4f} episode-hit={ep['hit_rate']:.4f} clean-fp={ep['clean_fp_rate']:.4f}"
     )
-    thr = pick_per_family_thresholds(oof, y, fam)
+    thr = pick_per_family_thresholds(oof, y, episode_family(groups, fam))
     tuned = np.zeros(len(X), dtype=int)
-    for f in sorted(set(fam.tolist())):
-        m = fam == f
+    ep_fam = episode_family(groups, fam)
+    for f in sorted(set(ep_fam.tolist())):
+        m = ep_fam == f
         tuned[m] = (oof[m] >= thr[str(f)]).astype(int)
     f1t = compute_raw_pointwise_f1(y, tuned)
     ept = episode_hit_rate(tuned, groups, fam)
