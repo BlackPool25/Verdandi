@@ -38,9 +38,11 @@ def build_specs(
                 ep = BASE_EP + k
                 k += 1
                 mag = 0.5 if rung == "incipient" else 4.0
+                # Twin rate budget: fault union <= 14 steps/ep (0.08*180).
+                dur = int(rng.integers(8, 13))
                 faults[ep] = {
                     "class": fam,
-                    "dur": int(rng.integers(8, 15)),
+                    "dur": dur,
                     "extra": {},
                     "id": f"M-{fam[:2].upper()}{rung[0].upper()}{j:03d}",
                     "mag_rung": rung,
