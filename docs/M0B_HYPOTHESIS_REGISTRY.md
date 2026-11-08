@@ -15,7 +15,7 @@ the fused operating point, not the OR, is the trained system under test.
 | wire | metric (battery m0b-train-frozen182) | status |
 |---|---|---|
 | H1 N-vs-S | S-arm VUS < best-N VUS by 0.158; F1 reading also negative (S 0.597 max vs LOF 0.669) | Falsified |
-| H2 gate +3pp | structural − quantile episode-hit = +0.104 (valid per-episode data; earlier 0.0 was a void join) | Survived |
+| H2 gate +3pp | structural − quantile episode-hit = +0.104 (valid per-episode data) | Survived |
 | H3 per-class +2pp | per-class F1 0.711 vs single global (+0.066) | Survived |
 | H4 M-vs-G ±2pp | walk/pcmci absent | BLOCKED (out of scope, not adjudicated) |
 | H5 firing | quality-expert clean fires 0/400 kits (≤3/1000 bar met); ≥2-of-3 stability needs repeats | Ambiguous (allowed) |
@@ -27,9 +27,9 @@ Combined episode-hit (any expert): 0.95 (3 misses, all quality).
 
 ## Baseline reference (untrained quantile + gates + CUSUM, battery m0b-baseline-frozen182)
 
-F1 raw 0.080 → 0.098 after RUN-only delay gating + loss-combo + variance gate + ML-OR wiring;
-AC@1 0.511; hit 131/182 → 179/182; clean_fp 5837 → 2626 cells.
+F1 raw 0.080 → 0.098 (RUN-only + combo + variance + ML-OR) → 0.103 (episode decision);
+AC@1 0.511; hit 131/182 → 179/182 → 182/182, misses 0; clean_fp 5837 → 2626 → 1419.
 Delay-gate RUN-only gating removed the STARVED-machine flood (B7S/RWK0 saturate tputlag all episode).
 Loss-combo gate (tputlag≥5 AND stale≥1) covers the between-bars signature. Variance gate (ratio≥4)
-fires 0/78000 clean cells (free insurance for the blowup direction; our 3 quality misses are
-variance-COLLAPSE, not blowup — needs per-episode normalization, Task 19).
+fires 0/78000 clean cells (free insurance for the blowup direction). Episode dwell (k=3, W=5)
+suppresses isolated flicker; CUSUM bypasses dwell (own hysteresis).
