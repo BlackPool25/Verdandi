@@ -25,6 +25,24 @@ def train_binary_gbm(X_tr: np.ndarray, y_tr: np.ndarray) -> object:
     return clf
 
 
+def pick_per_family_thresholds(
+    scores: np.ndarray, y_true: np.ndarray, families: np.ndarray
+) -> dict[str, float]:
+    """Per-family max-F1 thresholds on window scores (tuning slice = eval slice).
+
+    Optimism caveat: thresholds picked on OOF are validation numbers, not test.
+    """
+    from src.train_pipeline import pick_threshold_max_f1
+
+    s = np.asarray(scores, dtype=float)
+    y = np.asarray(y_true, dtype=int)
+    f = np.asarray(families)
+    return {
+        str(fam): float(pick_threshold_max_f1(s[f == fam], y[f == fam]))
+        for fam in sorted(set(f.tolist()))
+    }
+
+
 def episode_hit_rate(
     window_pred: np.ndarray, groups: np.ndarray, window_fam: np.ndarray
 ) -> dict:
@@ -69,20 +87,31 @@ def main(argv: list[str] | None = None) -> int:
     X, y, fam, groups = build_windows(df, w=args.w, stride=args.stride)
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)
-    oof = np.zeros(len(X), dtype=int)
+    oof = np.zeros(len(X))
     for tr, te in cv.split(X, y, groups):
         clf = train_binary_gbm(X[tr], y[tr])
-        oof[te] = clf.predict(X[te])  # type: ignore[union-attr]
-    f1 = compute_raw_pointwise_f1(y, oof)
-    ep = episode_hit_rate(oof, groups, fam)
+        oof[te] = clf.predict_proba(X[te])[:, 1]  # type: ignore[union-attr]
+    f1 = compute_raw_pointwise_f1(y, (oof >= 0.5).astype(int))
+    ep = episode_hit_rate((oof >= 0.5).astype(int), groups, fam)
     print(
         f"window-F1={f1:.4f} episode-hit={ep['hit_rate']:.4f} clean-fp={ep['clean_fp_rate']:.4f}"
+    )
+    thr = pick_per_family_thresholds(oof, y, fam)
+    tuned = np.zeros(len(X), dtype=int)
+    for f in sorted(set(fam.tolist())):
+        m = fam == f
+        tuned[m] = (oof[m] >= thr[str(f)]).astype(int)
+    f1t = compute_raw_pointwise_f1(y, tuned)
+    ept = episode_hit_rate(tuned, groups, fam)
+    print(
+        f"tuned window-F1={f1t:.4f} episode-hit={ept['hit_rate']:.4f} clean-fp={ept['clean_fp_rate']:.4f}"
     )
     per_fam = {}
     for f in sorted(set(fam.tolist()) - {"none"}):
         m = fam == f
-        per_fam[f] = round(float(oof[m].mean()), 4)
+        per_fam[f] = round(float(tuned[m].mean()), 4)
     print("per-family window recall:", per_fam)
+    print("per-family thresholds:", {k: round(v, 4) for k, v in thr.items()})
     return 0
 
 
