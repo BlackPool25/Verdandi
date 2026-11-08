@@ -50,7 +50,9 @@ def test_apply_purge_embargo_drops_train_near_test():
     t_starts = np.arange(20)
     train_idx = np.arange(20)
     # Test span covers starts 8..11; embargo 2 kills starts 6..13.
-    keep = tp.apply_purge_embargo(train_idx, t_starts, test_start=8, test_end=12, embargo=2)
+    keep = tp.apply_purge_embargo(
+        train_idx, t_starts, test_start=8, test_end=12, embargo=2
+    )
     assert list(keep) == [0, 1, 2, 3, 4, 5, 14, 15, 16, 17, 18, 19]
 
 
@@ -69,7 +71,9 @@ def test_focal_weights_gamma_zero_is_ones():
 
 def test_focal_weights_downweight_easy_examples():
     p = np.array([0.9, 0.5])
-    assert list(tp.focal_confidence_weights(p, gamma=2.0)) == pytest.approx([0.01, 0.25])
+    assert list(tp.focal_confidence_weights(p, gamma=2.0)) == pytest.approx(
+        [0.01, 0.25]
+    )
 
 
 def test_pick_threshold_max_f1_separates():
@@ -145,7 +149,9 @@ def test_scaler_tripwire_passes_when_absent(tmp_path):
 
 
 def test_require_post_warmup_rejects_warmup_rows():
-    df = pd.DataFrame({"step": [0, 5, 14, 15, 16], "warmup_flag": [True, True, True, False, False]})
+    df = pd.DataFrame(
+        {"step": [0, 5, 14, 15, 16], "warmup_flag": [True, True, True, False, False]}
+    )
     with pytest.raises(ValueError, match="[Ww]arm"):
         tp.require_post_warmup(df)
 
@@ -158,12 +164,22 @@ def test_require_post_warmup_accepts_clean_frame():
 def test_purge_uses_interval_overlap_not_just_starts():
     # Window [5, 21) overlaps purged span [6, 14) even though start 5 < 6.
     keep = tp.apply_purge_embargo(
-        np.array([0]), np.array([5]), test_start=8, test_end=12, embargo=2, window_len=16
+        np.array([0]),
+        np.array([5]),
+        test_start=8,
+        test_end=12,
+        embargo=2,
+        window_len=16,
     )
     assert keep == []
     # Window [14, 30) starts at the gap edge: no overlap, kept.
     keep = tp.apply_purge_embargo(
-        np.array([0]), np.array([14]), test_start=8, test_end=12, embargo=2, window_len=16
+        np.array([0]),
+        np.array([14]),
+        test_start=8,
+        test_end=12,
+        embargo=2,
+        window_len=16,
     )
     assert keep == [0]
 

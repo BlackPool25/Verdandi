@@ -152,7 +152,11 @@ def fit_transform_fold(
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, tuple[float, float]]]:
     """Fit median/IQR on the train fold only; transform both (test never fitted)."""
     params = fit_per_machine_median_iqr(df_train, channels)
-    return transform_per_machine(df_train, params), transform_per_machine(df_test, params), params
+    return (
+        transform_per_machine(df_train, params),
+        transform_per_machine(df_test, params),
+        params,
+    )
 
 
 # SMOTE is default-OFF on temporal windows (interpolation breaks autocorrelation
@@ -221,7 +225,9 @@ def compute_raw_pointwise_f1(
 
 def compute_sample_weights(y_true: np.ndarray) -> np.ndarray:
     """Balanced class weights (mean 1.0): minority windows train louder."""
-    return np.asarray(compute_sample_weight("balanced", np.asarray(y_true)), dtype=float)
+    return np.asarray(
+        compute_sample_weight("balanced", np.asarray(y_true)), dtype=float
+    )
 
 
 def focal_confidence_weights(p_true: np.ndarray, *, gamma: float = 2.0) -> np.ndarray:
@@ -254,7 +260,10 @@ def pick_per_class_thresholds(
     s = np.asarray(scores, dtype=float)
     y = np.asarray(y_true, dtype=int)
     c = np.asarray(classes)
-    return {str(cls): pick_threshold_max_f1(s[c == cls], y[c == cls]) for cls in sorted(set(c.tolist()))}
+    return {
+        str(cls): pick_threshold_max_f1(s[c == cls], y[c == cls])
+        for cls in sorted(set(c.tolist()))
+    }
 
 
 def build_runtable_row(
@@ -277,7 +286,9 @@ def build_runtable_row(
 
 def main(argv: list[str] | None = None) -> int:
     """CLI: write a runtable schema row (pipeline entry point for CI/battery)."""
-    parser = argparse.ArgumentParser(description="Verdandi train pipeline (Phase-A entry)")
+    parser = argparse.ArgumentParser(
+        description="Verdandi train pipeline (Phase-A entry)"
+    )
     parser.add_argument("--out", required=True, help="Runtable CSV path")
     parser.add_argument("--job", default="train", help="Job name for the runtable row")
     parser.add_argument("--n-windows", type=int, default=0)
