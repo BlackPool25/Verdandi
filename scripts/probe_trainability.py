@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     seed = 500
     origins = ["A2", "B2", "C2", "A8", "B1", "ASM2", "A0"]
     for fam, orig in zip(FAMILIES, origins):
-        spec = {"id": f"P-{fam}", "class": fam, "origin": orig, "t0": 150, "dur": 12}
+        spec = {"id": f"P-{fam}", "class": fam, "origin": orig, "t0": 150, "dur": 8}
         if fam == "spike":
             spec["mag_sigma"] = 5.0
         elif fam == "drift":

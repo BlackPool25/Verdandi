@@ -38,3 +38,19 @@ Per-class structural gates, not a louder quantile:
 - Keep quantile/IQR as the signal-class leg + MP-discord guardrail. Gate promotion on per-class recall, never global F1 alone.
 
 Flip% (OQ-2 second half), BARO null (OQ-3), and grounding (OQ-4) remain blocked on walk.py + pcmci_job.py.
+
+## Addendum: trainability probe (the scoreboard that matters)
+
+`scripts/probe_trainability.py` — per-family train-AUC upper bounds (in-sample, signal-existence only) on 2 clean + 7 fault episodes, structural v6 features vs obs-only:
+
+| Family | Struct AUC | Obs-only AUC | Reading |
+|---|---|---|---|
+| drift | 0.740 | 0.975 | obs wins (signal fault) |
+| bias | 0.840 | 1.000 | obs wins |
+| delay | 0.780 | 0.252 | structural only (obs worse than chance) |
+| loss | 0.742 | 0.282 | structural only |
+| breakdown | 1.000 | 0.999 | both (DOWN shifts obs −3σ; quantile is one-sided UP so it missed — add a lower fence) |
+| quality | 0.952 | 0.669 | structural wins |
+| spike | 0.794 | 1.000 | obs wins |
+
+Every family is learnable from v6 features (worst 0.74, most ≥0.78). The rule-based F1=0.08 measures hand-tuned operating points, not data quality. Recommendation: ML battery next (per-family experts on v6 features, PRISSUE-19); rules become fallback + training-signal generators, not the product.
