@@ -105,3 +105,32 @@ def test_miss_drill_oracle_pins_detected():
     # F-21 drift ramps: must flag the origin (late flag = DELAY taxonomy, not a miss)
     top, lat, hit, origin = drill("F-21")
     assert hit and top == origin
+
+
+def test_fit_accepts_per_machine_mask():
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=(300, 2))
+    x[50:60, 0] += 6.0
+    mask = np.ones((300, 2), dtype=bool)
+    mask[50:60, 0] = False
+    thr = detect.fit_quantile_thresholds(x, ["A", "B"], clean_mask=mask)
+    unmasked = detect.fit_quantile_thresholds(x, ["A", "B"])
+    assert thr["A"]["thr"] < unmasked["A"]["thr"]
+    assert thr["B"]["thr"] == unmasked["B"]["thr"]
+
+
+def test_exceedance_suppress_mask_kills_down_alarms():
+    thr = {m: {"thr": 3.0} for m in MACHINES}
+    obs = np.zeros((10, len(MACHINES)))
+    obs[4, MACHINES.index("B2")] = 5.0
+    suppress = np.zeros_like(obs, dtype=bool)
+    suppress[4, MACHINES.index("B2")] = True
+    alarms, scores = detect.detect_exceedance(obs, thr, MACHINES, suppress=suppress)
+    assert alarms.sum() == 0
+    assert scores[4, MACHINES.index("B2")] == pytest.approx(2.0)
+
+
+def test_run_only_mask_selects_window_and_run():
+    states = np.array([["RUN"] * 10, ["RUN"] * 5 + ["DOWN"] * 5])
+    mask = detect.clean_run_mask(states, 2, 8)
+    assert list(mask) == [True, True, True, False, False, False]
