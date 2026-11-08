@@ -46,10 +46,16 @@ def episode_family(groups: np.ndarray, window_fam: np.ndarray) -> np.ndarray:
 
 
 def pick_per_family_thresholds(
-    scores: np.ndarray, y_true: np.ndarray, families: np.ndarray
+    scores: np.ndarray,
+    y_true: np.ndarray,
+    families: np.ndarray,
+    *,
+    fallback: float = 0.5,
 ) -> dict[str, float]:
     """Per-family max-F1 thresholds on window scores (tuning slice = eval slice).
 
+    All-negative slices (e.g. clean episodes) carry no signal — tuning there is
+    vacuous and collapses to flag-all, so they keep the fallback threshold.
     Optimism caveat: thresholds picked on OOF are validation numbers, not test.
     """
     from src.train_pipeline import pick_threshold_max_f1
@@ -57,10 +63,14 @@ def pick_per_family_thresholds(
     s = np.asarray(scores, dtype=float)
     y = np.asarray(y_true, dtype=int)
     f = np.asarray(families)
-    return {
-        str(fam): float(pick_threshold_max_f1(s[f == fam], y[f == fam]))
-        for fam in sorted(set(f.tolist()))
-    }
+    out = {}
+    for fam in sorted(set(f.tolist())):
+        m = f == fam
+        if int(y[m].sum()) == 0:
+            out[str(fam)] = float(fallback)
+        else:
+            out[str(fam)] = float(pick_threshold_max_f1(s[m], y[m]))
+    return out
 
 
 def episode_hit_rate(
@@ -97,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
-    from src.train_pipeline import compute_raw_pointwise_f1
+    from src.train_pipeline import compute_raw_pointwise_f1, pick_threshold_max_f1
     from src.window_dataset import build_windows
 
     paths = sorted(_glob.glob(args.parquet))
@@ -116,7 +126,10 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"window-F1={f1:.4f} episode-hit={ep['hit_rate']:.4f} clean-fp={ep['clean_fp_rate']:.4f}"
     )
-    thr = pick_per_family_thresholds(oof, y, episode_family(groups, fam))
+    global_thr = float(pick_threshold_max_f1(oof, y))
+    thr = pick_per_family_thresholds(
+        oof, y, episode_family(groups, fam), fallback=global_thr
+    )
     tuned = np.zeros(len(X), dtype=int)
     ep_fam = episode_family(groups, fam)
     for f in sorted(set(ep_fam.tolist())):

@@ -64,6 +64,16 @@ def test_per_family_thresholds_beat_global_on_shifted_families():
     assert compute_raw_pointwise_f1(y, dec) >= compute_raw_pointwise_f1(y, glob)
 
 
+def test_degenerate_all_negative_slice_falls_back_to_global():
+    from scripts.train_windows import pick_per_family_thresholds
+
+    s = np.array([0.1, 0.2, 0.8, 0.9])
+    y = np.array([0, 0, 0, 0])
+    fam = np.array(["none"] * 4)
+    thr = pick_per_family_thresholds(s, y, fam, fallback=0.5)
+    assert thr["none"] == 0.5
+
+
 def test_episode_family_labels_clean_windows_with_episode_family():
     from scripts.train_windows import episode_family
 
