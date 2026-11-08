@@ -29,13 +29,14 @@ CUSUM_P1_FLOOR = 0.2
 
 def fit_run_only_thresholds(cal_seed: int, machine_names: list[str]) -> dict:
     """Quantile artifact fitted on all-RUN calibration steps only (state-aware fit)."""
-    rec = twin.run_episode(cal_seed, None)
+    rec = twin.run_episode(cal_seed, None, enable_natural_breakdown=False)
     states = np.asarray(rec["states"])
     obs = np.asarray(rec["obs"], dtype=float).T
-    mask_1d = detect.clean_run_mask(states, config.WARMUP_STEPS, config.CAL_WIN)
-    full = np.zeros_like(obs, dtype=bool)
-    full[config.WARMUP_STEPS : config.CAL_WIN] = mask_1d[:, None]
-    return detect.fit_quantile_thresholds(obs, machine_names, clean_mask=full)
+    mask = np.zeros_like(obs, dtype=bool)
+    for j in range(len(machine_names)):
+        for t in range(config.WARMUP_STEPS, config.CAL_WIN):
+            mask[t, j] = states[j, t] == "RUN"
+    return detect.fit_quantile_thresholds(obs, machine_names, clean_mask=mask)
 
 
 def cusum_alarm_times(
@@ -129,12 +130,12 @@ def run_battery(
     """Run all manifest episodes + clean episodes; aggregate audit numbers."""
     rows = []
     for ep, row in zip(manifest["fault_episodes"], manifest["rows"]):
-        rec = twin.run_episode(ep, dict(row))
+        rec = twin.run_episode(ep, dict(row), enable_natural_breakdown=False)
         rows.append(
             score_episode(rec, dict(row), thresholds, machine_names, p0=p0, p1=p1)
         )
     for ep in manifest["clean_episodes"]:
-        rec = twin.run_episode(ep, None)
+        rec = twin.run_episode(ep, None, enable_natural_breakdown=False)
         rows.append(score_episode(rec, None, thresholds, machine_names, p0=p0, p1=p1))
     tp = sum(r["tp"] for r in rows)
     fp = sum(r["fp"] for r in rows)
@@ -198,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     # Pass 1 (clean): nominal reject rate for the quality CUSUM.
     kits = fails = 0
     for ep in manifest["clean_episodes"]:
-        rec = twin.run_episode(ep, None)
+        rec = twin.run_episode(ep, None, enable_natural_breakdown=False)
         for _, passed in gates.kit_outcomes_from_events(rec.get("events", [])):
             kits += 1
             fails += 0 if passed else 1

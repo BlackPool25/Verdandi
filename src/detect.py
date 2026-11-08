@@ -45,11 +45,16 @@ def fit_quantile_thresholds(
         raise ValueError(
             f"clean_mask shape {mask.shape} != T {(x.shape[0],)} or (T, N) {x.shape}"
         )
-    if int(masks.sum()) < 10:
-        raise ValueError("fit needs >= 10 clean steps")
+    if int(masks.sum()) < 1:
+        raise ValueError("fit needs >= 1 clean step")
     out: dict[str, dict[str, float]] = {}
     for j, m in enumerate(machine_names):
-        col = x[masks[:, j], j]
+        used = masks[:, j]
+        if int(used.sum()) < 10:
+            # Degenerate RUN history: fall back to the full column for this
+            # machine (documented via n == T) rather than fitting on dust.
+            used = np.ones(x.shape[0], dtype=bool)
+        col = x[used, j]
         q99 = float(np.quantile(col, q_high))
         q1 = float(np.quantile(col, 0.25))
         q3 = float(np.quantile(col, 0.75))
@@ -60,7 +65,7 @@ def fit_quantile_thresholds(
             "q3": q3,
             "fence": fence,
             "thr": max(q99, fence),
-            "n": float(int(masks[:, j].sum())),
+            "n": float(int(used.sum())),
         }
     return out
 
