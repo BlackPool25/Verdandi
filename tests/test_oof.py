@@ -23,8 +23,8 @@ def _four_episode_df() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def _mean_dist(X_train_clean: np.ndarray, y_train: np.ndarray):
-    mu = X_train_clean.mean(axis=0)
+def _mean_dist(X_train: np.ndarray, y_train: np.ndarray):
+    mu = X_train[np.asarray(y_train) == 0].mean(axis=0)
     return lambda x: np.abs(np.asarray(x, dtype=float) - mu).sum(axis=1)
 
 

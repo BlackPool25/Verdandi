@@ -1,8 +1,10 @@
 """GroupKFold out-of-fold scoring with fold-only normalization.
 
 Expert protocol (numpy, larger-abnormal scores):
-    scorer = maker(X_train_clean, y_train)   # fit on train NORMALS only
-    scores = scorer(X_test)                   # 1-D array, larger = more abnormal
+    scorer = maker(X_train, y_train)   # maker selects its own rows:
+                                       # unsupervised experts fit X_train[y_train == 0];
+                                       # supervised arms may use all rows.
+    scores = scorer(X_test)            # 1-D array, larger = more abnormal
 Normalization reuses train_pipeline.fit_transform_fold inside each fold, so no
 fold ever sees another fold's statistics.
 """
@@ -53,7 +55,7 @@ def run_oof(
         x_te = te_t[cols].to_numpy(dtype=float)
         y_tr = y[tr]
         for name, maker in experts.items():
-            scorer = maker(x_tr[y_tr == 0], y_tr)
+            scorer = maker(x_tr, y_tr)
             scores[name][te] = np.asarray(scorer(x_te), dtype=float).ravel()
     out = df.copy()
     for name, s in scores.items():
