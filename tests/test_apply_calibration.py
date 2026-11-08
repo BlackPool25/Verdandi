@@ -109,3 +109,16 @@ def test_episode_normalization_centers_clean():
         oof, ["s1"], clean_mask=oof["y"] == 0, families=oof["family"]
     )
     assert out["fused"][oof["y"] == 1].all() and out["fused"][oof["y"] == 0].sum() <= 2
+
+
+def test_recall_floor_beats_maxf1_recall_on_weak_family():
+    import numpy as np
+
+    from src.apply_calibration import pick_recall_floor_thresholds
+
+    rng = np.random.default_rng(0)
+    s = np.concatenate([rng.normal(0, 1, 90), rng.normal(1.0, 1, 10)])
+    y = np.array([0] * 90 + [1] * 10)
+    thr = pick_recall_floor_thresholds(s, y, np.array(["w"] * 100), floor=0.7)["w"]
+    r = ((s >= thr).astype(int) & y).sum() / y.sum()
+    assert r >= 0.7

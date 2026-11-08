@@ -22,10 +22,7 @@ from src.calibrate_3arm import (
     stability_vote,
 )
 from src.fusion import estimate_reliabilities
-from src.train_pipeline import (
-    compute_raw_pointwise_f1,
-    pick_per_class_thresholds,
-)
+from src.train_pipeline import compute_raw_pointwise_f1
 
 
 def expert_threshold(clean_scores: np.ndarray) -> float:
@@ -38,6 +35,35 @@ def expert_threshold(clean_scores: np.ndarray) -> float:
     exc = s[s > q95] - q95
     tau_c = fit_pot_mom_threshold(exc, prior_zq=tau_a)["z_q"]
     return stability_vote(tau_a, tau_b, tau_c)
+
+
+def pick_recall_floor_thresholds(
+    scores: np.ndarray, y_true: np.ndarray, classes: np.ndarray, *, floor: float = 0.7
+) -> dict[str, float]:
+    """Per-class max-precision operating point subject to recall >= floor.
+
+    Rightmost (highest) threshold meeting the floor; falls back to the lowest
+    threshold (max recall) when the floor is unreachable. Unlike max-F1, this
+    binds to a recall contract instead of the eval slice's prevalence.
+    """
+    s = np.asarray(scores, dtype=float)
+    y = np.asarray(y_true, dtype=int)
+    c = np.asarray(classes)
+    out: dict[str, float] = {}
+    for cls in sorted(set(c.tolist())):
+        m = c == cls
+        ss, yy = s[m], y[m]
+        p = int(yy.sum())
+        if p == 0 or len(ss) == 0:
+            out[str(cls)] = float(np.max(ss)) if len(ss) else 0.0
+            continue
+        best = float(np.min(ss))
+        for thr in sorted(set(ss.tolist()), reverse=True):
+            if int((((ss >= thr).astype(int)) & yy).sum()) / p >= floor:
+                best = float(thr)
+                break
+        out[str(cls)] = best
+    return out
 
 
 def apply_calibration(
@@ -108,7 +134,7 @@ def apply_calibration(
             row_score += w * z[col][rows]
         fused[rows] = row_score
     out["fused_score"] = fused
-    thr = pick_per_class_thresholds(fused, y, fam)
+    thr = pick_recall_floor_thresholds(fused, y, fam, floor=0.7)
     final = np.zeros(len(oof), dtype=bool)
     for f in sorted(set(fam.tolist())):
         rows = np.flatnonzero(fam == f)

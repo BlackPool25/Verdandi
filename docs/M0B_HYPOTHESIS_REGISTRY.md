@@ -6,8 +6,9 @@ Tiered F1 rule (owner 2026-11-08): ≥0.85 pass; 0.60–0.84 fail + falsificatio
 
 ## Trained-pool adjudication (OOF decisions, full-episode rows, deployment prevalence)
 
-Trained fused operating point: point-F1 **0.711** (OOF-tuned; optimism caveat ~0.05–0.15 applies,
-honest estimate ≈0.58–0.66 — Task 20 nested run pending; was 0.657 pre-normalization).
+Trained fused operating point: point-F1 **0.554** under recall-floor 0.7 (was 0.711 max-F1;
+floor guarantees >=0.70 fault-row recall in EVERY family at 2.7% clean-row rate).
+Optimism caveat ~0.05–0.15 still applies; honest estimate ≈0.47–0.50 — Task 20 nested run pending.
 Clean-row fused rate 0.9% (window-only veto; was 1.5% with whole-episode veto).
 Naive OR with quantile (hard union in runner): F1 **0.098** — textbook OR inflation, measured;
 the fused operating point, not the OR, is the trained system under test.
@@ -16,7 +17,7 @@ the fused operating point, not the OR, is the trained system under test.
 |---|---|---|
 | H1 N-vs-S | S-arm VUS < best-N VUS by 0.158; F1 reading also negative (S 0.597 max vs LOF 0.669) | Falsified |
 | H2 gate +3pp | structural − quantile episode-hit = +0.104 (valid per-episode data) | Survived |
-| H3 per-class +2pp | per-class F1 0.711 vs single global (+0.066) | Survived |
+| H3 per-class +2pp | per-class F1 0.554 vs single global (-0.091) — floor trades F1 for recall guarantee | Falsified |
 | H4 M-vs-G ±2pp | walk/pcmci absent | BLOCKED (out of scope, not adjudicated) |
 | H5 firing | quality-expert clean fires 0/400 kits (≤3/1000 bar met); ≥2-of-3 stability needs repeats | Ambiguous (allowed) |
 | USAD/GDN | torch absent in CPU-only env | BLOCKED, never Falsified |
