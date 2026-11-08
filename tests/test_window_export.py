@@ -541,3 +541,38 @@ class TestMultiScaleExport:
         df1 = pd.read_parquet(dir1 / "window_features.parquet")
         df2 = pd.read_parquet(dir2 / "window_features.parquet")
         assert df1.equals(df2)
+
+
+# ---------------------------------------------------------------------------
+# Test: Masked detrend (M0b-T Phase A4 — fit trend on clean ticks only)
+# ---------------------------------------------------------------------------
+
+
+class TestMaskedDetrend:
+    def test_full_mask_matches_detrend_signal(self):
+        rng = np.random.default_rng(0)
+        t = np.arange(300)
+        x = 0.1 * t + rng.normal(size=300)
+        np.testing.assert_allclose(
+            we.detrend_masked(x, np.ones(300, dtype=bool)), we.detrend_signal(x), atol=1e-8
+        )
+
+    def test_fault_step_not_smeared_into_trend(self):
+        t = np.arange(300)
+        x = 0.1 * t.astype(float)
+        x[150:160] += 5.0  # injected step fault
+        mask = np.ones(300, dtype=bool)
+        mask[150:160] = False  # fit trend on clean ticks only
+        y_masked = we.detrend_masked(x, mask)
+        y_global = we.detrend_signal(x)
+        assert abs(float(np.mean(y_masked[150:160])) - 5.0) < 0.5
+        # Global fit smears the step into the trend; masked fit preserves it.
+        assert float(np.mean(y_masked[150:160])) > float(np.mean(y_global[150:160]))
+
+    def test_mask_length_mismatch_raises(self):
+        with pytest.raises(ValueError, match="mask"):
+            we.detrend_masked(np.zeros(10), np.ones(8, dtype=bool))
+
+    def test_empty_mask_raises(self):
+        with pytest.raises(ValueError, match="mask"):
+            we.detrend_masked(np.zeros(10), np.zeros(10, dtype=bool))

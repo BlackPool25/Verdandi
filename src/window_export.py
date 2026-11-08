@@ -136,6 +136,28 @@ def detrend_signal(x: np.ndarray) -> np.ndarray:
     return scipy_detrend(x, type="linear")
 
 
+def detrend_masked(x: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Remove linear trend fitted on masked (clean/RUN-only) ticks from a 1-D signal.
+
+    The least-squares line is fitted on x[mask] only, then subtracted from the
+    full series — fault/symptom ticks never enter the trend estimate, so step
+    faults are preserved instead of smeared into the trend.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    m = np.asarray(mask, dtype=bool)
+    if x.ndim != 1:
+        raise ValueError(f"detrend_masked expects 1-D input, got shape {x.shape}")
+    if m.shape != x.shape:
+        raise ValueError(
+            f"detrend_masked mask shape {m.shape} != signal shape {x.shape}"
+        )
+    if int(np.sum(m)) < 2:
+        raise ValueError("detrend_masked mask must select at least 2 ticks")
+    t = np.arange(len(x), dtype=np.float64)
+    slope, intercept = np.polyfit(t[m], x[m], 1)
+    return x - (slope * t + intercept)
+
+
 def global_envelope(
     x: np.ndarray,
     definition_id: str = ENVELOPE_DEFINITION_ID,
