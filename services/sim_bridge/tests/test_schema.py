@@ -14,7 +14,7 @@ import copy
 import pytest
 
 from services.sim_bridge import schema as S
-from src.config import BUFFERS
+from src.config import BUFFERS, MACHINE_INDEX
 from src.twin import run_episode
 
 SEEDS = [7, 777, 1234]
@@ -146,8 +146,8 @@ def test_bridge_currents_key_and_energy_header():
     tick, rec = good_tick()
     # tick currents: verbatim row passthrough, same machine order as states
     assert "currents" in tick, "tick must carry currents row (W5)"
-    order = sorted(rec["machines"])
-    idx = {m: i for i, m in enumerate(order)}
+    order = sorted(rec["machines"], key=MACHINE_INDEX.__getitem__)
+    idx = MACHINE_INDEX
     expected = [rec["currents"][idx[m]][0] for m in order]
     assert tick["currents"] == expected
     assert len(tick["currents"]) == N_MACHINES
@@ -186,3 +186,38 @@ def test_bridge_v2_header_missing_energy_rejected():
     del bad["energy"]
     with pytest.raises(S.SchemaViolation, match="missing keys"):
         S.validate_header(bad)
+
+
+def test_build_tick_uses_canonical_machine_order():
+    """B1 slot must hold the B1 row, not the alphabetical-sort row (B7S).
+
+    Regression: sorted(record["machines"]) put ASM0 at idx 6 and B1 at
+    idx 10 (reading canonical row 10 = B7S, standby STARVED), while the
+    frontend MACHINE_IDS / MACHINE_INDEX canonical order has B0 at idx 6
+    and B1 at idx 7.
+    """
+    from src.config import N_MACHINES
+
+    canonical = list(MACHINE_INDEX.keys())
+    n = N_MACHINES
+    t = 3
+    record: dict[str, object] = {
+        "machines": {m: {} for m in canonical},
+        "states": [[f"{m}-s{k}" for k in range(t)] for m in canonical],
+        "obs": [[float(MACHINE_INDEX[m]) for k in range(t)] for m in canonical],
+        "throughput": [[MACHINE_INDEX[m] % 2 for k in range(t)] for m in canonical],
+        "currents": [[float(MACHINE_INDEX[m]) + 0.5 for k in range(t)] for m in canonical],
+        "buffers": [[0 for k in range(t)] for _ in range(len(BUFFERS))],
+        "events": [],
+        "parts": [],
+        "faults": [],
+    }
+    tick = S.build_tick(record, 1)
+    b1_slot = MACHINE_INDEX["B1"]
+    assert tick["states"][b1_slot] == record["states"][b1_slot][1] == "B1-s1"
+    assert tick["states"] == [f"{m}-s1" for m in canonical]
+    assert tick["obs"] == [float(MACHINE_INDEX[m]) for m in canonical]
+    assert tick["throughput"] == [MACHINE_INDEX[m] % 2 for m in canonical]
+    assert tick["currents"] == [float(MACHINE_INDEX[m]) + 0.5 for m in canonical]
+    assert len(tick["states"]) == n
+    assert tick["states"][b1_slot] != "B7S-s1"

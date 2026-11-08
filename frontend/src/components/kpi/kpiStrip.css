@@ -58,19 +58,22 @@
 }
 
 .vd-tile-val {
-  font-size: var(--text-sm);
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 16px;
+  font-weight: bold;
   color: var(--text);
   line-height: 1;
 }
 
 .vd-tile-denom {
-  font-size: 10px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 13px;
   color: var(--ink-500);
 }
 
 .vd-tile-unit {
-  font-family: var(--font-pixel);
-  font-size: 11px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 13px;
   color: var(--ink-500);
   margin-left: 2px;
 }
@@ -149,8 +152,9 @@
 }
 
 .vd-state-num {
-  font-family: var(--font-display, "Press Start 2P", monospace);
-  font-size: 11px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 16px;
+  font-weight: bold;
   color: var(--text);
   margin-left: 3px;
 }
@@ -256,7 +260,9 @@
 }
 
 .vd-total-val {
-  font-size: 12px;
+  font-family: var(--font-mono, "VT323", monospace);
+  font-size: 16px;
+  font-weight: bold;
   color: var(--text);
   margin-top: 2px;
 }

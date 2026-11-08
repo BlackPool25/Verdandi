@@ -2,12 +2,11 @@ import type { TickPatch } from "../topology/TopologyView";
 import type { DownUpEvent, TwinEvent } from "../components/events/types";
 import { MACHINE_IDS } from "../store/tick";
 
-// Live tick arrays replay in sorted(record["machines"]) order (schema.py
-// _machines). The twin roster sorts lexicographically to A0,A1,A2,A7,A8,A9,
-// ASM0,ASM1,ASM2, B0,B1,B2,B7P,B7S,B8,B9, C0,C1,C2,C6,C7, INSP0, PKG0,PKG1,
-// PKG2, RWK0 — NOT the display order in MACHINE_IDS (PKG0-2 sit after INSP0,
-// INSP0 after C7; ASM0-2 sort before B0 within the A-block).
-export const STREAM_MACHINE_ORDER: readonly string[] = [...MACHINE_IDS].sort();
+// Live tick arrays replay in canonical MACHINE_INDEX order (schema.py
+// _machines sorted by MACHINE_INDEX, matching store/tick.ts MACHINE_IDS).
+// Do NOT sort alphabetically: sorted() puts ASM0-2 before B0 and INSP0
+// after C7, misaligning B1->B7S (STARVED ghost).
+export const STREAM_MACHINE_ORDER: readonly string[] = MACHINE_IDS;
 
 export const T_TOTAL = 300;
 export const BYTE_BUDGET = 2 * 1024 * 1024;

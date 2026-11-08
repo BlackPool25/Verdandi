@@ -15,6 +15,7 @@ export function TopBar(): React.JSX.Element {
     setGuideOpen,
     hasVisitedGuide,
     markGuideVisited,
+    jumpToStep,
     stepPrevEvent,
     stepNextEvent,
     faults,
@@ -33,6 +34,10 @@ export function TopBar(): React.JSX.Element {
   const cursor = Math.max(0, source.cursor);
   const playing = source.playing;
   const speed = source.speed;
+  const bufferedMax = source.rowCount > 0 ? source.rowCount - 1 : 0;
+  const scrubMax = Math.min(T_TOTAL - 1, bufferedMax);
+  const scrubValue = Math.min(cursor, scrubMax);
+  const canScrub = source.rowCount > 0 && source.rowJson(0) !== undefined;
 
   const handleCopyEpisode = () => {
     if (!episodeId) return;
@@ -107,6 +112,7 @@ export function TopBar(): React.JSX.Element {
             className="vd-ctrl-btn"
             data-testid="topbar-step-prev-event"
             onClick={stepPrevEvent}
+            disabled={!canScrub}
             title="Jump to previous event"
             aria-label="Jump to previous event"
           >
@@ -118,8 +124,9 @@ export function TopBar(): React.JSX.Element {
             data-testid="topbar-step-back"
             onClick={() => {
               source.setPlaying(false);
-              source.stepTo(Math.max(0, cursor - 1));
+              jumpToStep(Math.max(0, cursor - 1));
             }}
+            disabled={!canScrub}
             title="Step backward one tick (-1)"
             aria-label="Step backward"
           >
@@ -131,7 +138,7 @@ export function TopBar(): React.JSX.Element {
             data-testid="topbar-play-pause"
             onClick={() => {
               if (!playing && cursor >= T_TOTAL - 1) {
-                source.stepTo(0);
+                jumpToStep(0);
                 source.setPlaying(true);
               } else {
                 source.setPlaying(!playing);
@@ -148,8 +155,9 @@ export function TopBar(): React.JSX.Element {
             data-testid="topbar-step-fwd"
             onClick={() => {
               source.setPlaying(false);
-              source.stepTo(Math.min(T_TOTAL - 1, cursor + 1));
+              jumpToStep(Math.min(scrubMax, cursor + 1));
             }}
+            disabled={!canScrub}
             title="Step forward one tick (+1)"
             aria-label="Step forward"
           >
@@ -160,6 +168,7 @@ export function TopBar(): React.JSX.Element {
             className="vd-ctrl-btn"
             data-testid="topbar-step-next-event"
             onClick={stepNextEvent}
+            disabled={!canScrub}
             title="Jump to next event"
             aria-label="Jump to next event"
           >
@@ -173,12 +182,13 @@ export function TopBar(): React.JSX.Element {
             <input
               type="range"
               min={0}
-              max={T_TOTAL - 1}
-              value={cursor}
+              max={scrubMax}
+              value={scrubValue}
               onChange={(e) => {
                 source.setPlaying(false);
-                source.stepTo(Number(e.target.value));
+                jumpToStep(Number(e.target.value));
               }}
+              disabled={!canScrub}
               className="vd-scrubber-slider"
               data-testid="topbar-scrubber"
               aria-label="simulation step scrubber"

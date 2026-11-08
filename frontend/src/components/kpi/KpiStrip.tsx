@@ -60,6 +60,11 @@ export function KpiStrip({
 
   // Update rolling history on step changes
   useEffect(() => {
+    rollingTputRef.current = [];
+    lastStepRef.current = -1;
+  }, [episodeId]);
+
+  useEffect(() => {
     if (tick === null || tick.step === lastStepRef.current) return;
     lastStepRef.current = tick.step;
     const currentTput = tick.throughput.reduce((a, b) => a + b, 0);

@@ -12,10 +12,11 @@ import { useLocation } from "react-router-dom";
 import { postEpisode } from "../components/controls/api";
 import { toFaultSpec } from "../components/events/anomaly";
 import type { FaultSpec } from "../components/events/types";
-import { BUFFER_IDS, type Tick } from "../store/tick";
+import { BUFFER_IDS, parseTick, type Tick } from "../store/tick";
 import { createTwinStore, type TwinStore } from "../store/twinStore";
 import {
   STREAM_MACHINE_ORDER,
+  T_TOTAL,
   useTickSource,
   type TickSource,
 } from "./tickSource";
@@ -49,6 +50,39 @@ export interface TwinStreamContextValue {
 }
 
 const TwinStreamContext = createContext<TwinStreamContextValue | null>(null);
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// sbuf lookup for seek: undefined means "row missing", caller seeks bare.
+function sbufFromRowJson(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  let body: unknown = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(body)) return undefined;
+  const v: unknown = body["sbuf_level"];
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+// Full-schema parse for forward-jump backfill of skipped ring rows.
+function tickFromRowJson(raw: string): Tick | null {
+  let body: unknown = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  try {
+    return parseTick(body);
+  } catch {
+    return null;
+  }
+}
 
 export function useTwinStream(): TwinStreamContextValue {
   const ctx = useContext(TwinStreamContext);
@@ -137,9 +171,15 @@ export function TwinStreamProvider({
   const seedNow = useCallback(() => {
     setSeedError(false);
     postEpisode("", targetSeed, [], true)
-      .then((created) => setEpisodeId(created.episode_id))
+      .then((created) => {
+        // Synchronous reset before the id swap: drops chart series to 0
+        // immediately so no stale-tick frame renders under the new id.
+        ingestedStep.current = -1;
+        chartStore.reset();
+        setEpisodeId(created.episode_id);
+      })
       .catch(() => setSeedError(true));
-  }, [targetSeed]);
+  }, [targetSeed, chartStore]);
 
   // Initial episode creation if no episode parameter
   useEffect(() => {
@@ -158,16 +198,27 @@ export function TwinStreamProvider({
     };
   }, [epParam, targetSeed]);
 
-  // Reset store whenever episode changes
+  // Reset on the prop episodeId (not source.episodeId, which lags one
+  // render behind the controller emit and mixes the new id with old rows).
   useEffect(() => {
     ingestedStep.current = -1;
     chartStore.reset();
-  }, [source.episodeId, chartStore]);
+  }, [episodeId, chartStore]);
 
-  // Ingest ticks into cyclic ring buffers
+  // Ingest ticks into cyclic ring buffers, backfilling any buffered prefix
+  // rows missed across the reset (cursor may already be past 0 on re-fire).
   useEffect(() => {
     const p = source.panelTick;
     if (p === null || p.step <= ingestedStep.current) return;
+    for (let k = ingestedStep.current + 1; k < p.step; k += 1) {
+      const raw = source.rowJson(k);
+      if (raw === undefined) continue;
+      const backfilled = tickFromRowJson(raw);
+      if (backfilled === null || backfilled.step <= ingestedStep.current) continue;
+      ingestedStep.current = backfilled.step;
+      chartStore.ingest(backfilled);
+    }
+    if (p.step <= ingestedStep.current) return;
     ingestedStep.current = p.step;
     const row: Tick = {
       step: p.step,
@@ -219,18 +270,40 @@ export function TwinStreamProvider({
       natural: boolean,
     ): Promise<EpisodeCreated> => {
       const created = await postEpisode("", seed, faultDrafts, natural);
+      ingestedStep.current = -1;
+      chartStore.reset();
       setEpisodeId(created.episode_id);
       source.setPlaying(true);
       return created;
     },
-    [source],
+    [source, chartStore],
   );
 
   const jumpToStep = useCallback(
     (step: number) => {
-      source.stepTo(step);
+      if (!Number.isInteger(step)) return;
+      const clamped = Math.min(T_TOTAL - 1, Math.max(0, step));
+      const ok = source.stepTo(clamped);
+      if (!ok) return;
+      const prev = ingestedStep.current;
+      if (clamped > prev) {
+        for (let k = prev + 1; k <= clamped; k += 1) {
+          const raw = source.rowJson(k);
+          if (raw === undefined) continue;
+          const backfill = tickFromRowJson(raw);
+          if (backfill === null) continue;
+          chartStore.ingest(backfill);
+        }
+      }
+      const sbuf = sbufFromRowJson(source.rowJson(clamped));
+      if (sbuf === undefined) {
+        chartStore.seek(clamped);
+      } else {
+        chartStore.seek(clamped, sbuf);
+      }
+      ingestedStep.current = clamped;
     },
-    [source],
+    [source, chartStore],
   );
 
   const stepPrevEvent = useCallback(() => {
@@ -245,11 +318,11 @@ export function TwinStreamProvider({
       }
     }
     if (target >= 0) {
-      source.stepTo(target);
+      jumpToStep(target);
     } else if (currentStep > 0) {
-      source.stepTo(0);
+      jumpToStep(0);
     }
-  }, [source]);
+  }, [source, jumpToStep]);
 
   const stepNextEvent = useCallback(() => {
     const currentStep = source.cursor;
@@ -263,9 +336,9 @@ export function TwinStreamProvider({
       }
     }
     if (target >= 0) {
-      source.stepTo(target);
+      jumpToStep(target);
     }
-  }, [source]);
+  }, [source, jumpToStep]);
 
   const showSkeleton = episodeId === null && !seedError;
 

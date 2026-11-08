@@ -75,7 +75,9 @@
      ------------------------------------------------------------- */
   --font-display: "Press Start 2P", monospace;
   --font-ui:      "Pixelify Sans", sans-serif;
-  --font-mono:    "VT323", monospace; /* Strictly raw JSON viewers only */
+  --font-mono:    "VT323", monospace;
+  --font-data:    "VT323", monospace;
+  --font-pixel:   "VT323", monospace;
 
   /* -------------------------------------------------------------
      8. PIXEL PRIMITIVES (4px Grid)
