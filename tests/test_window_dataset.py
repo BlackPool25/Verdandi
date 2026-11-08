@@ -41,9 +41,39 @@ def test_window_features_separate_shift():
     assert X[y == 1].mean() > X[y == 0].mean()
 
 
-def test_clean_norm_centers_clean_and_preserves_shift():
+def test_invariant_width_and_channel_permutation_invariance():
     import numpy as np
+    import pandas as pd
 
+    from src.window_dataset import build_windows
+
+    n = 64
+    base = {
+        "episode_id": [1] * n,
+        "step": list(range(n)),
+        "y": [0] * 32 + [1] * 32,
+        "fault_family": ["none"] * 32 + ["delay"] * 32,
+        "obs_A0": np.concatenate([np.zeros(32), np.linspace(0, 8, 32)]),
+        "obs_A1": np.zeros(n),
+        "cycle_lag": list(range(n)),
+        "stale_hold_run": [0] * n,
+        "reject_flag_count": [0] * n,
+        "degrade_flag_count": [0] * n,
+    }
+    df = pd.DataFrame(base)
+    Xi, _yi, _, _ = build_windows(df, w=16, stride=16, invariant=True)
+    assert Xi.shape[1] == 15 + 8 and np.isfinite(Xi).all()
+    swapped = df.copy()
+    swapped[["obs_A0", "obs_A1"]] = df[["obs_A1", "obs_A0"]].values
+    Xs, _, _, _ = build_windows(swapped, w=16, stride=16, invariant=True)
+    assert np.array_equal(Xi, Xs)
+    Xa, _, _, _ = build_windows(df, w=16, stride=16, invariant=False)
+    assert Xa.shape[1] == 2 * 5 + 8  # absolute width scales with channel count
+    Xas, _, _, _ = build_windows(swapped, w=16, stride=16, invariant=False)
+    assert not np.array_equal(Xa, Xas)  # absolute keys on which channel moved
+
+
+def test_clean_norm_centers_clean_and_preserves_shift():
     from src.window_dataset import apply_norm, fit_clean_norm
 
     rng = np.random.default_rng(0)

@@ -130,9 +130,11 @@ def main(argv: list[str] | None = None) -> int:
 
         from src.window_dataset import build_windows
 
+        art0 = joblib.load(args.artifact + "/model.joblib")
+        inv = bool(art0.get("invariant", False))
         paths = sorted(_glob.glob(args.parquet))
         df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-        sw, sy, sfam, sg = build_windows(df, w=32, stride=8)
+        sw, sy, sfam, sg = build_windows(df, w=32, stride=8, invariant=inv)
         stream = (sw, sy, sg, sfam)
     r = bench(args.artifact, n_windows=args.n_windows, stream=stream)
     print(

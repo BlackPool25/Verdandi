@@ -55,3 +55,19 @@ def test_finalize_trains_calibrates_saves_and_reloads(tmp_path):
     art2 = joblib.load(out / "model.joblib")
     p2 = art2["model"].predict_proba(X)[:, 1]
     assert np.array_equal(p1, p2)
+
+
+def test_finalize_invariant_emits_23_features(tmp_path):
+    from scripts.finalize_window_model import finalize
+
+    r = finalize(
+        _tiny_df(),
+        out_dir=str(tmp_path / "inv"),
+        w=16,
+        stride=16,
+        seed=0,
+        invariant=True,
+    )
+    assert r["n_features"] == 23
+    art = joblib.load(tmp_path / "inv" / "model.joblib")
+    assert art["invariant"] is True

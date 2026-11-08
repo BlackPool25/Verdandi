@@ -28,9 +28,14 @@ from src.window_dataset import STRUCT_COLS, apply_norm, build_windows, fit_clean
 STATS = ("mean", "std", "min", "max", "slope")
 
 
-def feature_names(obs_cols: list[str]) -> list[str]:
+def feature_names(obs_cols: list[str], *, invariant: bool = False) -> list[str]:
     """Name each window feature in build_windows emission order."""
-    names = [f"{c}.{s}" for c in obs_cols for s in STATS]
+    if invariant:
+        from src.window_dataset import INVARIANT_STATS
+
+        names = [f"any.{s}.{k}" for k in STATS for s in INVARIANT_STATS]
+    else:
+        names = [f"{c}.{s}" for c in obs_cols for s in STATS]
     for c in STRUCT_COLS:
         if c == "stale_hold_run":
             names += [f"{c}.rate", f"{c}.max"]
@@ -49,17 +54,18 @@ def finalize(
     stride: int = 8,
     seed: int = 0,
     battery_id: str = "m0b-mass-balanced-v1",
+    invariant: bool = False,
 ) -> dict:
     """Train, calibrate, threshold, save. Returns validation metrics + paths."""
     from sklearn.calibration import CalibratedClassifierCV  # type: ignore[import-untyped]
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
 
     obs_cols = [c for c in df.columns if c.startswith("obs_")]
-    X, y, fam, groups = build_windows(df, w=w, stride=stride)
+    X, y, fam, groups = build_windows(df, w=w, stride=stride, invariant=invariant)
     eps = sorted(pd.unique(groups))
     cal_eps = set(eps[2::3])
     cal = np.array([e in cal_eps for e in groups])
-    n_obs = X.shape[1] - 2 * len(STRUCT_COLS)
+    n_obs = 15 if invariant else X.shape[1] - 2 * len(STRUCT_COLS)
     norm_med, norm_iqr = fit_clean_norm(X[~cal], y[~cal], n_obs)
     Xn, Xc = (
         apply_norm(X[~cal], norm_med, norm_iqr, n_obs),
@@ -81,7 +87,7 @@ def finalize(
     f1 = compute_raw_pointwise_f1(y[cal], dec)
     out = pathlib.Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    names = feature_names(obs_cols)
+    names = feature_names(obs_cols, invariant=invariant)
     assert len(names) == X.shape[1], f"{len(names)} != {X.shape[1]}"
     joblib.dump(
         {
@@ -91,6 +97,7 @@ def finalize(
             "w": w,
             "stride": stride,
             "battery_id": battery_id,
+            "invariant": bool(invariant),
             "norm_median": norm_med.tolist(),
             "norm_iqr": norm_iqr.tolist(),
             "n_obs_features": int(n_obs),
@@ -127,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--w", type=int, default=32)
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--invariant", action="store_true")
     args = ap.parse_args(argv)
     import glob as _glob
 
@@ -134,7 +142,14 @@ def main(argv: list[str] | None = None) -> int:
     if not paths:
         raise SystemExit(f"no parquet shards match {args.parquet}")
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-    r = finalize(df, out_dir=args.out, w=args.w, stride=args.stride, seed=args.seed)
+    r = finalize(
+        df,
+        out_dir=args.out,
+        w=args.w,
+        stride=args.stride,
+        seed=args.seed,
+        invariant=args.invariant,
+    )
     print(
         f"finalized -> {r['out_dir']}: val window-F1={r['window_f1']:.4f} "
         f"({r['n_windows']} windows, {r['n_features']} feats, {r['n_cal_episodes']} cal eps)"

@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--splits", type=int, default=3)
     ap.add_argument("--save-oof", default="")
+    ap.add_argument("--invariant", action="store_true")
     args = ap.parse_args(argv)
     import glob as _glob
 
@@ -120,8 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     if not paths:
         raise SystemExit(f"no parquet shards match {args.parquet}")
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-    X, y, fam, groups = build_windows(df, w=args.w, stride=args.stride)
-    n_obs = X.shape[1] - 2 * len(STRUCT_COLS)  # obs block first, counters trail
+    X, y, fam, groups = build_windows(
+        df, w=args.w, stride=args.stride, invariant=args.invariant
+    )
+    n_obs = 15 if args.invariant else X.shape[1] - 2 * len(STRUCT_COLS)
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)
     oof = np.zeros(len(X))
