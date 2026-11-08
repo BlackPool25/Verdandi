@@ -6,5 +6,7 @@ B1 (prereg fill) executable now: fault table machine IDs predate topology-A (M1-
 Task B1: complete (commit 2ab1403; freeze script + 6 tests RED→GREEN, manifest 57b933a4 182 rows byte-identical, prereg filled, gateway waiver logged; full gate 425 passed + 1 skip, ruff/format clean)
 Task P1-detect: complete (commit e7c5632; src/detect.py 124 pure LOC, 8 tests RED→GREEN; F-06 lat≤3, F-21 flagged at origin; full gate 433 passed, ruff/format/mypy clean)
 Task A-audit (runnable half): complete (commit 43e21ed; scripts/run_m0b_baseline.py + 2 tests; F1=0.159 AC@1=0.423 hit 83/182 misses 99; signal classes covered, structural 92/104 missed; docs/M0B_BASELINE_AUDIT.md; full gate 435 passed, ruff clean). Blocked remainder (flip/BARO/grounding): walk.py + pcmci_job.py.
-Task buffer-fix: complete (commit 681ecbc; gap channels + plant-total buffer_occ on v6 only, legacy v3-v5 byte-identical per frozen flag-day contracts; 3 RED→GREEN; full gate green).
+Task fusion-wire: complete (commit 7c6c2cb; RUN-only fit helper, DOWN suppress, OR structural gates + quality CUSUM in runner; 23 green).
+Ruling: battery runs with enable_natural_breakdown=False (seeded-only controlled experiment; natural-breakdown robustness is a separate later test, else unseeded DOWN pollutes fp/fn accounting).
+Fix: all-RUN mask too strict under natural breakdowns → per-machine RUN masks (script-level, verified by audit run).
 Remaining Phase-1: walk.py (depth≤3+top-k+gateway), pcmci_job.py (bagged per-partition tau-2), shadow.py (cross-partition ranker).

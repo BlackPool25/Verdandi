@@ -134,3 +134,12 @@ def test_run_only_mask_selects_window_and_run():
     states = np.array([["RUN"] * 10, ["RUN"] * 5 + ["DOWN"] * 5])
     mask = detect.clean_run_mask(states, 2, 8)
     assert list(mask) == [True, True, True, False, False, False]
+
+
+def test_fit_falls_back_when_run_history_degenerate():
+    x = np.zeros((300, 1))
+    x[:, 0] = 1.0
+    mask = np.zeros((300, 1), dtype=bool)
+    mask[10:15, 0] = True  # only 5 RUN steps: fallback to full column
+    thr = detect.fit_quantile_thresholds(x, ["A"], clean_mask=mask)
+    assert thr["A"]["n"] == 300
