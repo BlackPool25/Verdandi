@@ -32,6 +32,14 @@ def build_specs(
     faults: dict[int, dict] = {}
     fault_eps: list[int] = []
     k = 0
+    # Faults strike any machine at any valid onset (uniform over machines and
+    # the feasible onset window). A single origin/onset teaches the model one
+    # machine's baselines — and invites memorizing (machine, time) instead of
+    # the signature. Window features carry no absolute clock, so time cannot
+    # leak; machine identity can, and is tested by leave-machine-out.
+    from src import config
+
+    machines = list(config.MACHINE_NAMES)
     for fam in FAMILIES:
         for rung in RUNGS:
             for j in range(n_per_cell):
@@ -54,10 +62,10 @@ def build_specs(
                     "id": f"M-{fam[:2].upper()}{rung[0].upper()}{j:03d}",
                     "mag_rung": rung,
                     "mag_sigma": float(mag),
-                    "origin": "A0",
+                    "origin": str(rng.choice(machines)),
                     "rep": False,
                     "sev": float(mag),
-                    "t0": 150,
+                    "t0": int(rng.integers(config.CAL_WIN, config.T - dur - 5)),
                 }
                 fault_eps.append(ep)
     clean_eps = [BASE_CLEAN + i for i in range(n_clean)]

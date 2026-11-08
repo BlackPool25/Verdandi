@@ -102,25 +102,38 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--w", type=int, default=32)
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--splits", type=int, default=3)
+    ap.add_argument("--save-oof", default="")
+    ap.add_argument("--invariant", action="store_true")
     args = ap.parse_args(argv)
     import glob as _glob
 
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
     from src.train_pipeline import compute_raw_pointwise_f1, pick_threshold_max_f1
-    from src.window_dataset import build_windows
+    from src.window_dataset import (
+        STRUCT_COLS,
+        apply_norm,
+        build_windows,
+        fit_clean_norm,
+    )
 
     paths = sorted(_glob.glob(args.parquet))
     if not paths:
         raise SystemExit(f"no parquet shards match {args.parquet}")
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-    X, y, fam, groups = build_windows(df, w=args.w, stride=args.stride)
+    X, y, fam, groups = build_windows(
+        df, w=args.w, stride=args.stride, invariant=args.invariant
+    )
+    n_obs = 15 if args.invariant else X.shape[1] - 2 * len(STRUCT_COLS)
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)
     oof = np.zeros(len(X))
     for tr, te in cv.split(X, y, groups):
-        clf = train_binary_gbm(X[tr], y[tr])
-        oof[te] = clf.predict_proba(X[te])[:, 1]  # type: ignore[union-attr]
+        # Fold-only clean baseline: inter-machine scale differences are fit on
+        # train-clean windows and applied blind to the held-out episodes.
+        med, iqr = fit_clean_norm(X[tr], y[tr], n_obs)
+        clf = train_binary_gbm(apply_norm(X[tr], med, iqr, n_obs), y[tr])
+        oof[te] = clf.predict_proba(apply_norm(X[te], med, iqr, n_obs))[:, 1]  # type: ignore[union-attr]
     f1 = compute_raw_pointwise_f1(y, (oof >= 0.5).astype(int))
     ep = episode_hit_rate((oof >= 0.5).astype(int), groups, fam)
     print(
@@ -146,6 +159,11 @@ def main(argv: list[str] | None = None) -> int:
         per_fam[f] = round(float(tuned[m].mean()), 4)
     print("per-family window recall:", per_fam)
     print("per-family thresholds:", {k: round(v, 4) for k, v in thr.items()})
+    if args.save_oof:
+        pd.DataFrame(
+            {"score": oof, "dec": tuned, "y": y, "fam": fam, "ep": groups}
+        ).to_parquet(args.save_oof, index=False)
+        print(f"oof saved -> {args.save_oof}")
     return 0
 
 
