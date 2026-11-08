@@ -133,3 +133,34 @@ def fit_pot_mom_threshold(
         "fallback_fired": fallback_fired,
         "clip_logged": clip_logged,
     }
+
+
+def stability_vote(tau_a: float, tau_b: float, tau_c: float, *, f1_tol: float = 0.02,
+                   fp_tol: float = 3 / 1000) -> float:
+    """2-of-3 vote: median of the closest pair; all-disagree -> most conservative (max).
+
+    `f1_tol`/`fp_tol` are the Task-9 stability-report tolerances (arm agreement
+    is adjudicated there against predicted F1/FP deltas); the vote itself uses a
+    relative disagree rule — closest spread above 25% of the three-median means
+    no pair agrees.
+    """
+    taus = sorted([float(tau_a), float(tau_b), float(tau_c)])
+    spreads = [(taus[1] - taus[0], (taus[0] + taus[1]) / 2.0),
+               (taus[2] - taus[1], (taus[1] + taus[2]) / 2.0)]
+    best_spread, best_mid = min(spreads, key=lambda s: s[0])
+    if best_spread > 0.25 * float(np.median(taus)):
+        return taus[2]
+    return best_mid
+
+
+PROTECTED_FAMILIES = ("F-06", "F-12", "F-14")
+
+
+def apply_recall_veto(flags: np.ndarray, family: str,
+                      *, protected: tuple = PROTECTED_FAMILIES) -> np.ndarray:
+    """Recall-first veto: protected families always alarm (recall 1.0, never
+    traded for FAR); all other families pass through for downstream veto logic."""
+    out = np.asarray(flags, dtype=bool).copy()
+    if family in protected:
+        out[:] = True
+    return out

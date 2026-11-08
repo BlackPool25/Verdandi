@@ -4,9 +4,11 @@ import numpy as np
 import pytest
 
 from src.calibrate_3arm import (
+    apply_recall_veto,
     fit_gmm_threshold,
     fit_pot_mom_threshold,
     fit_quantile_threshold,
+    stability_vote,
 )
 
 
@@ -34,3 +36,13 @@ def test_mom_spot_falls_back_on_heavy_tail():
     excesses = rng.pareto(0.4, size=40)  # true xi ~0.7 -> MOM invalid
     out = fit_pot_mom_threshold(excesses)
     assert out["fallback_fired"] is True and -0.5 < out["xi_hat"] < 0.5
+
+
+def test_vote_takes_agreeing_pair_median():
+    assert stability_vote(1.0, 1.1, 5.0) == pytest.approx(1.05)
+
+
+def test_veto_never_drops_protected_recall():
+    flags = np.array([True, False, True])
+    out = apply_recall_veto(flags, "F-06")
+    assert out.tolist() == [True, True, True]
