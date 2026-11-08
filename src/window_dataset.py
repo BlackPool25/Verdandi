@@ -16,6 +16,36 @@ import pandas as pd
 STRUCT_COLS = ("cycle_lag", "stale_hold_run", "reject_flag_count", "degrade_flag_count")
 
 
+def n_obs_features(n_obs_cols: int) -> int:
+    """Width of the obs block: 5 stats per channel, emitted first."""
+    return 5 * n_obs_cols
+
+
+def fit_clean_norm(
+    X: np.ndarray, y: np.ndarray, n_obs: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Median/IQR of the obs block on clean rows only (caller passes train-only).
+
+    Inter-machine level/scale differences live here; fault signatures survive
+    as deviations from the clean baseline instead of raw machine units.
+    """
+    xc = X[np.asarray(y) == 0][:, :n_obs]
+    med = np.median(xc, axis=0)
+    iqr = np.maximum(
+        np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9
+    )
+    return np.asarray(med, dtype=float), np.asarray(iqr, dtype=float)
+
+
+def apply_norm(
+    X: np.ndarray, med: np.ndarray, iqr: np.ndarray, n_obs: int
+) -> np.ndarray:
+    """Normalize the obs block; structural counters pass through untouched."""
+    out = np.array(X, dtype=float)
+    out[:, :n_obs] = (out[:, :n_obs] - med) / iqr
+    return out
+
+
 def _window_features(seg: pd.DataFrame, obs_cols: list[str]) -> np.ndarray:
     parts = []
     for c in obs_cols:

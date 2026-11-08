@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -41,11 +42,11 @@ def test_finalize_trains_calibrates_saves_and_reloads(tmp_path):
     assert (out / "thresholds.json").exists()
     assert (out / "schema.json").exists()
     assert r["window_f1"] > 0.5
+    art0 = joblib.load(out / "model.joblib")
+    assert {"norm_median", "norm_iqr", "n_obs_features"} <= set(art0)
     schema = json.loads((out / "schema.json").read_text())
     assert schema["w"] == 16 and len(schema["features"]) == r["n_features"]
     # Reload: identical predictions.
-    import joblib
-
     art = joblib.load(out / "model.joblib")
     from src.window_dataset import build_windows
 

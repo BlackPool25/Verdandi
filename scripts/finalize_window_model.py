@@ -23,7 +23,7 @@ import pandas as pd  # type: ignore[import-untyped]
 
 from scripts.train_windows import episode_family, pick_per_family_thresholds
 from src.train_pipeline import compute_raw_pointwise_f1, pick_threshold_max_f1
-from src.window_dataset import STRUCT_COLS, build_windows
+from src.window_dataset import STRUCT_COLS, apply_norm, build_windows, fit_clean_norm
 
 STATS = ("mean", "std", "min", "max", "slope")
 
@@ -59,12 +59,18 @@ def finalize(
     eps = sorted(pd.unique(groups))
     cal_eps = set(eps[2::3])
     cal = np.array([e in cal_eps for e in groups])
+    n_obs = X.shape[1] - 2 * len(STRUCT_COLS)
+    norm_med, norm_iqr = fit_clean_norm(X[~cal], y[~cal], n_obs)
+    Xn, Xc = (
+        apply_norm(X[~cal], norm_med, norm_iqr, n_obs),
+        apply_norm(X[cal], norm_med, norm_iqr, n_obs),
+    )
     base = HistGradientBoostingClassifier(max_iter=300, random_state=seed)
     # Internal 3-fold cross-fit calibration on train episodes only; the held-out
     # calibration third stays unseen for threshold picking and validation.
     model = CalibratedClassifierCV(estimator=base, cv=3, method="sigmoid")
-    model.fit(X[~cal], y[~cal])
-    scores = np.asarray(model.predict_proba(X[cal])[:, 1])
+    model.fit(Xn, y[~cal])
+    scores = np.asarray(model.predict_proba(Xc)[:, 1])
     ep_fam = episode_family(groups[cal], fam[cal])
     global_thr = float(pick_threshold_max_f1(scores, y[cal]))
     thr = pick_per_family_thresholds(scores, y[cal], ep_fam, fallback=global_thr)
@@ -85,6 +91,9 @@ def finalize(
             "w": w,
             "stride": stride,
             "battery_id": battery_id,
+            "norm_median": norm_med.tolist(),
+            "norm_iqr": norm_iqr.tolist(),
+            "n_obs_features": int(n_obs),
         },
         out / "model.joblib",
     )

@@ -39,3 +39,19 @@ def test_window_features_separate_shift():
 
     X, y, _, _ = build_windows(_df(), w=16, stride=8)
     assert X[y == 1].mean() > X[y == 0].mean()
+
+
+def test_clean_norm_centers_clean_and_preserves_shift():
+    import numpy as np
+
+    from src.window_dataset import apply_norm, fit_clean_norm
+
+    rng = np.random.default_rng(0)
+    Xc = rng.normal(10, 2, size=(50, 10))
+    Xf = rng.normal(16, 2, size=(10, 10))
+    X = np.vstack([Xc, Xf])
+    y = np.array([0] * 50 + [1] * 10)
+    med, iqr = fit_clean_norm(X, y, n_obs=10)
+    Xn = apply_norm(X, med, iqr, n_obs=10)
+    assert abs(float(Xn[:50].mean())) < 0.2
+    assert float(Xn[50:].mean()) > 2.0
