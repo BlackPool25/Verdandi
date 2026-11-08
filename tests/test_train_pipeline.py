@@ -196,3 +196,70 @@ def test_cli_appends_runtable_rows(tmp_path):
     with open(out, newline="") as fh:
         rows = list(csv.DictReader(fh))
     assert [r["job"] for r in rows] == ["a", "b"]
+
+
+def test_ecod_is_only_pyod_import():
+    import subprocess
+
+    out = subprocess.run(
+        ["grep", "-rn", "pyod", "src/", "--include=*.py"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert out.strip() != "" and all("ecod" in line.lower() for line in out.strip().splitlines())
+
+
+def _pool_clean_spike(seed: int = 0):
+    rng = np.random.default_rng(seed)
+    clean = rng.normal(0, 1, size=(200, 3))
+    spike = np.array([[10.0, 10.0, 10.0]])
+    return clean, spike
+
+
+def test_pool_ecod_marks_spike_above_clean():
+    from pyod.models.ecod import ECOD
+
+    clean, spike = _pool_clean_spike()
+    clf = ECOD(contamination=0.05).fit(clean)
+    s = tp.as_abnormal_scores("ecod", clf, np.vstack([clean, spike]))
+    assert s[-1] > s[:-1].mean()
+
+
+def test_pool_sklearn_signs_mark_spike_above_clean():
+    from sklearn.decomposition import PCA
+    from sklearn.ensemble import IsolationForest
+    from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
+
+    from src.train_pipeline import as_abnormal_scores
+
+    clean, spike = _pool_clean_spike()
+    both = np.vstack([clean, spike])
+    assert as_abnormal_scores("iforest", IsolationForest(random_state=0).fit(clean), both)[-1] > 0
+    assert as_abnormal_scores(
+        "lof", LocalOutlierFactor(novelty=True).fit(clean), both
+    )[-1] > as_abnormal_scores("lof", LocalOutlierFactor(novelty=True).fit(clean), clean).mean()
+    assert as_abnormal_scores("knn", NearestNeighbors(n_neighbors=5).fit(clean), both)[-1] > 0
+    assert as_abnormal_scores("pca", PCA(n_components=1).fit(clean), both)[-1] > 0
+
+
+def test_pool_dlinear_and_mp_flag_shape_break():
+    from src.train_pipeline import as_abnormal_scores, fit_dlinear_trend
+
+    rng = np.random.default_rng(0)
+    t = np.arange(300, dtype=float)
+    clean = (0.1 * t + rng.normal(0, 0.5, size=300))[:, None]
+    spiked = clean.copy()
+    spiked[150] += 20.0
+    coef = fit_dlinear_trend(clean)
+    assert as_abnormal_scores("dlinear", coef, spiked)[150] > 5.0
+    s = as_abnormal_scores("mp", None, spiked)
+    assert abs(int(np.argmax(s)) - 150) <= 64
+
+
+def test_pool_falsify_arms_report_unavailable():
+    from src.train_pipeline import pool_available
+
+    for name in ("usad", "gdn"):
+        ok, reason = pool_available(name)
+        assert ok is False and reason != ""
+    assert pool_available("ecod")[0] is True

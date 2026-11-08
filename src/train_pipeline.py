@@ -311,3 +311,75 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# --- M0b-T detector pool (Task 8): registry + unified larger-abnormal scores ---
+# PyOD waiver (owner 2026-11-08): ECOD ONLY. Every other expert is sklearn /
+# scipy / numpy / stumpy. torch-based arms (USAD, GDN) are falsify-arms and
+# unavailable in this CPU-only env — recorded, never silently dropped.
+
+POOL: dict[str, dict] = {
+    "quantile": {"kind": "detector", "note": "detect.fit_quantile_thresholds (no fitted object)"},
+    "ecod": {"kind": "detector", "sign": "larger-abnormal", "make": "pyod.models.ecod:ECOD"},
+    "iforest": {"kind": "detector", "sign": "negative-outlier", "make": "sklearn.ensemble:IsolationForest"},
+    "knn": {"kind": "detector", "sign": "larger-abnormal", "make": "sklearn.neighbors:NearestNeighbors"},
+    "pca": {"kind": "detector", "sign": "larger-abnormal", "make": "sklearn.decomposition:PCA"},
+    "lof": {"kind": "detector", "sign": "negative-outlier", "make": "sklearn.neighbors:LocalOutlierFactor"},
+    "ols": {"kind": "probe", "note": "sklearn.linear_model:LinearRegression supervised train-AUC probe"},
+    "dlinear": {"kind": "detector", "sign": "larger-abnormal", "note": "numpy least-squares trend residual"},
+    "usad": {"kind": "falsify-arm", "available": False, "reason": "needs torch; small-N risk"},
+    "gdn": {"kind": "falsify-arm", "available": False, "reason": "needs torch/PyG; small-N risk"},
+    "mp": {"kind": "guardrail", "sign": "larger-abnormal", "make": "stumpy:stump"},
+}
+
+
+def pool_available(name: str) -> tuple[bool, str]:
+    """(available, reason): falsify-arms report why they cannot run here."""
+    entry = POOL[name]
+    if "available" in entry:
+        return bool(entry["available"]), str(entry.get("reason", ""))
+    make = entry.get("make")
+    if make is None:
+        return True, str(entry.get("note", "native implementation"))
+    module, _ = make.split(":")
+    try:
+        __import__(module)
+    except ImportError as err:
+        return False, str(err)
+    return True, "import-ok"
+
+
+def _resolve_make(dotted: str):
+    module, attr = dotted.split(":")
+    return getattr(__import__(module, fromlist=[attr]), attr)
+
+
+def fit_dlinear_trend(x_clean: np.ndarray) -> np.ndarray:
+    """Least-squares line per column on clean train; returns [slope, intercept]."""
+    x = np.asarray(x_clean, dtype=float)
+    t = np.arange(x.shape[0], dtype=float)
+    a = np.vstack([t, np.ones_like(t)]).T
+    coef, *_ = np.linalg.lstsq(a, x, rcond=None)
+    return coef  # [2, n_channels]: row 0 slope, row 1 intercept
+
+
+def as_abnormal_scores(name: str, fitted, x: np.ndarray) -> np.ndarray:
+    """Unified larger=more-abnormal scores for a fitted pool expert."""
+    x = np.asarray(x, dtype=float)
+    if name == "knn":
+        dist, _ = fitted.kneighbors(x, n_neighbors=5)
+        return dist[:, -1]
+    if name == "pca":
+        recon = fitted.inverse_transform(fitted.transform(x))
+        return ((x - recon) ** 2).sum(axis=1)
+    if name == "dlinear":
+        t = np.arange(x.shape[0], dtype=float)[:, None]
+        return np.abs(x - (t * fitted[0] + fitted[1])).max(axis=1)
+    if name == "mp":
+        import stumpy  # type: ignore[import-untyped]
+
+        mp = stumpy.stump(x.ravel(), m=min(64, max(8, x.shape[0] // 4)))
+        return np.asarray(mp.P_, dtype=float)
+    sign = POOL[name].get("sign", "larger-abnormal")
+    raw = np.asarray(fitted.decision_function(x), dtype=float)
+    return raw if sign == "larger-abnormal" else -raw
