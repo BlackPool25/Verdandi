@@ -313,10 +313,10 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-# --- M0b-T detector pool (Task 8): registry + unified larger-abnormal scores ---
-# PyOD waiver (owner 2026-11-08): ECOD ONLY. Every other expert is sklearn /
-# scipy / numpy / stumpy. GPU-framework arms (USAD, GDN) are falsify-arms and
-# unavailable in this CPU-only env — recorded, never silently dropped.
+# --- M0b-T detector pool (Task 8 registry + Task 25 prune): unified larger-abnormal scores ---
+# Pruned to contributors only (owner 2026-11-08): ecod/iforest removed (dead
+# weight pointwise, waiver moot, ban reinstated). GPU-framework arms (USAD, GDN)
+# are falsify-arms and unavailable in this CPU-only env — recorded, never dropped.
 
 POOL: dict[str, dict] = {
     "quantile": {
@@ -324,14 +324,14 @@ POOL: dict[str, dict] = {
         "note": "detect.fit_quantile_thresholds (no fitted object)",
     },
     "ecod": {
-        "kind": "detector",
-        "sign": "larger-abnormal",
-        "make": "pyod.models.ecod:ECOD",
+        "kind": "deprecated",
+        "available": False,
+        "reason": "pruned Task 25: pointwise dead weight; waiver moot, ban reinstated",
     },
     "iforest": {
-        "kind": "detector",
-        "sign": "negative-outlier",
-        "make": "sklearn.ensemble:IsolationForest",
+        "kind": "deprecated",
+        "available": False,
+        "reason": "pruned Task 25: pointwise dead weight",
     },
     "knn": {
         "kind": "detector",

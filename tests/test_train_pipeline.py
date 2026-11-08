@@ -198,7 +198,7 @@ def test_cli_appends_runtable_rows(tmp_path):
     assert [r["job"] for r in rows] == ["a", "b"]
 
 
-def test_ecod_is_only_pyod_import():
+def test_no_pyod_imports_anywhere():
     import subprocess
 
     out = subprocess.run(
@@ -207,9 +207,7 @@ def test_ecod_is_only_pyod_import():
         text=True,
         check=False,
     ).stdout
-    assert out.strip() != "" and all(
-        "ecod" in line.lower() for line in out.strip().splitlines()
-    )
+    assert out.strip() == ""
 
 
 def _pool_clean_spike(seed: int = 0):
@@ -220,29 +218,22 @@ def _pool_clean_spike(seed: int = 0):
 
 
 def test_pool_ecod_marks_spike_above_clean():
-    from pyod.models.ecod import ECOD
+    from sklearn.neighbors import NearestNeighbors
 
     clean, spike = _pool_clean_spike()
-    clf = ECOD(contamination=0.05).fit(clean)
-    s = tp.as_abnormal_scores("ecod", clf, np.vstack([clean, spike]))
+    clf = NearestNeighbors(n_neighbors=5).fit(clean)
+    s = tp.as_abnormal_scores("knn", clf, np.vstack([clean, spike]))
     assert s[-1] > s[:-1].mean()
 
 
 def test_pool_sklearn_signs_mark_spike_above_clean():
     from sklearn.decomposition import PCA
-    from sklearn.ensemble import IsolationForest
     from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
 
     from src.train_pipeline import as_abnormal_scores
 
     clean, spike = _pool_clean_spike()
     both = np.vstack([clean, spike])
-    assert (
-        as_abnormal_scores("iforest", IsolationForest(random_state=0).fit(clean), both)[
-            -1
-        ]
-        > 0
-    )
     assert (
         as_abnormal_scores("lof", LocalOutlierFactor(novelty=True).fit(clean), both)[-1]
         > as_abnormal_scores(
@@ -276,4 +267,4 @@ def test_pool_falsify_arms_report_unavailable():
     for name in ("usad", "gdn"):
         ok, reason = pool_available(name)
         assert ok is False and reason != ""
-    assert pool_available("ecod")[0] is True
+    assert pool_available("lof")[0] is True
