@@ -104,10 +104,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def add_temporal(df: pd.DataFrame, obs_cols: list[str]) -> pd.DataFrame:
     """Per-episode causal temporal scores.
 
@@ -147,3 +143,7 @@ def add_temporal(df: pd.DataFrame, obs_cols: list[str]) -> pd.DataFrame:
     out["dlinear"] = dlinear
     out["mp_confirm"] = confirm
     return out
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
