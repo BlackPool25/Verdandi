@@ -41,3 +41,15 @@ def test_fuse_thresholds_weighted_votes():
 def test_fuse_counting_needs_k_votes():
     assert fuse_counting([True, False, True], k=2) is True
     assert fuse_counting([True, False, True], k=3) is False
+
+
+def test_episode_decision_requires_persistence():
+    from src.fusion import episode_decision
+
+    iso = {"q": np.array([False, False, True, False, False, False, False, False])}
+    assert not episode_decision(iso, k=3, window=5).any()
+    run = {"q": np.array([False, True, True, True, False, False, False, False])}
+    assert episode_decision(run, k=3, window=5)[3]
+    both = {"q": np.zeros(8, dtype=bool), "ml": np.zeros(8, dtype=bool)}
+    both["ml"][2:5] = True
+    assert episode_decision(both, k=3, window=5)[4]

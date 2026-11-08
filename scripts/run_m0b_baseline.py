@@ -119,6 +119,8 @@ def score_episode(
                 or gates.breakdown_gate(int(counters["downrun"][j, t]))
             ):
                 gate[t, j] = True
+    from src.fusion import episode_decision
+
     out: dict = {"tp": 0, "fp": 0, "fn": 0, "top": None, "latency": 999, "hit": False}
     if fused_flags is not None:
         _ml = np.asarray(fused_flags, dtype=bool).ravel()
@@ -127,19 +129,34 @@ def score_episode(
         ml[config.T - len(_ml) :] = _ml[-min(len(_ml), config.T) :]
     else:
         ml = np.zeros(config.T, dtype=bool)
+    cusum_hits = cusum_alarm_times(rec.get("events", []), p0, p1)
+    cus = np.zeros(config.T, dtype=bool)
+    for t in cusum_hits:
+        if 0 <= int(t) < config.T:
+            cus[int(t)] = True
+    # Episode decision: dwell-confirmed screen OR debounced CUSUM (CUSUM has its
+    # own hysteresis; dwelling it again would suppress legitimate single blips).
+    yh_full = episode_decision(
+        {
+            "quantile": alarms_q.any(axis=1),
+            "structural": gate.any(axis=1),
+            "ml": ml,
+        },
+        k=3,
+        window=5,
+    ) | cus
     if fault is None:
-        out["fp"] = int((alarms_q | gate | ml[:, None])[config.CAL_WIN :].sum())
+        out["fp"] = int(yh_full[config.CAL_WIN :].sum())
         return out
     t0, dur = int(fault["t0"]), int(fault["dur"])
     origin = fault["origin"]
     j = machine_names.index(origin)
     scored = np.zeros(config.T - config.CAL_WIN, dtype=int)
     scored[t0 - config.CAL_WIN : t0 - config.CAL_WIN + dur] = 1
-    yh = (alarms_q | gate | ml[:, None])[config.CAL_WIN :, :].max(axis=1).astype(int)
+    yh = yh_full[config.CAL_WIN :].astype(int)
     q_alarm = bool(alarms_q[t0 : t0 + dur + LAT_GATE, j].any())
     g_alarm = bool(gate[t0 : t0 + dur + LAT_GATE, j].any())
     m_alarm = bool(ml[t0 : t0 + dur + LAT_GATE].any())
-    cusum_hits = cusum_alarm_times(rec.get("events", []), p0, p1)
     c_alarm = any(t0 <= t < t0 + dur + LAT_GATE for t in cusum_hits)
     out["tp"] = int(((scored == 1) & (yh == 1)).sum())
     out["fp"] = int(((scored == 0) & (yh == 1)).sum())
@@ -150,7 +167,7 @@ def score_episode(
         origin=origin,
         top=top,
         latency=lat,
-        hit=bool(q_alarm or g_alarm or c_alarm or m_alarm),
+        hit=bool(yh_full[t0 : t0 + dur + LAT_GATE].any()),
         experts={
             "quantile": q_alarm,
             "structural": g_alarm,

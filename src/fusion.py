@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 
 def estimate_reliabilities(tp: int, fp: int, p: int, n: int) -> tuple[float, float]:
     """Laplace-smoothed (Pd, Pfa): (TP+1)/(P+2), (FP+1)/(N+2)."""
@@ -41,6 +43,30 @@ def fuse(
 def fuse_counting(votes: list[bool], *, k: int) -> bool:
     """k-out-of-N fallback when reliabilities are untrusted."""
     return sum(1 for v in votes if v) >= k
+
+
+def episode_decision(
+    expert_flags: dict[str, np.ndarray], *, k: int = 3, window: int = 5
+) -> np.ndarray:
+    """Episode-level decision: OR screen (recall) + k-of-N dwell confirm (precision).
+
+    A single-tick firing is suppressed; only sustained agreement (any expert, or
+    the same one) inside a trailing window survives. Window must be shorter than
+    the shortest fault duration (8 ticks) so real episodes are never gated out.
+    """
+    names = sorted(expert_flags)
+    if not names:
+        return np.array([], dtype=bool)
+    n = len(np.asarray(expert_flags[names[0]]))
+    screen = np.zeros(n, dtype=bool)
+    for name in names:
+        screen |= np.asarray(expert_flags[name], dtype=bool)
+    if k <= 1:
+        return screen
+    counts = np.convolve(screen.astype(int), np.ones(window, dtype=int), mode="full")[:n]
+    starts = np.zeros(n, dtype=int)
+    starts[1:] = counts[:-1]
+    return screen & (starts + screen.astype(int) >= k)
 
 
 def suppress(alarm: bool, key: tuple, window: int, ledger: dict) -> tuple[bool, str]:
