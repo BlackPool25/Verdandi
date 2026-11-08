@@ -143,3 +143,11 @@ def test_fit_falls_back_when_run_history_degenerate():
     mask[10:15, 0] = True  # only 5 RUN steps: fallback to full column
     thr = detect.fit_quantile_thresholds(x, ["A"], clean_mask=mask)
     assert thr["A"]["n"] == 300
+
+
+def test_lower_fence_flags_down_shift():
+    obs = np.zeros((50, 1))
+    obs[25:, 0] = -5.0  # DOWN-shift, never exceeds upper fence
+    thr = detect.fit_quantile_thresholds(obs[:20], ["M1"])
+    alarms, scores = detect.detect_exceedance(obs, thr, ["M1"])
+    assert alarms[30, 0] and scores[30, 0] > 0
