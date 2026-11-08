@@ -142,3 +142,14 @@ def test_scaler_tripwire_fires_on_artifact(tmp_path):
 
 def test_scaler_tripwire_passes_when_absent(tmp_path):
     assert tp.assert_no_scaler_artifact(tmp_path) is None
+
+
+def test_require_post_warmup_rejects_warmup_rows():
+    df = pd.DataFrame({"step": [0, 5, 14, 15, 16], "warmup_flag": [True, True, True, False, False]})
+    with pytest.raises(ValueError, match="[Ww]arm"):
+        tp.require_post_warmup(df)
+
+
+def test_require_post_warmup_accepts_clean_frame():
+    df = pd.DataFrame({"step": [15, 16, 299], "warmup_flag": [False, False, False]})
+    assert tp.require_post_warmup(df) is df
