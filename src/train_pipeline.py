@@ -84,14 +84,23 @@ def apply_purge_embargo(
     test_start: int,
     test_end: int,
     embargo: int = 0,
+    window_len: int = 1,
 ) -> list[int]:
-    """Drop train windows whose start falls inside [test_start - embargo, test_end + embargo)."""
+    """Drop train windows overlapping [test_start - embargo, test_end + embargo).
+
+    Interval overlap (window [t_start, t_start + window_len)), not start-only:
+    a window starting just outside the gap still overlaps the test span.
+    """
     if embargo < 0:
         raise ValueError(f"embargo must be >= 0, got {embargo}")
+    if window_len < 1:
+        raise ValueError(f"window_len must be >= 1, got {window_len}")
     t = np.asarray(t_starts)
+    lo = test_start - embargo
+    hi = test_end + embargo
     keep = []
     for i in np.asarray(train_idx, dtype=int):
-        if t[i] < test_start - embargo or t[i] >= test_end + embargo:
+        if t[i] >= hi or t[i] + window_len <= lo:
             keep.append(int(i))
     return keep
 
@@ -183,7 +192,12 @@ def require_post_warmup(df: pd.DataFrame) -> pd.DataFrame:
 def create_grouped_cv(
     n_splits: int = 5,
 ) -> StratifiedGroupKFold:
-    """Create zero-leakage StratifiedGroupKFold cross-validator grouped by episode_id."""
+    """Create zero-leakage StratifiedGroupKFold cross-validator grouped by episode_id.
+
+    Fail-closed: n_splits >= 2 and <= n_groups (sklearn enforces the upper bound at split).
+    """
+    if n_splits < 2:
+        raise ValueError(f"n_splits must be >= 2, got {n_splits}")
     return StratifiedGroupKFold(n_splits=n_splits)
 
 
@@ -275,9 +289,11 @@ def main(argv: list[str] | None = None) -> int:
     row["wall_seconds"] = time.perf_counter() - start
     out_path = pathlib.Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", newline="", encoding="utf-8") as fh:
+    is_new = not (out_path.exists() and out_path.stat().st_size > 0)
+    with open(out_path, "a" if not is_new else "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(RUNTABLE_COLUMNS))
-        writer.writeheader()
+        if is_new:
+            writer.writeheader()
         writer.writerow(row)
     return 0
 
