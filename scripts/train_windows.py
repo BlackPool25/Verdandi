@@ -50,17 +50,22 @@ def episode_hit_rate(
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="train window GBM on mass battery")
-    ap.add_argument("--parquet", default="artifacts/m0b_mass.parquet")
+    ap.add_argument("--parquet", default="artifacts/m0b_mass_*.parquet")
     ap.add_argument("--w", type=int, default=32)
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--splits", type=int, default=3)
     args = ap.parse_args(argv)
+    import glob as _glob
+
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
     from src.train_pipeline import compute_raw_pointwise_f1
     from src.window_dataset import build_windows
 
-    df = pd.read_parquet(args.parquet)
+    paths = sorted(_glob.glob(args.parquet))
+    if not paths:
+        raise SystemExit(f"no parquet shards match {args.parquet}")
+    df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
     X, y, fam, groups = build_windows(df, w=args.w, stride=args.stride)
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)

@@ -71,32 +71,44 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--manifest", default=MANIFEST_OUT)
     ap.add_argument("--out", default=PARQUET_OUT)
+    ap.add_argument("--shard-eps", type=int, default=400)
     args = ap.parse_args(argv)
     from src import dataset_export
 
     fault_eps, clean_eps, faults = build_specs(
         n_per_cell=args.n_per_cell, n_clean=args.n_clean, seed=args.seed
     )
-    res = dataset_export.export_v6(
-        seeds=clean_eps + fault_eps,
-        out=args.out,
-        faults=faults,
-        enable_natural_breakdown=False,
-    )
+    # Shard the export: each shard stays under the 100MB export size cap.
+    all_eps = clean_eps + fault_eps
+    shards = []
+    out_base = pathlib.Path(args.out)
+    for i in range(0, len(all_eps), args.shard_eps):
+        shard_eps = all_eps[i : i + args.shard_eps]
+        shard_out = str(
+            out_base.with_name(f"{out_base.stem}_{i // args.shard_eps:02d}.parquet")
+        )
+        dataset_export.export_v6(
+            seeds=shard_eps,
+            out=shard_out,
+            faults={ep: faults[ep] for ep in shard_eps if ep in faults},
+            enable_natural_breakdown=False,
+        )
+        shards.append(shard_out)
     manifest = {
         "battery_id": BATTERY_ID,
         "fault_episodes": fault_eps,
         "clean_episodes": clean_eps,
         "rows": [faults[ep] for ep in fault_eps],
         "master_seed": args.seed,
+        "shards": shards,
     }
     p = pathlib.Path(args.manifest)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(
-        f"mass {BATTERY_ID}: {len(fault_eps)} fault + {len(clean_eps)} clean -> {args.out}"
+        f"mass {BATTERY_ID}: {len(fault_eps)} fault + {len(clean_eps)} clean"
+        f" -> {len(shards)} shards"
     )
-    print(f"export: {res}")
     return 0
 
 
