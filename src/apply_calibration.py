@@ -21,8 +21,11 @@ from src.calibrate_3arm import (
     fit_quantile_threshold,
     stability_vote,
 )
-from src.fusion import cv_weights, estimate_reliabilities
-from src.train_pipeline import pick_per_class_thresholds
+from src.fusion import estimate_reliabilities
+from src.train_pipeline import (
+    compute_raw_pointwise_f1,
+    pick_per_class_thresholds,
+)
 
 
 def expert_threshold(clean_scores: np.ndarray) -> float:
@@ -55,8 +58,18 @@ def apply_calibration(
         s = oof[col].to_numpy(dtype=float)
         tau = expert_threshold(s[clean])
         decisions[col] = s > tau
-    # Global reliabilities (pooled OOF) + per-family shrinkage.
+    # Global reliabilities (pooled OOF) + per-family shrinkage. Weights come
+    # from hard decisions; the fused SCORE is soft (z-scored per expert on
+    # clean val, weighted by shrunk informedness) so ranking info survives.
     out = oof.copy()
+    z: dict[str, np.ndarray] = {}
+    for col in score_cols:
+        s = oof[col].to_numpy(dtype=float)
+        sc = s[clean]
+        sc = sc[np.isfinite(sc)]
+        med = float(np.median(sc))
+        iqr = float(np.quantile(sc, 0.75) - np.quantile(sc, 0.25)) or 1.0
+        z[col] = (s - med) / (iqr + 1e-9)
     fused = np.zeros(len(oof))
     for f in sorted(set(fam.tolist())):
         rows = np.flatnonzero(fam == f)
@@ -73,14 +86,24 @@ def apply_calibration(
             pd_hat, pfa_hat = estimate_reliabilities(tp, fp, p, n)
             g_pd, g_pfa = estimate_reliabilities(gtp, gfp, gp, gn)
             lam = len(rows) / (len(rows) + 20)
-            pd_s = lam * pd_hat + (1 - lam) * g_pd
-            pfa_s = lam * pfa_hat + (1 - lam) * g_pfa
-            w_pos, w_neg = cv_weights(pd_s, pfa_s)
-            row_score += np.where(d, w_pos, w_neg)
+            j_fam = pd_hat - pfa_hat
+            j_glob = g_pd - g_pfa
+            w = max(0.0, lam * j_fam + (1 - lam) * j_glob)
+            row_score += w * z[col][rows]
         fused[rows] = row_score
     out["fused_score"] = fused
     thr = pick_per_class_thresholds(fused, y, fam)
-    final = np.array([fused[i] >= thr[str(fam[i])] for i in range(len(oof))])
+    final = np.zeros(len(oof), dtype=bool)
+    for f in sorted(set(fam.tolist())):
+        rows = np.flatnonzero(fam == f)
+        dec = fused[rows] >= thr[str(f)]
+        # Trivial-guard: max-F1 on uninformative scores degenerates to flag-all
+        # (F1(all-true) = 2*pi/(1+pi) beats F1(none) = 0). Precision-first: when
+        # the operating point cannot beat trivial by a material 2pp, abstain.
+        prev = float(y[rows].mean()) if len(rows) else 0.0
+        trivial = 2 * prev / (1 + prev) if prev > 0 else 0.0
+        achieved = compute_raw_pointwise_f1(y[rows], dec.astype(int))
+        final[rows] = dec if achieved >= trivial + 0.02 else False
     for f in sorted(set(fam.tolist())):
         rows_f = fam == f
         final[rows_f] = apply_recall_veto(final[rows_f], str(f), protected=protected)

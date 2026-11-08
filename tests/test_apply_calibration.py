@@ -24,3 +24,19 @@ def test_perfect_scores_fuse_to_all_tp_no_fp():
         oof, ["s1"], clean_mask=oof["y"] == 0, families=oof["family"]
     )
     assert out["fused"][out["y"] == 1].all() and not out["fused"][out["y"] == 0].any()
+
+
+def test_uninformative_family_abstains_instead_of_flag_all():
+    rng = np.random.default_rng(0)
+    n = 60
+    oof = pd.DataFrame(
+        {
+            "family": ["U"] * n,
+            "y": [0] * 58 + [1] * 2,
+            "s1": rng.normal(0, 1, size=n),
+        }
+    )
+    out = apply_calibration(
+        oof, ["s1"], clean_mask=oof["y"] == 0, families=oof["family"]
+    )
+    assert not out["fused"].any()
