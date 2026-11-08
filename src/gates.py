@@ -21,13 +21,42 @@ DOWN_BAR = 3
 
 
 def delay_gate(tput_lag: int, state: str, *, bar: int = TPUTLAG_BAR) -> bool:
-    """Throughput-lag gate: sustained release stall outside DOWN (breakdown's jurisdiction)."""
-    return tput_lag >= bar and state != "DOWN"
+    """Throughput-lag gate: sustained release stall while the machine should produce.
+
+    RUN-only: STARVED/IDLE machines legitimately sit at zero throughput all
+    episode (clean STARVED machines saturate tputlag); DOWN is breakdown's
+    jurisdiction. Gating on state, not just the counter, is the precision fix.
+    """
+    return tput_lag >= bar and state == "RUN"
 
 
 def loss_gate(stale_count: int, *, bar: int = STALE_BAR) -> bool:
     """Stale-hold gate: sensor frozen long enough to rule out coincidence."""
     return stale_count >= bar
+
+
+def loss_combo_gate(
+    tput_lag: int, stale_count: int, *, tput_bar: int = 5, stale_bar: int = 1
+) -> bool:
+    """Loss signature that falls between the two bars: throughput stalled AND any
+    exact-repeat present. Clean STARVED machines (tputlag saturated, stale == 0)
+    never fire it; clean episodes measured stale max 0/10 eps."""
+    return tput_lag >= tput_bar and stale_count >= stale_bar
+
+
+def variance_exceeds(
+    obs_1d: np.ndarray, baseline_var: float, *, window: int = 16, ratio: float = 4.0
+) -> np.ndarray:
+    """Quality gate: trailing-window variance vs clean baseline (precision-degradation
+    signature). Point-wise ratio checks are noise; the window aggregates them."""
+    x = np.asarray(obs_1d, dtype=float)
+    if x.size < window or not np.isfinite(baseline_var) or baseline_var <= 0:
+        return np.zeros(x.shape, dtype=bool)
+    w = np.lib.stride_tricks.sliding_window_view(x, window)
+    var = w.var(axis=1)
+    out = np.zeros(x.shape, dtype=bool)
+    out[window - 1 :] = var >= ratio * baseline_var
+    return out
 
 
 def breakdown_gate(down_run: int, *, bar: int = DOWN_BAR) -> bool:

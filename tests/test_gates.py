@@ -12,11 +12,14 @@ from src import gates
 pytestmark = [pytest.mark.k2, pytest.mark.k3, pytest.mark.battery]
 
 
-def test_delay_gate_fires_on_lag_not_down():
-    assert gates.delay_gate(12, "STARVED")
+def test_delay_gate_fires_on_run_only():
+    assert gates.delay_gate(12, "RUN")
     assert gates.delay_gate(10, "RUN")
-    assert not gates.delay_gate(9, "STARVED")
-    # DOWN-owned: breakdown gate's jurisdiction, no double-fire.
+    assert not gates.delay_gate(9, "RUN")
+    # STARVED/IDLE legitimate idle excluded (clean STARVED machines saturate
+    # tputlag all episode); DOWN-owned: breakdown gate's jurisdiction.
+    assert not gates.delay_gate(300, "STARVED")
+    assert not gates.delay_gate(300, "IDLE")
     assert not gates.delay_gate(50, "DOWN")
 
 
@@ -131,3 +134,18 @@ def test_cusum_arl0_floor_at_measured_p0():
     from scripts.measure_cusum_p0 import H_CUSUM, P0_CUSUM, P1_CUSUM
 
     assert arl0_monte_carlo(P0_CUSUM, P1_CUSUM, H_CUSUM, seed=0) >= 300
+
+
+def test_loss_combo_gate_catches_between_bar_signatures():
+    assert gates.loss_combo_gate(5, 1)
+    assert gates.loss_combo_gate(300, 4)
+    assert not gates.loss_combo_gate(300, 0)
+    assert not gates.loss_combo_gate(4, 1)
+    assert not gates.loss_combo_gate(5, 0)
+
+
+def test_variance_gate_flags_noisy_window():
+    rng = np.random.default_rng(0)
+    x = np.concatenate([rng.normal(0, 1, 100), rng.normal(0, 5, 20)])
+    out = gates.variance_exceeds(x, 1.0, window=16, ratio=4.0)
+    assert out.sum() > 0 and not out[:100].any()

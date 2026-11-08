@@ -70,6 +70,7 @@ def fit_quantile_thresholds(
             "low_fence": low_fence,
             "thr": max(q99, fence),
             "thr_low": min(q01, low_fence),
+            "clean_var": float(np.var(col)) if len(col) > 1 else 1.0,
             "n": float(int(used.sum())),
         }
     return out
