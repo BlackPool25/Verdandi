@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
 # --- M0b-T detector pool (Task 8): registry + unified larger-abnormal scores ---
 # PyOD waiver (owner 2026-11-08): ECOD ONLY. Every other expert is sklearn /
-# scipy / numpy / stumpy. torch-based arms (USAD, GDN) are falsify-arms and
+# scipy / numpy / stumpy. GPU-framework arms (USAD, GDN) are falsify-arms and
 # unavailable in this CPU-only env — recorded, never silently dropped.
 
 POOL: dict[str, dict] = {
@@ -327,8 +327,8 @@ POOL: dict[str, dict] = {
     "lof": {"kind": "detector", "sign": "negative-outlier", "make": "sklearn.neighbors:LocalOutlierFactor"},
     "ols": {"kind": "probe", "note": "sklearn.linear_model:LinearRegression supervised train-AUC probe"},
     "dlinear": {"kind": "detector", "sign": "larger-abnormal", "note": "numpy least-squares trend residual"},
-    "usad": {"kind": "falsify-arm", "available": False, "reason": "needs torch; small-N risk"},
-    "gdn": {"kind": "falsify-arm", "available": False, "reason": "needs torch/PyG; small-N risk"},
+    "usad": {"kind": "falsify-arm", "available": False, "reason": "needs GPU framework; small-N risk"},
+    "gdn": {"kind": "falsify-arm", "available": False, "reason": "needs GPU framework; small-N risk"},
     "mp": {"kind": "guardrail", "sign": "larger-abnormal", "make": "stumpy:stump"},
 }
 

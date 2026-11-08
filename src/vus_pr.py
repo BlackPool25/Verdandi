@@ -70,7 +70,7 @@ def range_pr_auc(
     p = np.asarray(precisions)[order]
     best = np.maximum.accumulate(p[::-1])[::-1]
     # Step-function (average-precision) integration: trapezoid overestimates
-    # single-point alarms (0.11,1)->(1.0,0.45) would score 0.76, not 0.51.
+    # single-point alarms (it credits the empty span between operating points).
     dr = np.diff(r, prepend=0.0)
     return float(np.sum(dr * best))
 

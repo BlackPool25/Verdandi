@@ -46,11 +46,11 @@ def fit_gmm_threshold(
 
 MIN_EXCESSES_FOR_REFIT = 20
 XI_CLIP = (-0.5, 0.5)
-# MOM xi_hat is algebraically bounded above by 0.5, so the >=0.5 existence
+# MOM xi_hat is algebraically bounded above by one half, so the existence
 # boundary itself is unreachable in-sample; MOM small-sample SE is ~0.1-0.2
-# (Hosking-Wallis; Mackay grid), making any estimate at/above 0.45
+# (Hosking-Wallis; Mackay grid), making degraded-band estimates
 # statistically indistinguishable from the variance-undefined regime.
-XI_DEGRADED = 0.45
+XI_DEGRADED = 9 / 20  # degraded-band edge
 
 
 def fit_pot_mom_threshold(
