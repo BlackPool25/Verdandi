@@ -22,7 +22,9 @@ Scorer = Callable[[np.ndarray], np.ndarray]
 Maker = Callable[[np.ndarray, np.ndarray], Scorer]
 
 
-def _normed_cols(df: pd.DataFrame, channels: list[str], transformed: pd.DataFrame) -> list[str]:
+def _normed_cols(
+    df: pd.DataFrame, channels: list[str], transformed: pd.DataFrame
+) -> list[str]:
     cols = []
     for ch in channels:
         col = f"obs_{ch}" if f"obs_{ch}" in df.columns else ch
@@ -47,9 +49,7 @@ def run_oof(
     cv = create_grouped_cv(n_splits)
     scores = {name: np.full(len(df), np.nan) for name in experts}
     for tr, te in cv.split(np.zeros((len(df), 1)), y, groups):
-        tr_t, te_t, _ = fit_transform_fold(
-            df.iloc[tr], df.iloc[te], list(feature_cols)
-        )
+        tr_t, te_t, _ = fit_transform_fold(df.iloc[tr], df.iloc[te], list(feature_cols))
         cols = _normed_cols(df, list(feature_cols), te_t)
         x_tr = tr_t[cols].to_numpy(dtype=float)
         x_te = te_t[cols].to_numpy(dtype=float)

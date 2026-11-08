@@ -53,17 +53,19 @@ def _supervised_lr(x_train: np.ndarray, y_train: np.ndarray):
 
 
 def makers() -> dict:
+    from pyod.models.ecod import ECOD  # type: ignore[import-untyped]  # PyOD waiver: ECOD only
     from sklearn.decomposition import PCA  # type: ignore[import-untyped]
     from sklearn.ensemble import IsolationForest  # type: ignore[import-untyped]
     from sklearn.neighbors import (  # type: ignore[import-untyped]
         LocalOutlierFactor,
         NearestNeighbors,
     )
-    from pyod.models.ecod import ECOD  # type: ignore[import-untyped]  # noqa: PyOD waiver (ECOD only)
 
     return {
         "ecod": _unsupervised("ecod", ECOD, contamination=0.05),
-        "iforest": _unsupervised("iforest", IsolationForest, n_estimators=200, random_state=0),
+        "iforest": _unsupervised(
+            "iforest", IsolationForest, n_estimators=200, random_state=0
+        ),
         "knn": _unsupervised("knn", NearestNeighbors, n_neighbors=5),
         "pca": _unsupervised("pca", PCA, n_components=0.90),
         "lof": _unsupervised("lof", LocalOutlierFactor, n_neighbors=20, novelty=True),
@@ -79,25 +81,23 @@ def train_oof_subset(
     eps = sorted(df["episode_id"].unique())[:n_episodes]
     sub = df[df["episode_id"].isin(eps)].reset_index(drop=True)
     scored = run_oof(sub, FEATURE_CHANNELS, makers(), n_splits=n_splits)
-    scored = add_temporal(
-        scored, [c for c in sub.columns if c.startswith("obs_")]
-    )
+    scored = add_temporal(scored, [c for c in sub.columns if c.startswith("obs_")])
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)
     scored.to_parquet(out)
     return scored
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="tabular OOF experts + S-arm, full battery")
+    ap = argparse.ArgumentParser(
+        description="tabular OOF experts + S-arm, full battery"
+    )
     ap.add_argument("--parquet", default=PARQUET)
     ap.add_argument("--out", default=OOF_OUT)
     ap.add_argument("--n-splits", type=int, default=5)
     args = ap.parse_args(argv)
     df = pd.read_parquet(args.parquet)
     scored = run_oof(df, FEATURE_CHANNELS, makers(), n_splits=args.n_splits)
-    scored = add_temporal(
-        scored, [c for c in df.columns if c.startswith("obs_")]
-    )
+    scored = add_temporal(scored, [c for c in df.columns if c.startswith("obs_")])
     pathlib.Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     scored.to_parquet(args.out)
     print(f"rows={len(scored)} experts={sorted(makers())} -> {args.out}")

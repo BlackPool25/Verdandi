@@ -25,13 +25,17 @@ DEFAULT_OUT = "artifacts/m0b_v6.parquet"
 
 def manifest_faults(manifest: dict) -> dict[int, dict]:
     """{episode_seed: fault spec} aligned with fault_episodes order."""
-    return {ep: dict(row) for ep, row in zip(manifest["fault_episodes"], manifest["rows"])}
+    return {
+        ep: dict(row) for ep, row in zip(manifest["fault_episodes"], manifest["rows"])
+    }
 
 
 def export_subset(clean_seed: int, fault_id: str, out: str) -> pd.DataFrame:
     """Export 1 clean + 1 fault episode (fast contract probe)."""
     manifest = json.loads(pathlib.Path(MANIFEST).read_text(encoding="utf-8"))
-    by_id = {r["id"]: (ep, r) for ep, r in zip(manifest["fault_episodes"], manifest["rows"])}
+    by_id = {
+        r["id"]: (ep, r) for ep, r in zip(manifest["fault_episodes"], manifest["rows"])
+    }
     ep, row = by_id[fault_id]
     res = dataset_export.export_v6(
         seeds=[clean_seed, ep],
