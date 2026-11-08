@@ -61,8 +61,12 @@ def score_episode(
     *,
     p0: float = P0_CUSUM,
     p1: float = P1_CUSUM,
+    dump_path: str | None = None,
 ) -> dict:
     """Score one episode: quantile OR structural gates OR quality CUSUM.
+
+    dump_path (optional .npz): persists max-machine quantile scores + full-length
+    root-window labels for the threshold-free VUS-PR appendix.
 
     tp/fp/fn vs root window; top-1/latency from quantile scores; hit if any
     expert fires at the origin inside [t0, t0+dur+LAT_GATE].
@@ -76,6 +80,19 @@ def score_episode(
     alarms_q, scores = detect.detect_exceedance(
         obs, thresholds, machine_names, suppress=suppress
     )
+    if dump_path is not None:
+        import numpy as _np
+
+        lab = _np.zeros(config.T, dtype=int)
+        if fault is not None:
+            t0, dur = int(fault["t0"]), int(fault["dur"])
+            lab[t0 : t0 + dur] = 1
+        _np.savez_compressed(
+            dump_path,
+            scores=_np.asarray(scores, dtype=float).max(axis=1),
+            labels=lab,
+            fault_id="" if fault is None else str(fault.get("id", "")),
+        )
     sigmas = [float(config.MACHINES[m]["sigma"]) for m in machine_names]
     counters = gates.track_counters(
         np.asarray(rec["obs"], dtype=float), states, tput, sigmas
@@ -126,17 +143,20 @@ def run_battery(
     *,
     p0: float = P0_CUSUM,
     p1: float = P1_CUSUM,
+    dump_dir: str | None = None,
 ) -> dict:
     """Run all manifest episodes + clean episodes; aggregate audit numbers."""
     rows = []
     for ep, row in zip(manifest["fault_episodes"], manifest["rows"]):
         rec = twin.run_episode(ep, dict(row), enable_natural_breakdown=False)
+        dp = f"{dump_dir}/{row['id']}.npz" if dump_dir else None
         rows.append(
-            score_episode(rec, dict(row), thresholds, machine_names, p0=p0, p1=p1)
+            score_episode(rec, dict(row), thresholds, machine_names, p0=p0, p1=p1, dump_path=dp)
         )
     for ep in manifest["clean_episodes"]:
         rec = twin.run_episode(ep, None, enable_natural_breakdown=False)
-        rows.append(score_episode(rec, None, thresholds, machine_names, p0=p0, p1=p1))
+        dp = f"{dump_dir}/clean_{ep}.npz" if dump_dir else None
+        rows.append(score_episode(rec, None, thresholds, machine_names, p0=p0, p1=p1, dump_path=dp))
     tp = sum(r["tp"] for r in rows)
     fp = sum(r["fp"] for r in rows)
     fn = sum(r["fn"] for r in rows)
@@ -190,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default="artifacts/m0b_baseline.json")
     parser.add_argument("--manifest", default="docs/m0b_battery_manifest.json")
     parser.add_argument("--cal-seed", type=int, default=7)
+    parser.add_argument("--dump-dir", default=None)
     args = parser.parse_args(argv)
 
     start = time.perf_counter()
@@ -206,7 +227,10 @@ def main(argv: list[str] | None = None) -> int:
     measured = fails / max(1, kits)
     if measured > 2 * P0_CUSUM:
         print(f"WARNING: clean fail rate {measured:.4f} > 2x locked p0 {P0_CUSUM:.4f}")
-    result = run_battery(manifest, thresholds, machines, p0=P0_CUSUM, p1=P1_CUSUM)
+    if args.dump_dir:
+        pathlib.Path(args.dump_dir).mkdir(parents=True, exist_ok=True)
+    result = run_battery(manifest, thresholds, machines, p0=P0_CUSUM, p1=P1_CUSUM,
+                         dump_dir=args.dump_dir)
     result["wall_seconds"] = time.perf_counter() - start
     result["cal_seed"] = args.cal_seed
     out = pathlib.Path(args.out)

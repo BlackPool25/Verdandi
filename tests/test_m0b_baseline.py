@@ -57,3 +57,23 @@ def test_two_episode_smoke_pins_score():
         outs.append(bl.score_episode(rec, dict(row), thr, MACHINES))
     assert all(o["hit"] for o in outs)
     assert outs[0]["latency"] <= 3
+
+
+def test_score_episode_dumps_scores_and_labels(tmp_path):
+    import pathlib
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
+    import run_m0b_baseline as bl
+    import freeze_m0b_battery as fz
+
+    from src import twin as _twin
+
+    m = fz.build_manifest(master_seed=777)
+    by_id = {r["id"]: (i, r) for i, r in enumerate(m["rows"])}
+    i, row = by_id["F-06"]
+    rec = _twin.run_episode(m["fault_episodes"][i], dict(row))
+    p = str(tmp_path / "F-06.npz")
+    bl.score_episode(rec, dict(row), detect.fit_quantile_thresholds(_twin.run_calibration(7), MACHINES), MACHINES, dump_path=p)
+    z = np.load(p)
+    assert z["scores"].shape == (300,) and z["labels"].sum() == 10 and z["labels"][150] == 1
