@@ -554,7 +554,9 @@ class TestMaskedDetrend:
         t = np.arange(300)
         x = 0.1 * t + rng.normal(size=300)
         np.testing.assert_allclose(
-            we.detrend_masked(x, np.ones(300, dtype=bool)), we.detrend_signal(x), atol=1e-8
+            we.detrend_masked(x, np.ones(300, dtype=bool)),
+            we.detrend_signal(x),
+            atol=1e-8,
         )
 
     def test_fault_step_not_smeared_into_trend(self):
