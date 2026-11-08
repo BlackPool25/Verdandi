@@ -47,15 +47,30 @@ def apply_calibration(
     clean_mask,
     families,
     ids=None,
+    window_mask=None,
     protected: tuple = ("F-06", "F-12", "F-14"),
 ) -> pd.DataFrame:
-    """Fuse expert OOF scores into per-row final decisions."""
-    fam = np.asarray(families)
+    """Fuse expert OOF scores into per-row final decisions.
+
+    Scores are z-normalized per episode first (transportability: a locked
+    threshold cannot hold FPR when episode baselines drift). Veto is scoped:
+    protected families force whole-slice True; protected IDS force True only
+    inside window_mask (root windows), never whole-episode.
+    """
+    fam = np.asarray([str(v) for v in families])
     y = oof["y"].to_numpy(dtype=int)
     clean = np.asarray(clean_mask, dtype=bool)
-    decisions: dict[str, np.ndarray] = {}
+    normed: dict[str, np.ndarray] = {}
     for col in score_cols:
         s = oof[col].to_numpy(dtype=float)
+        med = oof.groupby("episode_id")[col].transform("median").to_numpy(dtype=float)
+        q75 = oof.groupby("episode_id")[col].transform(lambda x: float(np.quantile(x, 0.75))).to_numpy(dtype=float)
+        q25 = oof.groupby("episode_id")[col].transform(lambda x: float(np.quantile(x, 0.25))).to_numpy(dtype=float)
+        iqr = np.maximum(q75 - q25, 1e-9)
+        normed[col] = np.where(np.isfinite(s), (s - med) / iqr, 0.0)
+    decisions: dict[str, np.ndarray] = {}
+    for col in score_cols:
+        s = normed[col]
         tau = expert_threshold(s[clean])
         decisions[col] = s > tau
     # Global reliabilities (pooled OOF) + per-family shrinkage. Weights come
@@ -64,11 +79,12 @@ def apply_calibration(
     out = oof.copy()
     z: dict[str, np.ndarray] = {}
     for col in score_cols:
-        s = oof[col].to_numpy(dtype=float)
+        s = normed[col]
         sc = s[clean]
         sc = sc[np.isfinite(sc)]
-        med = float(np.median(sc))
-        iqr = float(np.quantile(sc, 0.75) - np.quantile(sc, 0.25)) or 1.0
+        med = float(np.median(sc)) if sc.size else 0.0
+        iqr = float(np.quantile(sc, 0.75) - np.quantile(sc, 0.25)) if sc.size else 1.0
+        iqr = iqr or 1.0
         z[col] = (s - med) / (iqr + 1e-9)
     fused = np.zeros(len(oof))
     for f in sorted(set(fam.tolist())):
@@ -108,7 +124,10 @@ def apply_calibration(
         rows_f = fam == f
         final[rows_f] = apply_recall_veto(final[rows_f], str(f), protected=protected)
     if ids is not None:
-        id_arr = np.asarray(ids)
-        final[np.array([v in protected for v in id_arr])] = True
+        id_arr = np.asarray(ids).astype(str)
+        hit = np.isin(id_arr, list(protected))
+        if window_mask is not None:
+            hit &= np.asarray(window_mask, dtype=bool)
+        final[hit] = True
     out["fused"] = final
     return out
