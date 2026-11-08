@@ -105,3 +105,27 @@ def test_kit_outcomes_carry_event_time():
         {"t": 13, "event": "REJECT_ROUTE", "detail": {"part": "k2", "to": "scrap"}},
     ]
     assert gates.kit_outcomes_from_events(events) == [(10, True), (12, False)]
+
+
+def arl0_monte_carlo(p0: float, p1: float, h: float, *, seed: int = 0, n: int = 2000) -> float:
+    """Mean kits-to-false-alarm under p0, using the production CUSUM step."""
+    rng = np.random.default_rng(seed)
+    w_fail, w_pass = gates.bernoulli_cusum_weights(p0, p1)
+    total = 0
+    for _ in range(n):
+        s, t = 0.0, 0
+        while True:
+            t += 1
+            s, alarm = gates.bernoulli_cusum_update(
+                s, bool(rng.random() >= p0), w_fail, w_pass, h=h
+            )
+            if alarm:
+                break
+        total += t
+    return total / n
+
+
+def test_cusum_arl0_floor_at_measured_p0():
+    from scripts.measure_cusum_p0 import H_CUSUM, P0_CUSUM, P1_CUSUM
+
+    assert arl0_monte_carlo(P0_CUSUM, P1_CUSUM, H_CUSUM, seed=0) >= 300

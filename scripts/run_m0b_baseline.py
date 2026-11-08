@@ -20,11 +20,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import numpy as np
 
 from src import config, detect, gates, train_pipeline, twin
+from scripts.measure_cusum_p0 import H_CUSUM, P0_CUSUM, P1_CUSUM
 
 LAT_GATE = 3
-# Bernoulli-CUSUM design (provisional; ARL calibration deferred to Phase C).
-CUSUM_H = 4.0
-CUSUM_P1_FLOOR = 0.2
+# Bernoulli-CUSUM design: locked from clean-episode measurement (scripts/measure_cusum_p0.py).
+CUSUM_H = H_CUSUM
 
 
 def fit_run_only_thresholds(cal_seed: int, machine_names: list[str]) -> dict:
@@ -59,8 +59,8 @@ def score_episode(
     thresholds: dict,
     machine_names: list[str],
     *,
-    p0: float = 0.05,
-    p1: float = 0.25,
+    p0: float = P0_CUSUM,
+    p1: float = P1_CUSUM,
 ) -> dict:
     """Score one episode: quantile OR structural gates OR quality CUSUM.
 
@@ -124,8 +124,8 @@ def run_battery(
     thresholds: dict,
     machine_names: list[str],
     *,
-    p0: float = 0.05,
-    p1: float = 0.25,
+    p0: float = P0_CUSUM,
+    p1: float = P1_CUSUM,
 ) -> dict:
     """Run all manifest episodes + clean episodes; aggregate audit numbers."""
     rows = []
@@ -196,16 +196,17 @@ def main(argv: list[str] | None = None) -> int:
     manifest = json.loads(pathlib.Path(args.manifest).read_text(encoding="utf-8"))
     machines = list(config.MACHINE_NAMES)
     thresholds = fit_run_only_thresholds(args.cal_seed, machines)
-    # Pass 1 (clean): nominal reject rate for the quality CUSUM.
+    # Pass 1 (clean): sanity-check the locked p0 against this manifest; the lock wins.
     kits = fails = 0
     for ep in manifest["clean_episodes"]:
         rec = twin.run_episode(ep, None, enable_natural_breakdown=False)
         for _, passed in gates.kit_outcomes_from_events(rec.get("events", [])):
             kits += 1
             fails += 0 if passed else 1
-    p0 = max(fails / max(1, kits), 1e-3)
-    p1 = max(4 * p0, CUSUM_P1_FLOOR)
-    result = run_battery(manifest, thresholds, machines, p0=p0, p1=p1)
+    measured = fails / max(1, kits)
+    if measured > 2 * P0_CUSUM:
+        print(f"WARNING: clean fail rate {measured:.4f} > 2x locked p0 {P0_CUSUM:.4f}")
+    result = run_battery(manifest, thresholds, machines, p0=P0_CUSUM, p1=P1_CUSUM)
     result["wall_seconds"] = time.perf_counter() - start
     result["cal_seed"] = args.cal_seed
     out = pathlib.Path(args.out)
