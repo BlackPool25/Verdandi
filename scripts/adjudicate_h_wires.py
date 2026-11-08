@@ -124,12 +124,13 @@ def main(argv: list[str] | None = None) -> int:
     ep_hits = episode_hits(fused, manifest)
     base_rows = {r.get("fault_id", r.get("id")): r for r in baseline["rows"]}
 
-    experts = ["knn", "pca", "lof", "supervised_lr", "dlinear"]
     fam_vus = {}
     for fam in sorted(fused.loc[fused["ep_family"] != "clean", "ep_family"].unique()):
         vals = []
+        # VUS on the fused ranking signal (z-scored); raw expert means are
+        # scale-dominated (e.g. PCA std ~244 vs LOF ~0.24) and not comparable.
         for _, g in fused[fused["ep_family"] == fam].groupby("episode_id"):
-            v = vus_pr(g[experts].mean(axis=1).to_numpy(), g["y"].to_numpy(dtype=int))
+            v = vus_pr(g["fused_score"].to_numpy(), g["y"].to_numpy(dtype=int))
             if np.isfinite(v):
                 vals.append(float(v))
         fam_vus[fam] = float(np.mean(vals)) if vals else float("nan")
