@@ -102,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--w", type=int, default=32)
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--splits", type=int, default=3)
+    ap.add_argument("--save-oof", default="")
     args = ap.parse_args(argv)
     import glob as _glob
 
@@ -146,6 +147,11 @@ def main(argv: list[str] | None = None) -> int:
         per_fam[f] = round(float(tuned[m].mean()), 4)
     print("per-family window recall:", per_fam)
     print("per-family thresholds:", {k: round(v, 4) for k, v in thr.items()})
+    if args.save_oof:
+        pd.DataFrame(
+            {"score": oof, "dec": tuned, "y": y, "fam": fam, "ep": groups}
+        ).to_parquet(args.save_oof, index=False)
+        print(f"oof saved -> {args.save_oof}")
     return 0
 
 

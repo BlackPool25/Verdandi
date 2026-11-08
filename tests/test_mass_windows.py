@@ -84,6 +84,27 @@ def test_episode_family_labels_clean_windows_with_episode_family():
     assert ef.tolist() == ["delay"] * 3 + ["none"] * 3
 
 
+def test_save_oof_writes_scored_windows(tmp_path):
+    import pandas as pd
+
+    from scripts.train_windows import main
+
+    out = tmp_path / "oof.parquet"
+    rc = main(
+        [
+            "--parquet",
+            "/tmp/opencode/msh_*.parquet",
+            "--splits",
+            "2",
+            "--save-oof",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    df = pd.read_parquet(out)
+    assert {"score", "dec", "y", "fam", "ep"} <= set(df.columns) and len(df) > 0
+
+
 def test_binary_gbm_separates_windows_and_episode_hit():
     from scripts.train_windows import episode_hit_rate, train_binary_gbm
 
