@@ -16,6 +16,29 @@ def test_mass_specs_balanced_and_deterministic():
     assert {fams.count(f) for f in set(fams)} == {4}
 
 
+def test_all_clean_shard_exports(tmp_path):
+    from scripts.gen_mass_battery import main
+
+    rc = main(
+        [
+            "--n-per-cell",
+            "1",
+            "--n-clean",
+            "2",
+            "--seed",
+            "0",
+            "--manifest",
+            str(tmp_path / "m.json"),
+            "--out",
+            str(tmp_path / "mass.parquet"),
+            "--shard-eps",
+            "2",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "m.json").exists()
+
+
 def test_binary_gbm_separates_windows_and_episode_hit():
     from scripts.train_windows import episode_hit_rate, train_binary_gbm
 

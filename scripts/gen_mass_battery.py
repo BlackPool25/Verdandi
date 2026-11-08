@@ -87,10 +87,12 @@ def main(argv: list[str] | None = None) -> int:
         shard_out = str(
             out_base.with_name(f"{out_base.stem}_{i // args.shard_eps:02d}.parquet")
         )
+        shard_faults = {ep: faults[ep] for ep in shard_eps if ep in faults}
         dataset_export.export_v6(
             seeds=shard_eps,
             out=shard_out,
-            faults={ep: faults[ep] for ep in shard_eps if ep in faults},
+            # Empty dict trips export's int-key lookup ({} is not None) — pass None.
+            faults=shard_faults or None,
             enable_natural_breakdown=False,
         )
         shards.append(shard_out)
