@@ -11,3 +11,8 @@ family anchor is a falsification, not a tuning problem.
 
 Frozen prereg text is untouched; this note governs evaluation until Phase C freezes
 the calibration preregistration.
+
+## Amendment 2026-11-08 (success overhaul): numeric VUS bar + chance-corrected row
+- Primary gate: mean per-family fused VUS-PR >= 0.90 (point-F1 0.85 retired as headline).
+- Companions: episode-hit rate + recall floor 0.7 + MCC/ROC-AUC/trivial-F1 row
+  (`summarize_metrics` in scripts/adjudicate_h_wires.py). Per owner locks.
