@@ -136,6 +136,43 @@ def transform_per_machine(
     return df_out
 
 
+def fit_transform_fold(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    channels: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, tuple[float, float]]]:
+    """Fit median/IQR on the train fold only; transform both (test never fitted)."""
+    params = fit_per_machine_median_iqr(df_train, channels)
+    return transform_per_machine(df_train, params), transform_per_machine(df_test, params), params
+
+
+# SMOTE is default-OFF on temporal windows (interpolation breaks autocorrelation
+# and leaks across episode groups). Oversampling, if ever enabled by ablation,
+# runs inside the fold via an explicit caller-supplied sampler.
+SMOTE_DEFAULT_OFF = True
+
+
+def apply_smote_inside_fold(
+    X: np.ndarray,
+    y: np.ndarray,
+    sampler: object = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """No-op unless the caller passes a sampler (fold-only oversampling hook)."""
+    if sampler is None:
+        return X, y
+    return sampler(X, y)  # type: ignore[operator]
+
+
+def assert_no_scaler_artifact(directory: str | pathlib.Path) -> None:
+    """Leakage tripwire: fail closed if a scaler.pkl exists on the pipeline path."""
+    artifact = pathlib.Path(directory) / "scaler.pkl"
+    if artifact.exists():
+        raise ValueError(
+            f"LEAKAGE VIOLATION: scaler.pkl forbidden on pipeline path ({artifact})"
+        )
+    return None
+
+
 def create_grouped_cv(
     n_splits: int = 5,
 ) -> StratifiedGroupKFold:

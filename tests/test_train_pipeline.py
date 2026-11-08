@@ -100,3 +100,45 @@ def test_cli_writes_runtable_csv(tmp_path):
     with open(out, newline="") as fh:
         rows = list(csv.DictReader(fh))
     assert len(rows) == 1 and rows[0]["job"] == "unit"
+
+
+def test_fit_transform_fold_fits_train_only():
+    rng = np.random.default_rng(0)
+    train_df = pd.DataFrame(
+        {"obs_A0": rng.normal(50.0, 1.0, size=100), "state_A0": "RUN"}
+    )
+    test_df = pd.DataFrame(
+        {"obs_A0": rng.normal(60.0, 1.0, size=100), "state_A0": "RUN"}
+    )
+    train_n, test_n, params = tp.fit_transform_fold(train_df, test_df, ["A0"])
+    assert params == tp.fit_per_machine_median_iqr(train_df, ["A0"])
+    assert params != tp.fit_per_machine_median_iqr(
+        pd.concat([train_df, test_df]), ["A0"]
+    )
+    assert f"obs_A0_normed" in train_n.columns and f"obs_A0_normed" in test_n.columns
+
+
+def test_smote_hook_defaults_to_noop_and_routes_fold_data():
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(20, 2))
+    y = np.array([0] * 18 + [1] * 2)
+    Xo, yo = tp.apply_smote_inside_fold(X, y)
+    assert Xo is X and yo is y
+    seen = {}
+
+    def spy(Xs, ys):
+        seen["n"] = len(ys)
+        return Xs, ys
+
+    tp.apply_smote_inside_fold(X, y, sampler=spy)
+    assert seen["n"] == 20
+
+
+def test_scaler_tripwire_fires_on_artifact(tmp_path):
+    (tmp_path / "scaler.pkl").write_bytes(b"leak")
+    with pytest.raises(ValueError, match="scaler.pkl"):
+        tp.assert_no_scaler_artifact(tmp_path)
+
+
+def test_scaler_tripwire_passes_when_absent(tmp_path):
+    assert tp.assert_no_scaler_artifact(tmp_path) is None
