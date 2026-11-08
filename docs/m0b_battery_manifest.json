@@ -1,0 +1,2802 @@
+{
+  "cap_budget": true,
+  "clean_episodes": [
+    30201,
+    30202,
+    30203,
+    30204,
+    30205,
+    30206,
+    30207,
+    30208,
+    30209,
+    30210
+  ],
+  "code_version": "twin-2.5.0-topology-A",
+  "episode_seeds": [
+    30001,
+    30002,
+    30003,
+    30004,
+    30005,
+    30006,
+    30007,
+    30008,
+    30009,
+    30010,
+    30011,
+    30012,
+    30013,
+    30014,
+    30015,
+    30016,
+    30017,
+    30018,
+    30019,
+    30020,
+    30021,
+    30022,
+    30023,
+    30024,
+    30025,
+    30026,
+    30027,
+    30028,
+    30029,
+    30030,
+    30031,
+    30032,
+    30033,
+    30034,
+    30035,
+    30036,
+    30037,
+    30038,
+    30039,
+    30040,
+    30041,
+    30042,
+    30043,
+    30044,
+    30045,
+    30046,
+    30047,
+    30048,
+    30049,
+    30050,
+    30051,
+    30052,
+    30053,
+    30054,
+    30055,
+    30056,
+    30057,
+    30058,
+    30059,
+    30060,
+    30061,
+    30062,
+    30063,
+    30064,
+    30065,
+    30066,
+    30067,
+    30068,
+    30069,
+    30070,
+    30071,
+    30072,
+    30073,
+    30074,
+    30075,
+    30076,
+    30077,
+    30078,
+    30079,
+    30080,
+    30081,
+    30082,
+    30083,
+    30084,
+    30085,
+    30086,
+    30087,
+    30088,
+    30089,
+    30090,
+    30091,
+    30092,
+    30093,
+    30094,
+    30095,
+    30096,
+    30097,
+    30098,
+    30099,
+    30100,
+    30101,
+    30102,
+    30103,
+    30104,
+    30105,
+    30106,
+    30107,
+    30108,
+    30109,
+    30110,
+    30111,
+    30112,
+    30113,
+    30114,
+    30115,
+    30116,
+    30117,
+    30118,
+    30119,
+    30120,
+    30121,
+    30122,
+    30123,
+    30124,
+    30125,
+    30126,
+    30127,
+    30128,
+    30129,
+    30130,
+    30131,
+    30132,
+    30133,
+    30134,
+    30135,
+    30136,
+    30137,
+    30138,
+    30139,
+    30140,
+    30141,
+    30142,
+    30143,
+    30144,
+    30145,
+    30146,
+    30147,
+    30148,
+    30149,
+    30150,
+    30151,
+    30152,
+    30153,
+    30154,
+    30155,
+    30156,
+    30157,
+    30158,
+    30159,
+    30160,
+    30161,
+    30162,
+    30163,
+    30164,
+    30165,
+    30166,
+    30167,
+    30168,
+    30169,
+    30170,
+    30171,
+    30172,
+    30173,
+    30174,
+    30175,
+    30176,
+    30177,
+    30178,
+    30179,
+    30180,
+    30181,
+    30182,
+    30201,
+    30202,
+    30203,
+    30204,
+    30205,
+    30206,
+    30207,
+    30208,
+    30209,
+    30210
+  ],
+  "fault_episodes": [
+    30001,
+    30002,
+    30003,
+    30004,
+    30005,
+    30006,
+    30007,
+    30008,
+    30009,
+    30010,
+    30011,
+    30012,
+    30013,
+    30014,
+    30015,
+    30016,
+    30017,
+    30018,
+    30019,
+    30020,
+    30021,
+    30022,
+    30023,
+    30024,
+    30025,
+    30026,
+    30027,
+    30028,
+    30029,
+    30030,
+    30031,
+    30032,
+    30033,
+    30034,
+    30035,
+    30036,
+    30037,
+    30038,
+    30039,
+    30040,
+    30041,
+    30042,
+    30043,
+    30044,
+    30045,
+    30046,
+    30047,
+    30048,
+    30049,
+    30050,
+    30051,
+    30052,
+    30053,
+    30054,
+    30055,
+    30056,
+    30057,
+    30058,
+    30059,
+    30060,
+    30061,
+    30062,
+    30063,
+    30064,
+    30065,
+    30066,
+    30067,
+    30068,
+    30069,
+    30070,
+    30071,
+    30072,
+    30073,
+    30074,
+    30075,
+    30076,
+    30077,
+    30078,
+    30079,
+    30080,
+    30081,
+    30082,
+    30083,
+    30084,
+    30085,
+    30086,
+    30087,
+    30088,
+    30089,
+    30090,
+    30091,
+    30092,
+    30093,
+    30094,
+    30095,
+    30096,
+    30097,
+    30098,
+    30099,
+    30100,
+    30101,
+    30102,
+    30103,
+    30104,
+    30105,
+    30106,
+    30107,
+    30108,
+    30109,
+    30110,
+    30111,
+    30112,
+    30113,
+    30114,
+    30115,
+    30116,
+    30117,
+    30118,
+    30119,
+    30120,
+    30121,
+    30122,
+    30123,
+    30124,
+    30125,
+    30126,
+    30127,
+    30128,
+    30129,
+    30130,
+    30131,
+    30132,
+    30133,
+    30134,
+    30135,
+    30136,
+    30137,
+    30138,
+    30139,
+    30140,
+    30141,
+    30142,
+    30143,
+    30144,
+    30145,
+    30146,
+    30147,
+    30148,
+    30149,
+    30150,
+    30151,
+    30152,
+    30153,
+    30154,
+    30155,
+    30156,
+    30157,
+    30158,
+    30159,
+    30160,
+    30161,
+    30162,
+    30163,
+    30164,
+    30165,
+    30166,
+    30167,
+    30168,
+    30169,
+    30170,
+    30171,
+    30172,
+    30173,
+    30174,
+    30175,
+    30176,
+    30177,
+    30178,
+    30179,
+    30180,
+    30181,
+    30182
+  ],
+  "gateway_machines": [
+    "ASM0",
+    "ASM1",
+    "INSP0",
+    "ASM2",
+    "RWK0"
+  ],
+  "gateway_quota_waived_to": ">=19%",
+  "gateway_rows": 35,
+  "gateway_share": 0.19230769230769232,
+  "manifest": "m0b-battery-v1",
+  "master_seed": 777,
+  "rows": [
+    {
+      "class": "spike",
+      "dur": 10,
+      "extra": {},
+      "id": "F-06",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.0,
+      "origin": "A0",
+      "rep": true,
+      "sev": 5.0,
+      "t0": 150
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A0-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.2455725186104125,
+      "origin": "A0",
+      "rep": false,
+      "sev": 4.2455725186104125,
+      "t0": 203
+    },
+    {
+      "class": "bias",
+      "dur": 14,
+      "extra": {},
+      "id": "F-A0-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.843746947067247,
+      "origin": "A0",
+      "rep": false,
+      "sev": 6.843746947067247,
+      "t0": 274
+    },
+    {
+      "class": "delay",
+      "dur": 12,
+      "extra": {
+        "d": 6
+      },
+      "id": "F-A0-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.862057066976271,
+      "origin": "A0",
+      "rep": false,
+      "sev": 4.862057066976271,
+      "t0": 179
+    },
+    {
+      "class": "loss",
+      "dur": 14,
+      "extra": {
+        "drop_rate": 0.10287780025018939
+      },
+      "id": "F-A0-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.194961837293481,
+      "origin": "A0",
+      "rep": false,
+      "sev": 6.194961837293481,
+      "t0": 241
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.5253883478062242
+      },
+      "id": "F-A0-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.962943310691072,
+      "origin": "A0",
+      "rep": false,
+      "sev": 5.962943310691072,
+      "t0": 221
+    },
+    {
+      "class": "quality",
+      "dur": 12,
+      "extra": {
+        "reject_rate": 0.2918958002626445
+      },
+      "id": "F-A0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.989586060445865,
+      "origin": "A0",
+      "rep": false,
+      "sev": 5.989586060445865,
+      "t0": 126
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A1-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.086831088377368,
+      "origin": "A1",
+      "rep": false,
+      "sev": 4.086831088377368,
+      "t0": 263
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A1-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.6221115961818064,
+      "origin": "A1",
+      "rep": false,
+      "sev": 6.6221115961818064,
+      "t0": 159
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 3
+      },
+      "id": "F-A1-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.6645467149947475,
+      "origin": "A1",
+      "rep": false,
+      "sev": 4.6645467149947475,
+      "t0": 196
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.15217675673677736
+      },
+      "id": "F-A1-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.683098259106753,
+      "origin": "A1",
+      "rep": false,
+      "sev": 4.683098259106753,
+      "t0": 178
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.1105923970168299
+      },
+      "id": "F-A1-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.934212998153525,
+      "origin": "A1",
+      "rep": false,
+      "sev": 5.934212998153525,
+      "t0": 237
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.10214867360962354
+      },
+      "id": "F-A1-quality",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.46614330413857,
+      "origin": "A1",
+      "rep": false,
+      "sev": 2.46614330413857,
+      "t0": 134
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A1-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.434504674492546,
+      "origin": "A1",
+      "rep": false,
+      "sev": 6.434504674492546,
+      "t0": 211
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A2-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.43817215786605,
+      "origin": "A2",
+      "rep": false,
+      "sev": 6.43817215786605,
+      "t0": 147
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A2-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.6018523686663375,
+      "origin": "A2",
+      "rep": false,
+      "sev": 5.6018523686663375,
+      "t0": 246
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 1
+      },
+      "id": "F-A2-delay",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.3311413246651955,
+      "origin": "A2",
+      "rep": false,
+      "sev": 1.3311413246651955,
+      "t0": 275
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.29914973011070883
+      },
+      "id": "F-A2-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.235548222909482,
+      "origin": "A2",
+      "rep": false,
+      "sev": 5.235548222909482,
+      "t0": 130
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.816060807285149
+      },
+      "id": "F-A2-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.6996490313256345,
+      "origin": "A2",
+      "rep": false,
+      "sev": 6.6996490313256345,
+      "t0": 161
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.2665071667884247
+      },
+      "id": "F-A2-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.169482627754684,
+      "origin": "A2",
+      "rep": false,
+      "sev": 5.169482627754684,
+      "t0": 216
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A2-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.093685040856412,
+      "origin": "A2",
+      "rep": false,
+      "sev": 4.093685040856412,
+      "t0": 181
+    },
+    {
+      "class": "bias",
+      "dur": 12,
+      "extra": {},
+      "id": "F-22",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.0,
+      "origin": "A7",
+      "rep": true,
+      "sev": 5.0,
+      "t0": 160
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A7-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.746330859710508,
+      "origin": "A7",
+      "rep": false,
+      "sev": 5.746330859710508,
+      "t0": 252
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 6
+      },
+      "id": "F-A7-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.819714430871356,
+      "origin": "A7",
+      "rep": false,
+      "sev": 6.819714430871356,
+      "t0": 214
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.1749281181089561
+      },
+      "id": "F-A7-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.488486245674627,
+      "origin": "A7",
+      "rep": false,
+      "sev": 6.488486245674627,
+      "t0": 283
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.3197324010499496
+      },
+      "id": "F-A7-breakdown",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.4322353654178803,
+      "origin": "A7",
+      "rep": false,
+      "sev": 2.4322353654178803,
+      "t0": 133
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.10200873244501543
+      },
+      "id": "F-A7-quality",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.249272651126996,
+      "origin": "A7",
+      "rep": false,
+      "sev": 1.249272651126996,
+      "t0": 238
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A7-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.660830008471928,
+      "origin": "A7",
+      "rep": false,
+      "sev": 6.660830008471928,
+      "t0": 147
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A8-drift",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.5015024118692648,
+      "origin": "A8",
+      "rep": false,
+      "sev": 1.5015024118692648,
+      "t0": 230
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A8-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.624712986688743,
+      "origin": "A8",
+      "rep": false,
+      "sev": 5.624712986688743,
+      "t0": 282
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 6
+      },
+      "id": "F-A8-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.216725006304967,
+      "origin": "A8",
+      "rep": false,
+      "sev": 5.216725006304967,
+      "t0": 258
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.18902039950817395
+      },
+      "id": "F-A8-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.294067014982262,
+      "origin": "A8",
+      "rep": false,
+      "sev": 6.294067014982262,
+      "t0": 214
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.4866605997201345
+      },
+      "id": "F-A8-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.665389219207112,
+      "origin": "A8",
+      "rep": false,
+      "sev": 4.665389219207112,
+      "t0": 170
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.21655605644372522
+      },
+      "id": "F-A8-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.220983368063069,
+      "origin": "A8",
+      "rep": false,
+      "sev": 6.220983368063069,
+      "t0": 121
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A8-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.900143229930987,
+      "origin": "A8",
+      "rep": false,
+      "sev": 4.900143229930987,
+      "t0": 200
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A9-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.982833599423783,
+      "origin": "A9",
+      "rep": false,
+      "sev": 6.982833599423783,
+      "t0": 280
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A9-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.322530954956367,
+      "origin": "A9",
+      "rep": false,
+      "sev": 4.322530954956367,
+      "t0": 145
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-A9-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.385609127641946,
+      "origin": "A9",
+      "rep": false,
+      "sev": 5.385609127641946,
+      "t0": 175
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.04640141889415435
+      },
+      "id": "F-A9-loss",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.2535012079458205,
+      "origin": "A9",
+      "rep": false,
+      "sev": 1.2535012079458205,
+      "t0": 231
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.603586893751121
+      },
+      "id": "F-A9-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.98033967081661,
+      "origin": "A9",
+      "rep": false,
+      "sev": 4.98033967081661,
+      "t0": 249
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.35488055972830046
+      },
+      "id": "F-A9-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.724918228148261,
+      "origin": "A9",
+      "rep": false,
+      "sev": 5.724918228148261,
+      "t0": 132
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-A9-spike",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.9918256314878158,
+      "origin": "A9",
+      "rep": false,
+      "sev": 1.9918256314878158,
+      "t0": 199
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B0-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.640848312576957,
+      "origin": "B0",
+      "rep": false,
+      "sev": 5.640848312576957,
+      "t0": 156
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B0-bias",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.6373114374156579,
+      "origin": "B0",
+      "rep": false,
+      "sev": 1.6373114374156579,
+      "t0": 261
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-B0-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.885510450017241,
+      "origin": "B0",
+      "rep": false,
+      "sev": 4.885510450017241,
+      "t0": 124
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.12841839661688173
+      },
+      "id": "F-B0-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.1340790307959345,
+      "origin": "B0",
+      "rep": false,
+      "sev": 4.1340790307959345,
+      "t0": 139
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.928569674752313
+      },
+      "id": "F-B0-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.797224634315691,
+      "origin": "B0",
+      "rep": false,
+      "sev": 4.797224634315691,
+      "t0": 207
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.32284490665893345
+      },
+      "id": "F-B0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.3112061901212995,
+      "origin": "B0",
+      "rep": false,
+      "sev": 4.3112061901212995,
+      "t0": 183
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B0-spike",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.2975610284143313,
+      "origin": "B0",
+      "rep": false,
+      "sev": 2.2975610284143313,
+      "t0": 230
+    },
+    {
+      "class": "drift",
+      "dur": 12,
+      "extra": {},
+      "id": "F-B1-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.736035472718601,
+      "origin": "B1",
+      "rep": false,
+      "sev": 5.736035472718601,
+      "t0": 186
+    },
+    {
+      "class": "bias",
+      "dur": 14,
+      "extra": {},
+      "id": "F-B1-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.640648081298825,
+      "origin": "B1",
+      "rep": false,
+      "sev": 6.640648081298825,
+      "t0": 246
+    },
+    {
+      "class": "delay",
+      "dur": 14,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-B1-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.860107506501305,
+      "origin": "B1",
+      "rep": false,
+      "sev": 4.860107506501305,
+      "t0": 218
+    },
+    {
+      "class": "loss",
+      "dur": 9,
+      "extra": {
+        "drop_rate": 0.20007805959084352
+      },
+      "id": "F-B1-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.510909283018404,
+      "origin": "B1",
+      "rep": false,
+      "sev": 6.510909283018404,
+      "t0": 170
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.588103584097981
+      },
+      "id": "F-B1-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.112205686495436,
+      "origin": "B1",
+      "rep": false,
+      "sev": 4.112205686495436,
+      "t0": 279
+    },
+    {
+      "class": "quality",
+      "dur": 11,
+      "extra": {
+        "reject_rate": 0.18549106094723733
+      },
+      "id": "F-B1-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.500878264537244,
+      "origin": "B1",
+      "rep": false,
+      "sev": 6.500878264537244,
+      "t0": 149
+    },
+    {
+      "class": "spike",
+      "dur": 14,
+      "extra": {},
+      "id": "F-B1-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.8042896024463335,
+      "origin": "B1",
+      "rep": false,
+      "sev": 5.8042896024463335,
+      "t0": 125
+    },
+    {
+      "class": "drift",
+      "dur": 12,
+      "extra": {},
+      "id": "F-21",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.2,
+      "origin": "B2",
+      "rep": true,
+      "sev": 5.2,
+      "t0": 150
+    },
+    {
+      "class": "breakdown",
+      "dur": 12,
+      "extra": {
+        "mttr_mult": 2
+      },
+      "id": "F-25",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.680940693640026,
+      "origin": "B2",
+      "rep": true,
+      "sev": 6.680940693640026,
+      "t0": 190
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B2-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.451654331216138,
+      "origin": "B2",
+      "rep": false,
+      "sev": 4.451654331216138,
+      "t0": 282
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-B2-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.7182796121326085,
+      "origin": "B2",
+      "rep": false,
+      "sev": 4.7182796121326085,
+      "t0": 231
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.22760630288443026
+      },
+      "id": "F-B2-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.982205276646628,
+      "origin": "B2",
+      "rep": false,
+      "sev": 6.982205276646628,
+      "t0": 211
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.38559003234456013
+      },
+      "id": "F-B2-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.434835650611962,
+      "origin": "B2",
+      "rep": false,
+      "sev": 5.434835650611962,
+      "t0": 129
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B2-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.775464796370052,
+      "origin": "B2",
+      "rep": false,
+      "sev": 5.775464796370052,
+      "t0": 172
+    },
+    {
+      "class": "loss",
+      "dur": 12,
+      "extra": {
+        "drop_rate": 0.2
+      },
+      "id": "F-24",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.910884967499271,
+      "origin": "B7P",
+      "rep": true,
+      "sev": 4.910884967499271,
+      "t0": 180
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B7P-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.348655068095013,
+      "origin": "B7P",
+      "rep": false,
+      "sev": 5.348655068095013,
+      "t0": 201
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B7P-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.563221551772237,
+      "origin": "B7P",
+      "rep": false,
+      "sev": 6.563221551772237,
+      "t0": 125
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 3
+      },
+      "id": "F-B7P-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.953770705999485,
+      "origin": "B7P",
+      "rep": false,
+      "sev": 4.953770705999485,
+      "t0": 166
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.2987424042010742
+      },
+      "id": "F-B7P-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.102913158509601,
+      "origin": "B7P",
+      "rep": false,
+      "sev": 4.102913158509601,
+      "t0": 255
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.10272003435561343
+      },
+      "id": "F-B7P-quality",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.3067991751941286,
+      "origin": "B7P",
+      "rep": false,
+      "sev": 1.3067991751941286,
+      "t0": 239
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B7P-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.439318458620189,
+      "origin": "B7P",
+      "rep": false,
+      "sev": 4.439318458620189,
+      "t0": 221
+    },
+    {
+      "class": "drift",
+      "dur": 12,
+      "extra": {},
+      "id": "F-B7S-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.220880306871156,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 4.220880306871156,
+      "t0": 254
+    },
+    {
+      "class": "bias",
+      "dur": 9,
+      "extra": {},
+      "id": "F-B7S-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.8789324926391,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 6.8789324926391,
+      "t0": 236
+    },
+    {
+      "class": "delay",
+      "dur": 14,
+      "extra": {
+        "d": 3
+      },
+      "id": "F-B7S-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.826873532300027,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 4.826873532300027,
+      "t0": 128
+    },
+    {
+      "class": "loss",
+      "dur": 11,
+      "extra": {
+        "drop_rate": 0.1792247839855917
+      },
+      "id": "F-B7S-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.682000376635293,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 4.682000376635293,
+      "t0": 286
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.032705449083514
+      },
+      "id": "F-B7S-breakdown",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.136889526904916,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 2.136889526904916,
+      "t0": 156
+    },
+    {
+      "class": "quality",
+      "dur": 14,
+      "extra": {
+        "reject_rate": 0.15817411701999592
+      },
+      "id": "F-B7S-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.0139739962206775,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 5.0139739962206775,
+      "t0": 204
+    },
+    {
+      "class": "spike",
+      "dur": 14,
+      "extra": {},
+      "id": "F-B7S-spike",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.7488495452405473,
+      "origin": "B7S",
+      "rep": false,
+      "sev": 1.7488495452405473,
+      "t0": 174
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B8-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.6594564619039165,
+      "origin": "B8",
+      "rep": false,
+      "sev": 5.6594564619039165,
+      "t0": 134
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B8-bias",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.2019821862586832,
+      "origin": "B8",
+      "rep": false,
+      "sev": 2.2019821862586832,
+      "t0": 169
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 3
+      },
+      "id": "F-B8-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.464131633847774,
+      "origin": "B8",
+      "rep": false,
+      "sev": 4.464131633847774,
+      "t0": 246
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.2333468025069779
+      },
+      "id": "F-B8-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.635587546781285,
+      "origin": "B8",
+      "rep": false,
+      "sev": 6.635587546781285,
+      "t0": 233
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.7811895140346623
+      },
+      "id": "F-B8-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.545803140098708,
+      "origin": "B8",
+      "rep": false,
+      "sev": 4.545803140098708,
+      "t0": 183
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.19487730210711654
+      },
+      "id": "F-B8-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.600845176904686,
+      "origin": "B8",
+      "rep": false,
+      "sev": 6.600845176904686,
+      "t0": 287
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-B8-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.179571697205883,
+      "origin": "B8",
+      "rep": false,
+      "sev": 4.179571697205883,
+      "t0": 208
+    },
+    {
+      "class": "quality",
+      "dur": 12,
+      "extra": {
+        "reject_rate": 0.25
+      },
+      "id": "F-26",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.115397260154399,
+      "origin": "B9",
+      "rep": true,
+      "sev": 5.115397260154399,
+      "t0": 200
+    },
+    {
+      "class": "drift",
+      "dur": 14,
+      "extra": {},
+      "id": "F-B9-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.7088526910501995,
+      "origin": "B9",
+      "rep": false,
+      "sev": 6.7088526910501995,
+      "t0": 175
+    },
+    {
+      "class": "bias",
+      "dur": 14,
+      "extra": {},
+      "id": "F-B9-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.696058597333957,
+      "origin": "B9",
+      "rep": false,
+      "sev": 5.696058597333957,
+      "t0": 235
+    },
+    {
+      "class": "delay",
+      "dur": 10,
+      "extra": {
+        "d": 1
+      },
+      "id": "F-B9-delay",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.9248980824842286,
+      "origin": "B9",
+      "rep": false,
+      "sev": 1.9248980824842286,
+      "t0": 160
+    },
+    {
+      "class": "loss",
+      "dur": 12,
+      "extra": {
+        "drop_rate": 0.11130715911663845
+      },
+      "id": "F-B9-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.565752869929626,
+      "origin": "B9",
+      "rep": false,
+      "sev": 6.565752869929626,
+      "t0": 137
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.391209915815268
+      },
+      "id": "F-B9-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.678549808797051,
+      "origin": "B9",
+      "rep": false,
+      "sev": 6.678549808797051,
+      "t0": 270
+    },
+    {
+      "class": "spike",
+      "dur": 10,
+      "extra": {},
+      "id": "F-B9-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.436454718048294,
+      "origin": "B9",
+      "rep": false,
+      "sev": 6.436454718048294,
+      "t0": 255
+    },
+    {
+      "class": "drift",
+      "dur": 9,
+      "extra": {},
+      "id": "F-C0-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.186230134351604,
+      "origin": "C0",
+      "rep": false,
+      "sev": 5.186230134351604,
+      "t0": 154
+    },
+    {
+      "class": "bias",
+      "dur": 14,
+      "extra": {},
+      "id": "F-C0-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.561156709906628,
+      "origin": "C0",
+      "rep": false,
+      "sev": 5.561156709906628,
+      "t0": 185
+    },
+    {
+      "class": "delay",
+      "dur": 14,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-C0-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.44250340941117,
+      "origin": "C0",
+      "rep": false,
+      "sev": 5.44250340941117,
+      "t0": 254
+    },
+    {
+      "class": "loss",
+      "dur": 14,
+      "extra": {
+        "drop_rate": 0.22531661304022413
+      },
+      "id": "F-C0-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.851115771855011,
+      "origin": "C0",
+      "rep": false,
+      "sev": 4.851115771855011,
+      "t0": 121
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.2159425649194626
+      },
+      "id": "F-C0-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.717369807040445,
+      "origin": "C0",
+      "rep": false,
+      "sev": 5.717369807040445,
+      "t0": 216
+    },
+    {
+      "class": "quality",
+      "dur": 14,
+      "extra": {
+        "reject_rate": 0.1920247926405036
+      },
+      "id": "F-C0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.665853119792546,
+      "origin": "C0",
+      "rep": false,
+      "sev": 5.665853119792546,
+      "t0": 280
+    },
+    {
+      "class": "spike",
+      "dur": 9,
+      "extra": {},
+      "id": "F-C0-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.982772370602866,
+      "origin": "C0",
+      "rep": false,
+      "sev": 6.982772370602866,
+      "t0": 171
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C1-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.466753321773597,
+      "origin": "C1",
+      "rep": false,
+      "sev": 6.466753321773597,
+      "t0": 278
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C1-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.983026323319156,
+      "origin": "C1",
+      "rep": false,
+      "sev": 6.983026323319156,
+      "t0": 181
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 6
+      },
+      "id": "F-C1-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.562207308725781,
+      "origin": "C1",
+      "rep": false,
+      "sev": 6.562207308725781,
+      "t0": 245
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.16268616718719284
+      },
+      "id": "F-C1-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.426688955349891,
+      "origin": "C1",
+      "rep": false,
+      "sev": 4.426688955349891,
+      "t0": 195
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.652139263154124
+      },
+      "id": "F-C1-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.888643548152911,
+      "origin": "C1",
+      "rep": false,
+      "sev": 5.888643548152911,
+      "t0": 125
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.22413701959930216
+      },
+      "id": "F-C1-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.470288879661325,
+      "origin": "C1",
+      "rep": false,
+      "sev": 6.470288879661325,
+      "t0": 162
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C1-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.066267516251569,
+      "origin": "C1",
+      "rep": false,
+      "sev": 6.066267516251569,
+      "t0": 263
+    },
+    {
+      "class": "delay",
+      "dur": 12,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-23",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.380003758882466,
+      "origin": "C2",
+      "rep": true,
+      "sev": 4.380003758882466,
+      "t0": 170
+    },
+    {
+      "class": "drift",
+      "dur": 14,
+      "extra": {},
+      "id": "F-C2-drift",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.6007229179891387,
+      "origin": "C2",
+      "rep": false,
+      "sev": 1.6007229179891387,
+      "t0": 261
+    },
+    {
+      "class": "bias",
+      "dur": 14,
+      "extra": {},
+      "id": "F-C2-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.172637561766123,
+      "origin": "C2",
+      "rep": false,
+      "sev": 6.172637561766123,
+      "t0": 196
+    },
+    {
+      "class": "loss",
+      "dur": 14,
+      "extra": {
+        "drop_rate": 0.024597045352028005
+      },
+      "id": "F-C2-loss",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.624859087853185,
+      "origin": "C2",
+      "rep": false,
+      "sev": 2.624859087853185,
+      "t0": 233
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.0173416560700987
+      },
+      "id": "F-C2-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.861438461264791,
+      "origin": "C2",
+      "rep": false,
+      "sev": 6.861438461264791,
+      "t0": 138
+    },
+    {
+      "class": "quality",
+      "dur": 9,
+      "extra": {
+        "reject_rate": 0.1815587806090766
+      },
+      "id": "F-C2-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.0167564786644245,
+      "origin": "C2",
+      "rep": false,
+      "sev": 6.0167564786644245,
+      "t0": 120
+    },
+    {
+      "class": "spike",
+      "dur": 10,
+      "extra": {},
+      "id": "F-C2-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.593043827022336,
+      "origin": "C2",
+      "rep": false,
+      "sev": 6.593043827022336,
+      "t0": 218
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C6-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.45670013574747,
+      "origin": "C6",
+      "rep": false,
+      "sev": 4.45670013574747,
+      "t0": 287
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C6-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.3389847600659746,
+      "origin": "C6",
+      "rep": false,
+      "sev": 4.3389847600659746,
+      "t0": 155
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 5
+      },
+      "id": "F-C6-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.001288916354347,
+      "origin": "C6",
+      "rep": false,
+      "sev": 5.001288916354347,
+      "t0": 177
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.23657696118790972
+      },
+      "id": "F-C6-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.8465439504037215,
+      "origin": "C6",
+      "rep": false,
+      "sev": 6.8465439504037215,
+      "t0": 227
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.5509525516085745
+      },
+      "id": "F-C6-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.26341289229664,
+      "origin": "C6",
+      "rep": false,
+      "sev": 4.26341289229664,
+      "t0": 128
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.228824556408696
+      },
+      "id": "F-C6-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.956557190835349,
+      "origin": "C6",
+      "rep": false,
+      "sev": 6.956557190835349,
+      "t0": 249
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C6-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.400211250381188,
+      "origin": "C6",
+      "rep": false,
+      "sev": 6.400211250381188,
+      "t0": 263
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C7-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.954858982984585,
+      "origin": "C7",
+      "rep": false,
+      "sev": 4.954858982984585,
+      "t0": 178
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C7-bias",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.553999771458333,
+      "origin": "C7",
+      "rep": false,
+      "sev": 2.553999771458333,
+      "t0": 228
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 6
+      },
+      "id": "F-C7-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.42608032362384,
+      "origin": "C7",
+      "rep": false,
+      "sev": 4.42608032362384,
+      "t0": 279
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.10611564290683209
+      },
+      "id": "F-C7-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.599593944876717,
+      "origin": "C7",
+      "rep": false,
+      "sev": 6.599593944876717,
+      "t0": 160
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.356141161340127
+      },
+      "id": "F-C7-breakdown",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.146133852868168,
+      "origin": "C7",
+      "rep": false,
+      "sev": 2.146133852868168,
+      "t0": 208
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.28819027357972493
+      },
+      "id": "F-C7-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.635307381609007,
+      "origin": "C7",
+      "rep": false,
+      "sev": 4.635307381609007,
+      "t0": 263
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-C7-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.291192993823152,
+      "origin": "C7",
+      "rep": false,
+      "sev": 5.291192993823152,
+      "t0": 242
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG0-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.548636180684915,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 5.548636180684915,
+      "t0": 230
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG0-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.6644994317130895,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 4.6644994317130895,
+      "t0": 188
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 2
+      },
+      "id": "F-PKG0-delay",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.2840340069807084,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 1.2840340069807084,
+      "t0": 125
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.24291645104387188
+      },
+      "id": "F-PKG0-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.6437346150554735,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 6.6437346150554735,
+      "t0": 271
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.2990174733607445
+      },
+      "id": "F-PKG0-breakdown",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.3571532080741815,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 1.3571532080741815,
+      "t0": 163
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.23967049510130256
+      },
+      "id": "F-PKG0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.026689996002416,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 4.026689996002416,
+      "t0": 216
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG0-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.117993878956483,
+      "origin": "PKG0",
+      "rep": false,
+      "sev": 5.117993878956483,
+      "t0": 147
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG1-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.336074984955882,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 4.336074984955882,
+      "t0": 219
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG1-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.261632564343336,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 6.261632564343336,
+      "t0": 170
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 4
+      },
+      "id": "F-PKG1-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.353535610203766,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 4.353535610203766,
+      "t0": 123
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.20524352063327378
+      },
+      "id": "F-PKG1-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.042523088708539,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 4.042523088708539,
+      "t0": 145
+    },
+    {
+      "class": "breakdown",
+      "dur": 4,
+      "extra": {
+        "mttr_mult": 2.237356938174898
+      },
+      "id": "F-PKG1-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.241564158458193,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 6.241564158458193,
+      "t0": 259
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.11092529067688789
+      },
+      "id": "F-PKG1-quality",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.104168104079955,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 1.104168104079955,
+      "t0": 196
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG1-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.800016935732762,
+      "origin": "PKG1",
+      "rep": false,
+      "sev": 6.800016935732762,
+      "t0": 277
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG2-drift",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.734664848048628,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 2.734664848048628,
+      "t0": 272
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG2-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.649317199439663,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 5.649317199439663,
+      "t0": 255
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 6
+      },
+      "id": "F-PKG2-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.440583215975536,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 6.440583215975536,
+      "t0": 153
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.23073769569774252
+      },
+      "id": "F-PKG2-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.26344958073618,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 4.26344958073618,
+      "t0": 133
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.773753618097016
+      },
+      "id": "F-PKG2-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.809567088706524,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 4.809567088706524,
+      "t0": 196
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.24301482982062073
+      },
+      "id": "F-PKG2-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.315786921242969,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 6.315786921242969,
+      "t0": 182
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-PKG2-spike",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.4269027551503486,
+      "origin": "PKG2",
+      "rep": false,
+      "sev": 2.4269027551503486,
+      "t0": 219
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-ASM0-drift",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.6217967962454543,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 2.6217967962454543,
+      "t0": 259
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-ASM0-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.133226151551665,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 6.133226151551665,
+      "t0": 197
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 2
+      },
+      "id": "F-ASM0-delay",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.5423618672053045,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 1.5423618672053045,
+      "t0": 174
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.06510760736619838
+      },
+      "id": "F-ASM0-loss",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.4749761187018846,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 2.4749761187018846,
+      "t0": 237
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.556620166472432
+      },
+      "id": "F-ASM0-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.523824158594297,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 6.523824158594297,
+      "t0": 151
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.3478600395112559
+      },
+      "id": "F-ASM0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.39294132613027,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 6.39294132613027,
+      "t0": 213
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-ASM0-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.741872876760701,
+      "origin": "ASM0",
+      "rep": false,
+      "sev": 5.741872876760701,
+      "t0": 289
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-ASM1-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.725626454238997,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 4.725626454238997,
+      "t0": 193
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-ASM1-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.847291928647402,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 5.847291928647402,
+      "t0": 258
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 3
+      },
+      "id": "F-ASM1-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.712294926026388,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 6.712294926026388,
+      "t0": 169
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.13487662842561854
+      },
+      "id": "F-ASM1-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.6611001853799685,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 5.6611001853799685,
+      "t0": 244
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.7833352635808353
+      },
+      "id": "F-ASM1-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.230117947747563,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 4.230117947747563,
+      "t0": 212
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.15778465885745485
+      },
+      "id": "F-ASM1-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.793763441245048,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 4.793763441245048,
+      "t0": 132
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-ASM1-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.591235283266456,
+      "origin": "ASM1",
+      "rep": false,
+      "sev": 6.591235283266456,
+      "t0": 285
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-INSP0-drift",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.3185414530810817,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 1.3185414530810817,
+      "t0": 244
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-INSP0-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.6088362834817,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 5.6088362834817,
+      "t0": 143
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 5
+      },
+      "id": "F-INSP0-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.8109605669538755,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 4.8109605669538755,
+      "t0": 286
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.18034416843591822
+      },
+      "id": "F-INSP0-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.188888205865678,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 6.188888205865678,
+      "t0": 165
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.9383201113424693
+      },
+      "id": "F-INSP0-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.662100660929127,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 6.662100660929127,
+      "t0": 224
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.23976304803986373
+      },
+      "id": "F-INSP0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.233643075903656,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 5.233643075903656,
+      "t0": 189
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-INSP0-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.40689532616932,
+      "origin": "INSP0",
+      "rep": false,
+      "sev": 4.40689532616932,
+      "t0": 203
+    },
+    {
+      "class": "drift",
+      "dur": 14,
+      "extra": {},
+      "id": "F-ASM2-drift",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.2709498339414464,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 4.2709498339414464,
+      "t0": 273
+    },
+    {
+      "class": "bias",
+      "dur": 14,
+      "extra": {},
+      "id": "F-ASM2-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.818450859323708,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 6.818450859323708,
+      "t0": 225
+    },
+    {
+      "class": "delay",
+      "dur": 9,
+      "extra": {
+        "d": 5
+      },
+      "id": "F-ASM2-delay",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.711899301113923,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 4.711899301113923,
+      "t0": 166
+    },
+    {
+      "class": "loss",
+      "dur": 14,
+      "extra": {
+        "drop_rate": 0.07765679172655929
+      },
+      "id": "F-ASM2-loss",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.6753512921071052,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 1.6753512921071052,
+      "t0": 127
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.1293611633125118
+      },
+      "id": "F-ASM2-breakdown",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.977735425602313,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 5.977735425602313,
+      "t0": 211
+    },
+    {
+      "class": "quality",
+      "dur": 13,
+      "extra": {
+        "reject_rate": 0.20996838466306178
+      },
+      "id": "F-ASM2-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.661813116102747,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 5.661813116102747,
+      "t0": 184
+    },
+    {
+      "class": "spike",
+      "dur": 14,
+      "extra": {},
+      "id": "F-ASM2-spike",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.484477723365901,
+      "origin": "ASM2",
+      "rep": false,
+      "sev": 6.484477723365901,
+      "t0": 249
+    },
+    {
+      "class": "drift",
+      "dur": 8,
+      "extra": {},
+      "id": "F-RWK0-drift",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.884127900384514,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 2.884127900384514,
+      "t0": 264
+    },
+    {
+      "class": "bias",
+      "dur": 8,
+      "extra": {},
+      "id": "F-RWK0-bias",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.232734961933005,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 5.232734961933005,
+      "t0": 169
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {
+        "d": 1
+      },
+      "id": "F-RWK0-delay",
+      "mag_rung": "incipient",
+      "mag_sigma": 2.7024950994703127,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 2.7024950994703127,
+      "t0": 139
+    },
+    {
+      "class": "loss",
+      "dur": 8,
+      "extra": {
+        "drop_rate": 0.23922738459563256
+      },
+      "id": "F-RWK0-loss",
+      "mag_rung": "caricature",
+      "mag_sigma": 5.761789370031232,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 5.761789370031232,
+      "t0": 182
+    },
+    {
+      "class": "breakdown",
+      "dur": 7,
+      "extra": {
+        "mttr_mult": 1.0141974189229113
+      },
+      "id": "F-RWK0-breakdown",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.7606470687951812,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 1.7606470687951812,
+      "t0": 232
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {
+        "reject_rate": 0.15199844624269387
+      },
+      "id": "F-RWK0-quality",
+      "mag_rung": "caricature",
+      "mag_sigma": 6.5644346595508685,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 6.5644346595508685,
+      "t0": 286
+    },
+    {
+      "class": "spike",
+      "dur": 8,
+      "extra": {},
+      "id": "F-RWK0-spike",
+      "mag_rung": "incipient",
+      "mag_sigma": 1.549838049062315,
+      "origin": "RWK0",
+      "rep": false,
+      "sev": 1.549838049062315,
+      "t0": 123
+    }
+  ],
+  "sha256": "57b933a4d3d694e2b95b04fdeeeda21affbd3c58de39004abe2e2a43c8896679",
+  "twin_schema": 6
+}
