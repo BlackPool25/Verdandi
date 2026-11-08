@@ -12,8 +12,12 @@ def test_mass_specs_balanced_and_deterministic():
     assert len(fe) == 7 * 2 * 2 and len(ce) == 4
     fe2, _, _ = build_specs(n_per_cell=2, n_clean=4, seed=0)
     assert fe == fe2
-    fams = [faults[ep]["class"] for ep in fe]
+    fams = [faults[ep]["class"] for ep in set(fe)]
     assert {fams.count(f) for f in set(fams)} == {4}
+    origins = {faults[ep]["origin"] for ep in fe}
+    assert len(origins) > 1, "faults must span machines, not a single origin"
+    t0s = {faults[ep]["t0"] for ep in fe}
+    assert len(t0s) > 1, "fault onset must vary across episodes"
 
 
 def test_all_clean_shard_exports(tmp_path):
