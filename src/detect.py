@@ -37,13 +37,19 @@ def fit_quantile_thresholds(
         if clean_mask is None
         else np.asarray(clean_mask, dtype=bool)
     )
-    if mask.shape != (x.shape[0],):
-        raise ValueError(f"clean_mask shape {mask.shape} != T {x.shape[0]}")
-    if int(mask.sum()) < 10:
+    if mask.shape == (x.shape[0],):
+        masks = np.repeat(mask[:, None], x.shape[1], axis=1)
+    elif mask.shape == (x.shape[0], x.shape[1]):
+        masks = mask
+    else:
+        raise ValueError(
+            f"clean_mask shape {mask.shape} != T {(x.shape[0],)} or (T, N) {x.shape}"
+        )
+    if int(masks.sum()) < 10:
         raise ValueError("fit needs >= 10 clean steps")
     out: dict[str, dict[str, float]] = {}
     for j, m in enumerate(machine_names):
-        col = x[mask, j]
+        col = x[masks[:, j], j]
         q99 = float(np.quantile(col, q_high))
         q1 = float(np.quantile(col, 0.25))
         q3 = float(np.quantile(col, 0.75))
@@ -54,9 +60,19 @@ def fit_quantile_thresholds(
             "q3": q3,
             "fence": fence,
             "thr": max(q99, fence),
-            "n": float(int(mask.sum())),
+            "n": float(int(masks[:, j].sum())),
         }
     return out
+
+
+def clean_run_mask(states: np.ndarray, start: int, end: int) -> np.ndarray:
+    """Steps in [start, end) where every machine is RUN (all-RUN clean steps)."""
+    s = np.asarray(states)
+    if s.ndim != 2 or not (0 <= start <= end <= s.shape[1]):
+        raise ValueError(
+            f"states must be [N, T] with 0 <= {start} <= {end} <= {s.shape[1]}"
+        )
+    return np.array([(s[:, t] == "RUN").all() for t in range(start, end)], dtype=bool)
 
 
 def save_artifact(
@@ -100,14 +116,27 @@ def detect_exceedance(
     obs: np.ndarray,
     thresholds: dict[str, dict[str, float]],
     machine_names: list[str],
+    *,
+    suppress: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Exceedance alarms + margins over a time-major [T, N] obs window."""
+    """Exceedance alarms + margins over a time-major [T, N] obs window.
+
+    suppress (optional [T, N] bool, e.g. DOWN steps) clears alarms but keeps scores.
+    """
     x = np.asarray(obs, dtype=float)
     if x.ndim != 2 or x.shape[1] != len(machine_names):
         raise ValueError(f"obs must be [T, N={len(machine_names)}], got {x.shape}")
     thr = np.array([float(thresholds[m]["thr"]) for m in machine_names])
     scores = x - thr
-    return (scores > 0), scores
+    alarms = scores > 0
+    if suppress is not None:
+        sup = np.asarray(suppress, dtype=bool)
+        if sup.shape != alarms.shape:
+            raise ValueError(
+                f"suppress shape {sup.shape} != alarms shape {alarms.shape}"
+            )
+        alarms = alarms & ~sup
+    return alarms, scores
 
 
 def apply_veto_asm2(peaks: dict[str, float]) -> str:
