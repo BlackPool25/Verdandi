@@ -23,7 +23,7 @@ def test_small_family_shrinks_to_global():
 
 
 def test_suppression_keeps_first_alert_with_count():
-    kept, reason = suppress(True, ("E1", "M1"), window=5, ledger={})
+    kept, _ = suppress(True, ("E1", "M1"), window=5, ledger={})
     kept2, reason2 = suppress(True, ("E1", "M1"), window=5, ledger={("E1", "M1"): 1})
     assert kept and not kept2 and "suppressed-count=1" in reason2
 

@@ -31,8 +31,8 @@ def dilate(labels: np.ndarray, buffer: int) -> np.ndarray:
 def _segments(mask: np.ndarray) -> list[tuple[int, int]]:
     y = np.asarray(mask, dtype=bool)
     edges = np.diff(y.astype(int))
-    starts = list(np.flatnonzero(edges == 1) + 1)
-    ends = list(np.flatnonzero(edges == -1) + 1)
+    starts: list[int] = [int(v) + 1 for v in np.flatnonzero(edges == 1)]
+    ends: list[int] = [int(v) + 1 for v in np.flatnonzero(edges == -1)]
     if y[0]:
         starts = [0] + starts
     if y[-1]:

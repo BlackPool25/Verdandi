@@ -64,8 +64,8 @@ def test_score_episode_dumps_scores_and_labels(tmp_path):
     import sys
 
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
-    import run_m0b_baseline as bl
     import freeze_m0b_battery as fz
+    import run_m0b_baseline as bl
 
     from src import twin as _twin
 
@@ -74,6 +74,16 @@ def test_score_episode_dumps_scores_and_labels(tmp_path):
     i, row = by_id["F-06"]
     rec = _twin.run_episode(m["fault_episodes"][i], dict(row))
     p = str(tmp_path / "F-06.npz")
-    bl.score_episode(rec, dict(row), detect.fit_quantile_thresholds(_twin.run_calibration(7), MACHINES), MACHINES, dump_path=p)
+    bl.score_episode(
+        rec,
+        dict(row),
+        detect.fit_quantile_thresholds(_twin.run_calibration(7), MACHINES),
+        MACHINES,
+        dump_path=p,
+    )
     z = np.load(p)
-    assert z["scores"].shape == (300,) and z["labels"].sum() == 10 and z["labels"][150] == 1
+    assert (
+        z["scores"].shape == (300,)
+        and z["labels"].sum() == 10
+        and z["labels"][150] == 1
+    )

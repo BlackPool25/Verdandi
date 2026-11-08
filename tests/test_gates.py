@@ -107,7 +107,9 @@ def test_kit_outcomes_carry_event_time():
     assert gates.kit_outcomes_from_events(events) == [(10, True), (12, False)]
 
 
-def arl0_monte_carlo(p0: float, p1: float, h: float, *, seed: int = 0, n: int = 2000) -> float:
+def arl0_monte_carlo(
+    p0: float, p1: float, h: float, *, seed: int = 0, n: int = 2000
+) -> float:
     """Mean kits-to-false-alarm under p0, using the production CUSUM step."""
     rng = np.random.default_rng(seed)
     w_fail, w_pass = gates.bernoulli_cusum_weights(p0, p1)

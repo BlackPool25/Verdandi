@@ -43,7 +43,11 @@ def build_appendix(dump_dir: str, families: dict[str, str]) -> dict:
         if np.isfinite(v):
             per_fam.setdefault(fam, []).append(float(v))
     return {
-        fam: {"n": len(v), "vus_pr_mean": float(np.mean(v)), "vus_pr_min": float(np.min(v))}
+        fam: {
+            "n": len(v),
+            "vus_pr_mean": float(np.mean(v)),
+            "vus_pr_min": float(np.min(v)),
+        }
         for fam, v in sorted(per_fam.items())
     }
 
@@ -60,12 +64,15 @@ def cusum_clean_hit_rate(clean_eps: list[int], p0: float, p1: float, h: float) -
             if alarm:
                 hits += 1
                 break
-    return {"n_clean": len(clean_eps), "cusum_clean_hit": hits,
-            "rate": hits / len(clean_eps) if clean_eps else 0.0}
+    return {
+        "n_clean": len(clean_eps),
+        "cusum_clean_hit": hits,
+        "rate": hits / len(clean_eps) if clean_eps else 0.0,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
-    from scripts.measure_cusum_p0 import H_CUSUM, P0_CUSUM, P1_CUSUM  # noqa: PLC0415
+    from scripts.measure_cusum_p0 import H_CUSUM, P0_CUSUM, P1_CUSUM
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", default="docs/m0b_battery_manifest.json")
@@ -82,20 +89,30 @@ def main(argv: list[str] | None = None) -> int:
         hits = sum(1 for r in rows if r["hit"])
         lo, hi = wilson(hits, len(rows))
         appendix.setdefault(fam, {}).update(
-            {"hit_rate": hits / len(rows), "hit_wilson95": [lo, hi], "n_hit": hits,
-             "n_episodes": len(rows)}
+            {
+                "hit_rate": hits / len(rows),
+                "hit_wilson95": [lo, hi],
+                "n_hit": hits,
+                "n_episodes": len(rows),
+            }
         )
     appendix["_cusum_clean"] = cusum_clean_hit_rate(
-        manifest["clean_episodes"], P0_CUSUM, P1_CUSUM, H_CUSUM)
-    appendix["_bars"] = {"f1_raw": baseline["f1_raw"], "ac1": baseline["ac1"],
-                         "clean_fp_total": baseline["clean_fp_total"]}
+        manifest["clean_episodes"], P0_CUSUM, P1_CUSUM, H_CUSUM
+    )
+    appendix["_bars"] = {
+        "f1_raw": baseline["f1_raw"],
+        "ac1": baseline["ac1"],
+        "clean_fp_total": baseline["clean_fp_total"],
+    }
     pathlib.Path(args.out).write_text(json.dumps(appendix, indent=2), encoding="utf-8")
     for fam, a in sorted(appendix.items()):
         if fam.startswith("_"):
             continue
-        print(f"{fam:10s} n={a.get('n_episodes', a.get('n')):3d} "
-              f"VUS-PR={a.get('vus_pr_mean', float('nan')):.3f} "
-              f"hit={a.get('hit_rate', float('nan')):.2f}")
+        print(
+            f"{fam:10s} n={a.get('n_episodes', a.get('n')):3d} "
+            f"VUS-PR={a.get('vus_pr_mean', float('nan')):.3f} "
+            f"hit={a.get('hit_rate', float('nan')):.2f}"
+        )
     print("cusum-clean:", appendix["_cusum_clean"])
     return 0
 

@@ -58,7 +58,9 @@ def test_build_appendix_groups_families_and_wilson(tmp_path):
         lab = np.zeros(100, dtype=int)
         lab[40:60] = 1
         s[40:60] += shift
-        np.savez_compressed(tmp_path / f"{name}.npz", scores=s, labels=lab, fault_id=name)
+        np.savez_compressed(
+            tmp_path / f"{name}.npz", scores=s, labels=lab, fault_id=name
+        )
     out = build_appendix(str(tmp_path), {"A": "sig", "B": "sig", "C": "sig"})
     assert out["sig"]["n"] == 3 and 0.0 < out["sig"]["vus_pr_mean"] <= 1.0
     lo, hi = wilson(20, 26)

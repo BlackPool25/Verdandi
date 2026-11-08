@@ -319,16 +319,54 @@ if __name__ == "__main__":
 # unavailable in this CPU-only env — recorded, never silently dropped.
 
 POOL: dict[str, dict] = {
-    "quantile": {"kind": "detector", "note": "detect.fit_quantile_thresholds (no fitted object)"},
-    "ecod": {"kind": "detector", "sign": "larger-abnormal", "make": "pyod.models.ecod:ECOD"},
-    "iforest": {"kind": "detector", "sign": "negative-outlier", "make": "sklearn.ensemble:IsolationForest"},
-    "knn": {"kind": "detector", "sign": "larger-abnormal", "make": "sklearn.neighbors:NearestNeighbors"},
-    "pca": {"kind": "detector", "sign": "larger-abnormal", "make": "sklearn.decomposition:PCA"},
-    "lof": {"kind": "detector", "sign": "negative-outlier", "make": "sklearn.neighbors:LocalOutlierFactor"},
-    "ols": {"kind": "probe", "note": "sklearn.linear_model:LinearRegression supervised train-AUC probe"},
-    "dlinear": {"kind": "detector", "sign": "larger-abnormal", "note": "numpy least-squares trend residual"},
-    "usad": {"kind": "falsify-arm", "available": False, "reason": "needs GPU framework; small-N risk"},
-    "gdn": {"kind": "falsify-arm", "available": False, "reason": "needs GPU framework; small-N risk"},
+    "quantile": {
+        "kind": "detector",
+        "note": "detect.fit_quantile_thresholds (no fitted object)",
+    },
+    "ecod": {
+        "kind": "detector",
+        "sign": "larger-abnormal",
+        "make": "pyod.models.ecod:ECOD",
+    },
+    "iforest": {
+        "kind": "detector",
+        "sign": "negative-outlier",
+        "make": "sklearn.ensemble:IsolationForest",
+    },
+    "knn": {
+        "kind": "detector",
+        "sign": "larger-abnormal",
+        "make": "sklearn.neighbors:NearestNeighbors",
+    },
+    "pca": {
+        "kind": "detector",
+        "sign": "larger-abnormal",
+        "make": "sklearn.decomposition:PCA",
+    },
+    "lof": {
+        "kind": "detector",
+        "sign": "negative-outlier",
+        "make": "sklearn.neighbors:LocalOutlierFactor",
+    },
+    "ols": {
+        "kind": "probe",
+        "note": "sklearn.linear_model:LinearRegression supervised train-AUC probe",
+    },
+    "dlinear": {
+        "kind": "detector",
+        "sign": "larger-abnormal",
+        "note": "numpy least-squares trend residual",
+    },
+    "usad": {
+        "kind": "falsify-arm",
+        "available": False,
+        "reason": "needs GPU framework; small-N risk",
+    },
+    "gdn": {
+        "kind": "falsify-arm",
+        "available": False,
+        "reason": "needs GPU framework; small-N risk",
+    },
     "mp": {"kind": "guardrail", "sign": "larger-abnormal", "make": "stumpy:stump"},
 }
 

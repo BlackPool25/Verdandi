@@ -205,8 +205,11 @@ def test_ecod_is_only_pyod_import():
         ["grep", "-rn", "pyod", "src/", "--include=*.py"],
         capture_output=True,
         text=True,
+        check=False,
     ).stdout
-    assert out.strip() != "" and all("ecod" in line.lower() for line in out.strip().splitlines())
+    assert out.strip() != "" and all(
+        "ecod" in line.lower() for line in out.strip().splitlines()
+    )
 
 
 def _pool_clean_spike(seed: int = 0):
@@ -234,11 +237,22 @@ def test_pool_sklearn_signs_mark_spike_above_clean():
 
     clean, spike = _pool_clean_spike()
     both = np.vstack([clean, spike])
-    assert as_abnormal_scores("iforest", IsolationForest(random_state=0).fit(clean), both)[-1] > 0
-    assert as_abnormal_scores(
-        "lof", LocalOutlierFactor(novelty=True).fit(clean), both
-    )[-1] > as_abnormal_scores("lof", LocalOutlierFactor(novelty=True).fit(clean), clean).mean()
-    assert as_abnormal_scores("knn", NearestNeighbors(n_neighbors=5).fit(clean), both)[-1] > 0
+    assert (
+        as_abnormal_scores("iforest", IsolationForest(random_state=0).fit(clean), both)[
+            -1
+        ]
+        > 0
+    )
+    assert (
+        as_abnormal_scores("lof", LocalOutlierFactor(novelty=True).fit(clean), both)[-1]
+        > as_abnormal_scores(
+            "lof", LocalOutlierFactor(novelty=True).fit(clean), clean
+        ).mean()
+    )
+    assert (
+        as_abnormal_scores("knn", NearestNeighbors(n_neighbors=5).fit(clean), both)[-1]
+        > 0
+    )
     assert as_abnormal_scores("pca", PCA(n_components=1).fit(clean), both)[-1] > 0
 
 

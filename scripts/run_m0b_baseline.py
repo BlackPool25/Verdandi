@@ -19,8 +19,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 
-from src import config, detect, gates, train_pipeline, twin
 from scripts.measure_cusum_p0 import H_CUSUM, P0_CUSUM, P1_CUSUM
+from src import config, detect, gates, train_pipeline, twin
 
 LAT_GATE = 3
 # Bernoulli-CUSUM design: locked from clean-episode measurement (scripts/measure_cusum_p0.py).
@@ -151,12 +151,18 @@ def run_battery(
         rec = twin.run_episode(ep, dict(row), enable_natural_breakdown=False)
         dp = f"{dump_dir}/{row['id']}.npz" if dump_dir else None
         rows.append(
-            score_episode(rec, dict(row), thresholds, machine_names, p0=p0, p1=p1, dump_path=dp)
+            score_episode(
+                rec, dict(row), thresholds, machine_names, p0=p0, p1=p1, dump_path=dp
+            )
         )
     for ep in manifest["clean_episodes"]:
         rec = twin.run_episode(ep, None, enable_natural_breakdown=False)
         dp = f"{dump_dir}/clean_{ep}.npz" if dump_dir else None
-        rows.append(score_episode(rec, None, thresholds, machine_names, p0=p0, p1=p1, dump_path=dp))
+        rows.append(
+            score_episode(
+                rec, None, thresholds, machine_names, p0=p0, p1=p1, dump_path=dp
+            )
+        )
     tp = sum(r["tp"] for r in rows)
     fp = sum(r["fp"] for r in rows)
     fn = sum(r["fn"] for r in rows)
@@ -229,8 +235,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"WARNING: clean fail rate {measured:.4f} > 2x locked p0 {P0_CUSUM:.4f}")
     if args.dump_dir:
         pathlib.Path(args.dump_dir).mkdir(parents=True, exist_ok=True)
-    result = run_battery(manifest, thresholds, machines, p0=P0_CUSUM, p1=P1_CUSUM,
-                         dump_dir=args.dump_dir)
+    result = run_battery(
+        manifest, thresholds, machines, p0=P0_CUSUM, p1=P1_CUSUM, dump_dir=args.dump_dir
+    )
     result["wall_seconds"] = time.perf_counter() - start
     result["cal_seed"] = args.cal_seed
     out = pathlib.Path(args.out)

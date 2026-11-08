@@ -43,9 +43,7 @@ def fuse_counting(votes: list[bool], *, k: int) -> bool:
     return sum(1 for v in votes if v) >= k
 
 
-def suppress(
-    alarm: bool, key: tuple, window: int, ledger: dict
-) -> tuple[bool, str]:
+def suppress(alarm: bool, key: tuple, window: int, ledger: dict) -> tuple[bool, str]:
     """Suppression keyed (expert, entity): first alert kept, repeats within the
     window suppressed with count + reason; window expiry forces re-alert."""
     if not alarm:

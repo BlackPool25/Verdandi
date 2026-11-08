@@ -5,11 +5,13 @@ Arm A: empirical quantile. Arm B: GMM (+Gamma). Arm C: MOM-SPOT with guardrail.
 """
 
 import numpy as np
-from scipy import stats
-from sklearn.mixture import GaussianMixture
+from scipy import stats  # type: ignore[import-untyped]
+from sklearn.mixture import GaussianMixture  # type: ignore[import-untyped]
 
 
-def fit_quantile_threshold(scores_clean: np.ndarray, *, fpr_target: float = 0.01) -> float:
+def fit_quantile_threshold(
+    scores_clean: np.ndarray, *, fpr_target: float = 0.01
+) -> float:
     """Empirical-quantile threshold: flag the top `fpr_target` fraction of clean scores."""
     return float(np.quantile(np.asarray(scores_clean, dtype=float), 1.0 - fpr_target))
 
@@ -74,7 +76,13 @@ def fit_pot_mom_threshold(
     """
     y = np.asarray(excesses, dtype=float).ravel()
     n_t = y.size
-    frozen = {"z_q": prior_zq if prior_zq is not None else float(np.max(y)) if n_t else float("inf")}
+    frozen = {
+        "z_q": prior_zq
+        if prior_zq is not None
+        else float(np.max(y))
+        if n_t
+        else float("inf")
+    }
     if n_t < MIN_EXCESSES_FOR_REFIT:
         return {
             "z_q": frozen["z_q"],
@@ -135,8 +143,14 @@ def fit_pot_mom_threshold(
     }
 
 
-def stability_vote(tau_a: float, tau_b: float, tau_c: float, *, f1_tol: float = 0.02,
-                   fp_tol: float = 3 / 1000) -> float:
+def stability_vote(
+    tau_a: float,
+    tau_b: float,
+    tau_c: float,
+    *,
+    f1_tol: float = 0.02,
+    fp_tol: float = 3 / 1000,
+) -> float:
     """2-of-3 vote: median of the closest pair; all-disagree -> most conservative (max).
 
     `f1_tol`/`fp_tol` are the Task-9 stability-report tolerances (arm agreement
@@ -145,8 +159,10 @@ def stability_vote(tau_a: float, tau_b: float, tau_c: float, *, f1_tol: float = 
     no pair agrees.
     """
     taus = sorted([float(tau_a), float(tau_b), float(tau_c)])
-    spreads = [(taus[1] - taus[0], (taus[0] + taus[1]) / 2.0),
-               (taus[2] - taus[1], (taus[1] + taus[2]) / 2.0)]
+    spreads = [
+        (taus[1] - taus[0], (taus[0] + taus[1]) / 2.0),
+        (taus[2] - taus[1], (taus[1] + taus[2]) / 2.0),
+    ]
     best_spread, best_mid = min(spreads, key=lambda s: s[0])
     if best_spread > 0.25 * float(np.median(taus)):
         return taus[2]
@@ -156,8 +172,9 @@ def stability_vote(tau_a: float, tau_b: float, tau_c: float, *, f1_tol: float = 
 PROTECTED_FAMILIES = ("F-06", "F-12", "F-14")
 
 
-def apply_recall_veto(flags: np.ndarray, family: str,
-                      *, protected: tuple = PROTECTED_FAMILIES) -> np.ndarray:
+def apply_recall_veto(
+    flags: np.ndarray, family: str, *, protected: tuple = PROTECTED_FAMILIES
+) -> np.ndarray:
     """Recall-first veto: protected families always alarm (recall 1.0, never
     traded for FAR); all other families pass through for downstream veto logic."""
     out = np.asarray(flags, dtype=bool).copy()
