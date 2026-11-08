@@ -19,9 +19,37 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 
-from src import config, detect, train_pipeline, twin
+from src import config, detect, gates, train_pipeline, twin
 
 LAT_GATE = 3
+# Bernoulli-CUSUM design (provisional; ARL calibration deferred to Phase C).
+CUSUM_H = 4.0
+CUSUM_P1_FLOOR = 0.2
+
+
+def fit_run_only_thresholds(cal_seed: int, machine_names: list[str]) -> dict:
+    """Quantile artifact fitted on all-RUN calibration steps only (state-aware fit)."""
+    rec = twin.run_episode(cal_seed, None)
+    states = np.asarray(rec["states"])
+    obs = np.asarray(rec["obs"], dtype=float).T
+    mask_1d = detect.clean_run_mask(states, config.WARMUP_STEPS, config.CAL_WIN)
+    full = np.zeros_like(obs, dtype=bool)
+    full[config.WARMUP_STEPS : config.CAL_WIN] = mask_1d[:, None]
+    return detect.fit_quantile_thresholds(obs, machine_names, clean_mask=full)
+
+
+def cusum_alarm_times(
+    events: list[dict], p0: float, p1: float, h: float = CUSUM_H
+) -> list[int]:
+    """Event times where the Bernoulli CUSUM crosses h (quality expert)."""
+    w_fail, w_pass = gates.bernoulli_cusum_weights(p0, p1)
+    s = 0.0
+    hits = []
+    for t, passed in gates.kit_outcomes_from_events(events):
+        s, alarm = gates.bernoulli_cusum_update(s, passed, w_fail, w_pass, h=h)
+        if alarm:
+            hits.append(int(t))
+    return hits
 
 
 def score_episode(
@@ -29,20 +57,52 @@ def score_episode(
     fault: dict | None,
     thresholds: dict,
     machine_names: list[str],
+    *,
+    p0: float = 0.05,
+    p1: float = 0.25,
 ) -> dict:
-    """Score one episode: tp/fp/fn vs root window, top-1, latency, hit."""
+    """Score one episode: quantile OR structural gates OR quality CUSUM.
+
+    tp/fp/fn vs root window; top-1/latency from quantile scores; hit if any
+    expert fires at the origin inside [t0, t0+dur+LAT_GATE].
+    """
+    n = len(machine_names)
     obs = np.asarray(rec["obs"], dtype=float).T
-    alarms, scores = detect.detect_exceedance(obs, thresholds, machine_names)
+    states = np.asarray(rec["states"])
+    tput = np.asarray(rec["throughput"], dtype=float)
+    states_tn = states.T
+    suppress = states_tn == "DOWN"
+    alarms_q, scores = detect.detect_exceedance(
+        obs, thresholds, machine_names, suppress=suppress
+    )
+    sigmas = [float(config.MACHINES[m]["sigma"]) for m in machine_names]
+    counters = gates.track_counters(
+        np.asarray(rec["obs"], dtype=float), states, tput, sigmas
+    )
+    gate = np.zeros_like(alarms_q)
+    for j in range(n):
+        for t in range(config.T):
+            st = str(states[j, t])
+            if (
+                gates.delay_gate(int(counters["tputlag"][j, t]), st)
+                or gates.loss_gate(int(counters["stale"][j, t]))
+                or gates.breakdown_gate(int(counters["downrun"][j, t]))
+            ):
+                gate[t, j] = True
     out: dict = {"tp": 0, "fp": 0, "fn": 0, "top": None, "latency": 999, "hit": False}
     if fault is None:
-        out["fp"] = int(alarms[config.CAL_WIN :].sum())
+        out["fp"] = int((alarms_q | gate)[config.CAL_WIN :].sum())
         return out
     t0, dur = int(fault["t0"]), int(fault["dur"])
     origin = fault["origin"]
     j = machine_names.index(origin)
     scored = np.zeros(config.T - config.CAL_WIN, dtype=int)
     scored[t0 - config.CAL_WIN : t0 - config.CAL_WIN + dur] = 1
-    yh = alarms[config.CAL_WIN :, :].max(axis=1).astype(int)
+    yh = (alarms_q | gate)[config.CAL_WIN :, :].max(axis=1).astype(int)
+    q_alarm = bool(alarms_q[t0 : t0 + dur + LAT_GATE, j].any())
+    g_alarm = bool(gate[t0 : t0 + dur + LAT_GATE, j].any())
+    cusum_hits = cusum_alarm_times(rec.get("events", []), p0, p1)
+    c_alarm = any(t0 <= t < t0 + dur + LAT_GATE for t in cusum_hits)
     out["tp"] = int(((scored == 1) & (yh == 1)).sum())
     out["fp"] = int(((scored == 0) & (yh == 1)).sum())
     out["fn"] = int(((scored == 1) & (yh == 0)).sum())
@@ -52,20 +112,30 @@ def score_episode(
         origin=origin,
         top=top,
         latency=lat,
-        hit=bool(alarms[t0 : t0 + dur + LAT_GATE, j].any()),
+        hit=bool(q_alarm or g_alarm or c_alarm),
+        experts={"quantile": q_alarm, "structural": g_alarm, "quality": c_alarm},
     )
     return out
 
 
-def run_battery(manifest: dict, thresholds: dict, machine_names: list[str]) -> dict:
+def run_battery(
+    manifest: dict,
+    thresholds: dict,
+    machine_names: list[str],
+    *,
+    p0: float = 0.05,
+    p1: float = 0.25,
+) -> dict:
     """Run all manifest episodes + clean episodes; aggregate audit numbers."""
     rows = []
     for ep, row in zip(manifest["fault_episodes"], manifest["rows"]):
         rec = twin.run_episode(ep, dict(row))
-        rows.append(score_episode(rec, dict(row), thresholds, machine_names))
+        rows.append(
+            score_episode(rec, dict(row), thresholds, machine_names, p0=p0, p1=p1)
+        )
     for ep in manifest["clean_episodes"]:
         rec = twin.run_episode(ep, None)
-        rows.append(score_episode(rec, None, thresholds, machine_names))
+        rows.append(score_episode(rec, None, thresholds, machine_names, p0=p0, p1=p1))
     tp = sum(r["tp"] for r in rows)
     fp = sum(r["fp"] for r in rows)
     fn = sum(r["fn"] for r in rows)
@@ -78,6 +148,11 @@ def run_battery(manifest: dict, thresholds: dict, machine_names: list[str]) -> d
         for r in hits
         if not r["hit"]
     ]
+    expert_hits = {"quantile": 0, "structural": 0, "quality": 0}
+    for r in lat_ok:
+        for k, v in r.get("experts", {}).items():
+            if v:
+                expert_hits[k] = expert_hits.get(k, 0) + 1
     return {
         "f1_raw": train_pipeline.compute_raw_pointwise_f1(y_true, y_pred),
         "ac1": sum(1 for r in hits if r["top"] == r["origin"]) / len(hits),
@@ -87,6 +162,7 @@ def run_battery(manifest: dict, thresholds: dict, machine_names: list[str]) -> d
         "n_hit": len(lat_ok),
         "n_fault_episodes": len(hits),
         "clean_fp_total": sum(r["fp"] for r in rows if not r.get("fault_id")),
+        "expert_hits": expert_hits,
         "misses": misses,
         "rows": [
             {
@@ -118,10 +194,17 @@ def main(argv: list[str] | None = None) -> int:
     start = time.perf_counter()
     manifest = json.loads(pathlib.Path(args.manifest).read_text(encoding="utf-8"))
     machines = list(config.MACHINE_NAMES)
-    thresholds = detect.fit_quantile_thresholds(
-        twin.run_calibration(args.cal_seed), machines
-    )
-    result = run_battery(manifest, thresholds, machines)
+    thresholds = fit_run_only_thresholds(args.cal_seed, machines)
+    # Pass 1 (clean): nominal reject rate for the quality CUSUM.
+    kits = fails = 0
+    for ep in manifest["clean_episodes"]:
+        rec = twin.run_episode(ep, None)
+        for _, passed in gates.kit_outcomes_from_events(rec.get("events", [])):
+            kits += 1
+            fails += 0 if passed else 1
+    p0 = max(fails / max(1, kits), 1e-3)
+    p1 = max(4 * p0, CUSUM_P1_FLOOR)
+    result = run_battery(manifest, thresholds, machines, p0=p0, p1=p1)
     result["wall_seconds"] = time.perf_counter() - start
     result["cal_seed"] = args.cal_seed
     out = pathlib.Path(args.out)
