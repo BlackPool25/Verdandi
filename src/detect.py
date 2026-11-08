@@ -56,15 +56,21 @@ def fit_quantile_thresholds(
             used = np.ones(x.shape[0], dtype=bool)
         col = x[used, j]
         q99 = float(np.quantile(col, q_high))
+        q01 = float(np.quantile(col, 1.0 - q_high))
         q1 = float(np.quantile(col, 0.25))
         q3 = float(np.quantile(col, 0.75))
         fence = float(q3 + 1.5 * (q3 - q1))
+        low_fence = float(q1 - 1.5 * (q3 - q1))
         out[m] = {
             "q99": q99,
+            "q01": q01,
             "q1": q1,
             "q3": q3,
             "fence": fence,
+            "low_fence": low_fence,
             "thr": max(q99, fence),
+            "thr_low": min(q01, low_fence),
+            "clean_var": float(np.var(col)) if len(col) > 1 else 1.0,
             "n": float(int(used.sum())),
         }
     return out
@@ -132,7 +138,13 @@ def detect_exceedance(
     if x.ndim != 2 or x.shape[1] != len(machine_names):
         raise ValueError(f"obs must be [T, N={len(machine_names)}], got {x.shape}")
     thr = np.array([float(thresholds[m]["thr"]) for m in machine_names])
-    scores = x - thr
+    # thr_low missing (hand-built dicts, pre-fence artifacts) -> -inf: the low-side
+    # margin (thr_low - x) stays negative, i.e. exactly the old upper-only behavior.
+    # fit_quantile_thresholds always emits thr_low.
+    thr_low = np.array(
+        [float(thresholds[m].get("thr_low", float("-inf"))) for m in machine_names]
+    )
+    scores = np.maximum(x - thr, thr_low - x)
     alarms = scores > 0
     if suppress is not None:
         sup = np.asarray(suppress, dtype=bool)

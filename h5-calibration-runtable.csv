@@ -1,0 +1,4 @@
+run_id,arm,n_scores,fpr_achieved,agree_vote,wall_seconds
+m0b-cal-001,quantile,2700,0.0178,4.052,0.0
+m0b-cal-001,gmm_k2,2700,0.0085,4.052,0.0
+m0b-cal-001,mom_spot,2700,0.0178,4.052,0.0
