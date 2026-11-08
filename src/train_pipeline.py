@@ -173,6 +173,14 @@ def assert_no_scaler_artifact(directory: str | pathlib.Path) -> None:
     return None
 
 
+def require_post_warmup(df: pd.DataFrame) -> pd.DataFrame:
+    """Train entry gate: reject frames containing warm-up transients."""
+    from src.dataset_export import assert_warmup_excluded
+
+    assert_warmup_excluded(df)
+    return df
+
+
 def create_grouped_cv(
     n_splits: int = 5,
 ) -> StratifiedGroupKFold:

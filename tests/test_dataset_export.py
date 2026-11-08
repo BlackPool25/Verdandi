@@ -26,7 +26,7 @@ def test_export_single_seed_happy_path(tmp_path):
     res = dataset_export.export(seed=777, out=out_parquet)
 
     assert out_parquet.exists()
-    assert res["row_count"] == 300
+    assert res["row_count"] == 300 - config.WARMUP_STEPS
     assert res["dataset_hash"]
 
     # Verify sorted column keys
@@ -66,6 +66,16 @@ def test_export_single_seed_happy_path(tmp_path):
     # ABSOLUTE RULE: NO scaler.pkl!
     scaler_file = tmp_path / "artifacts" / "scaler.pkl"
     assert not scaler_file.exists(), "LEAKAGE VIOLATION: scaler.pkl must NOT be created"
+
+
+def test_export_excludes_warmup_by_default(tmp_path):
+    out_parquet = tmp_path / "artifacts" / "dataset_v3.parquet"
+    res = dataset_export.export(seed=777, out=out_parquet)
+
+    assert res["row_count"] == 300 - config.WARMUP_STEPS
+    df = dataset_export.load_dataset(out_parquet)
+    assert int(df["step"].min()) >= config.WARMUP_STEPS
+    assert not bool(df["warmup_flag"].any())
 
 
 def test_export_5x_same_seed_bit_identical(tmp_path):

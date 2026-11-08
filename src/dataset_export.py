@@ -28,6 +28,7 @@ import math
 import pathlib
 import time
 import uuid
+import warnings
 from typing import Any
 
 import numpy as np
@@ -143,7 +144,7 @@ def export(
     schema_version: int | None = None,
     runs_log: str | pathlib.Path | None = None,
     job_name: str = "dataset_v3",
-    exclude_warmup: bool = False,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export deterministic Parquet dataset and associated metadata.
 
@@ -177,6 +178,13 @@ def export(
             Enforced via assert_warmup_excluded(df).
     """
     run_id = f"run-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+    if not exclude_warmup:
+        warnings.warn(
+            "dataset export called with exclude_warmup=False; "
+            "ML training should exclude transient warm-up steps",
+            UserWarning,
+            stacklevel=2,
+        )
     start_time = time.perf_counter()
     out_path = pathlib.Path(out)
     out_dir = out_path.parent
@@ -748,7 +756,7 @@ def export_contract_dataset(
     out_dir: str | pathlib.Path = "artifacts",
     seeds: list[int] | None = None,
     out_name: str = "dataset_v3.parquet",
-    exclude_warmup: bool = False,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export a multi-episode dataset with balanced stratification keys for contract testing.
 
@@ -829,7 +837,7 @@ def export_v4(
     row_group_size: int = 1024,
     enable_natural_breakdown: bool = True,
     runs_log: str | pathlib.Path | None = None,
-    exclude_warmup: bool = False,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export deterministic v4 Parquet dataset and associated metadata.
 
@@ -881,7 +889,7 @@ def export_contract_dataset_v4(
     seeds: list[int] | None = None,
     out_name: str = "dataset_v4.parquet",
     runs_log: str | pathlib.Path | None = None,
-    exclude_warmup: bool = False,
+    exclude_warmup: bool = True,
 ) -> dict[str, Any]:
     """Export a multi-episode v4 dataset with balanced stratification keys for contract testing.
 
@@ -1385,8 +1393,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--exclude-warmup",
-        action="store_true",
-        help="Exclude transient warm-up steps (steps 0..14)",
+        dest="exclude_warmup",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Exclude transient warm-up steps (steps 0..14); --no-exclude-warmup keeps them",
     )
     args = parser.parse_args()
 
