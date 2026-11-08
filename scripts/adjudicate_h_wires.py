@@ -50,6 +50,38 @@ def adjudicate(*wires: dict, battery_id: str, date: str | None = None) -> list[d
     return rows
 
 
+def summarize_metrics(
+    y_true: np.ndarray, fused_scores: np.ndarray, fused_decisions: np.ndarray
+) -> dict:
+    """Chance-corrected metric row (Task 27): F1 + MCC + ROC-AUC + trivial baseline."""
+    from sklearn.metrics import matthews_corrcoef, roc_auc_score
+
+    from src.train_pipeline import compute_raw_pointwise_f1
+
+    y = np.asarray(y_true, dtype=int)
+    dec = np.asarray(fused_decisions, dtype=int)
+    sc = np.asarray(fused_scores, dtype=float)
+    f1 = float(compute_raw_pointwise_f1(y, dec))
+    try:
+        mcc = float(matthews_corrcoef(y, dec))
+    except ValueError:
+        mcc = 0.0
+    try:
+        roc = float(roc_auc_score(y, sc)) if len(np.unique(y)) == 2 else 0.0
+    except ValueError:
+        roc = 0.0
+    prev = float(y.mean()) if len(y) else 0.0
+    trivial = 2 * prev / (1 + prev) if prev > 0 else 0.0
+    return {
+        "f1": f1,
+        "mcc": mcc,
+        "roc_auc": roc,
+        "trivial_f1_all": float(trivial),
+        "n_pos": int(y.sum()),
+        "n_total": len(y),
+    }
+
+
 def episode_hits(fused: pd.DataFrame, manifest: dict) -> pd.DataFrame:
     """Per fault episode: fused hit in root window, latency, fused VUS-PR inputs."""
     ep2row = {ep: r for ep, r in zip(manifest["fault_episodes"], manifest["rows"])}
@@ -92,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     ep_hits = episode_hits(fused, manifest)
     base_rows = {r.get("fault_id", r.get("id")): r for r in baseline["rows"]}
 
-    experts = ["ecod", "iforest", "knn", "pca", "lof", "supervised_lr", "dlinear"]
+    experts = ["knn", "pca", "lof", "supervised_lr", "dlinear"]
     fam_vus = {}
     for fam in sorted(fused.loc[fused["ep_family"] != "clean", "ep_family"].unique()):
         vals = []
@@ -115,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
             [
                 max(
                     vus_pr(g[c].to_numpy(), g["y"].to_numpy())
-                    for c in ["ecod", "iforest", "knn", "pca", "lof", "dlinear"]
+                    for c in ["knn", "pca", "lof", "dlinear"]
                 )
                 for _, g in sup.groupby("episode_id")
             ]
@@ -216,6 +248,15 @@ def main(argv: list[str] | None = None) -> int:
         "wires": wires,
         "family_vus_fused": {k: round(v, 3) for k, v in fam_vus.items()},
         "episode_hit_combined": round(float(ep_hits["any_hit"].mean()), 3),
+        "metrics": summarize_metrics(
+            fused["y"].to_numpy(dtype=int),
+            fused["fused_score"].to_numpy(dtype=float),
+            fused["fused"].to_numpy(dtype=int),
+        ),
+        "vus_bar": {
+            "bar": 0.90,
+            "mean_family_vus": round(float(np.nanmean(list(fam_vus.values()))), 4),
+        },
     }
     pathlib.Path("artifacts/m0b_h_wires.json").write_text(
         json.dumps(out, indent=2, default=str)
