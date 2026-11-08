@@ -1,0 +1,170 @@
+{
+  "battery_id": "m0b-train-supplement-v1",
+  "fault_episodes": [
+    31000,
+    31001,
+    31002,
+    31003,
+    31004,
+    31005,
+    31006,
+    31007,
+    31008,
+    31009,
+    31010,
+    31011
+  ],
+  "clean_episodes": [
+    31200,
+    31201,
+    31202,
+    31203
+  ],
+  "rows": [
+    {
+      "class": "delay",
+      "dur": 12,
+      "extra": {},
+      "id": "S-DE00",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.0,
+      "origin": "A0",
+      "rep": false,
+      "sev": 4.0,
+      "t0": 150
+    },
+    {
+      "class": "delay",
+      "dur": 9,
+      "extra": {},
+      "id": "S-DE01",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {},
+      "id": "S-DE02",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "delay",
+      "dur": 8,
+      "extra": {},
+      "id": "S-DE03",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.0,
+      "origin": "A0",
+      "rep": false,
+      "sev": 4.0,
+      "t0": 150
+    },
+    {
+      "class": "loss",
+      "dur": 13,
+      "extra": {},
+      "id": "S-LO00",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "loss",
+      "dur": 14,
+      "extra": {},
+      "id": "S-LO01",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "loss",
+      "dur": 12,
+      "extra": {},
+      "id": "S-LO02",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.0,
+      "origin": "A0",
+      "rep": false,
+      "sev": 4.0,
+      "t0": 150
+    },
+    {
+      "class": "loss",
+      "dur": 13,
+      "extra": {},
+      "id": "S-LO03",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "quality",
+      "dur": 11,
+      "extra": {},
+      "id": "S-QU00",
+      "mag_rung": "caricature",
+      "mag_sigma": 4.0,
+      "origin": "A0",
+      "rep": false,
+      "sev": 4.0,
+      "t0": 150
+    },
+    {
+      "class": "quality",
+      "dur": 14,
+      "extra": {},
+      "id": "S-QU01",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "quality",
+      "dur": 13,
+      "extra": {},
+      "id": "S-QU02",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    },
+    {
+      "class": "quality",
+      "dur": 8,
+      "extra": {},
+      "id": "S-QU03",
+      "mag_rung": "incipient",
+      "mag_sigma": 0.5,
+      "origin": "A0",
+      "rep": false,
+      "sev": 0.5,
+      "t0": 150
+    }
+  ],
+  "master_seed": 0
+}
