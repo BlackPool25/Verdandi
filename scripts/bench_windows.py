@@ -68,6 +68,13 @@ def bench(
     model, thr = art["model"], dict(art["thresholds"])
     thr["__global__"] = float(art["global_threshold"])
     w, stride = int(art["w"]), int(art["stride"])
+    from src.window_dataset import apply_norm as _apply_norm
+
+    _norm = (
+        np.asarray(art["norm_median"], dtype=float),
+        np.asarray(art["norm_iqr"], dtype=float),
+        int(art["n_obs_features"]),
+    )
     rng = np.random.default_rng(seed)
     n_feat = int(model.n_features_in_)
     del w
@@ -89,8 +96,9 @@ def bench(
         from scripts.train_windows import episode_family
 
         ef = episode_family(np.asarray(sg), np.asarray(sfam))
+        swn = _apply_norm(np.asarray(sw, dtype=float), *_norm)
         s = np.asarray(
-            joblib.load(art_dir / "model.joblib")["model"].predict_proba(sw)[:, 1]
+            joblib.load(art_dir / "model.joblib")["model"].predict_proba(swn)[:, 1]
         )
         d = apply_thresholds(s, ef, thr)
         delays = stream_delays(d, np.asarray(sy), np.asarray(sg), stride=stride)
@@ -122,9 +130,11 @@ def main(argv: list[str] | None = None) -> int:
 
         from src.window_dataset import build_windows
 
+        art0 = joblib.load(args.artifact + "/model.joblib")
+        inv = bool(art0.get("invariant", False))
         paths = sorted(_glob.glob(args.parquet))
         df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-        sw, sy, sfam, sg = build_windows(df, w=32, stride=8)
+        sw, sy, sfam, sg = build_windows(df, w=32, stride=8, invariant=inv)
         stream = (sw, sy, sg, sfam)
     r = bench(args.artifact, n_windows=args.n_windows, stream=stream)
     print(

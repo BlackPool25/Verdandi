@@ -12,8 +12,12 @@ def test_mass_specs_balanced_and_deterministic():
     assert len(fe) == 7 * 2 * 2 and len(ce) == 4
     fe2, _, _ = build_specs(n_per_cell=2, n_clean=4, seed=0)
     assert fe == fe2
-    fams = [faults[ep]["class"] for ep in fe]
+    fams = [faults[ep]["class"] for ep in set(fe)]
     assert {fams.count(f) for f in set(fams)} == {4}
+    origins = {faults[ep]["origin"] for ep in fe}
+    assert len(origins) > 1, "faults must span machines, not a single origin"
+    t0s = {faults[ep]["t0"] for ep in fe}
+    assert len(t0s) > 1, "fault onset must vary across episodes"
 
 
 def test_all_clean_shard_exports(tmp_path):
@@ -82,6 +86,27 @@ def test_episode_family_labels_clean_windows_with_episode_family():
         np.array(["none", "delay", "none", "none", "none", "none"]),
     )
     assert ef.tolist() == ["delay"] * 3 + ["none"] * 3
+
+
+def test_save_oof_writes_scored_windows(tmp_path):
+    import pandas as pd
+
+    from scripts.train_windows import main
+
+    out = tmp_path / "oof.parquet"
+    rc = main(
+        [
+            "--parquet",
+            "/tmp/opencode/msh_*.parquet",
+            "--splits",
+            "2",
+            "--save-oof",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    df = pd.read_parquet(out)
+    assert {"score", "dec", "y", "fam", "ep"} <= set(df.columns) and len(df) > 0
 
 
 def test_binary_gbm_separates_windows_and_episode_hit():
