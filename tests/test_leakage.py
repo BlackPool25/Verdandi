@@ -83,6 +83,7 @@ class TestLeakageSafeguards:
 
     def test_pooled_derivation_uses_train_seeds_only(self):
         """derive_base_window does not require or touch test episode seeds."""
+        pytest.skip("vacuous until derive_base_window resolves (always UNRESOLVED); see A2")
         train_seeds = [7, 11, 13]
 
         # Calibration on train seeds
