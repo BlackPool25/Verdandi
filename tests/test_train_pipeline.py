@@ -115,7 +115,7 @@ def test_fit_transform_fold_fits_train_only():
     assert params != tp.fit_per_machine_median_iqr(
         pd.concat([train_df, test_df]), ["A0"]
     )
-    assert f"obs_A0_normed" in train_n.columns and f"obs_A0_normed" in test_n.columns
+    assert "obs_A0_normed" in train_n.columns and "obs_A0_normed" in test_n.columns
 
 
 def test_smote_hook_defaults_to_noop_and_routes_fold_data():
