@@ -94,11 +94,18 @@ def _znorm(x: np.ndarray, n: int = 30) -> np.ndarray:
 
 
 def machine_onset(
-    g: pd.DataFrame, obs_col: str, nominal_j: float, sigma_j: float, k: float = 2.5
+    g: pd.DataFrame,
+    obs_col: str,
+    nominal_j: float,
+    sigma_j: float,
+    k: float = 2.5,
+    method: str = "pelt",
 ) -> tuple[int, str]:
     """Onset tick for one machine: first state deviation else residual crossing.
 
     Returns (tick, kind) with kind in {state, residual, none}.
+    method selects the residual-leg segmenter: "pelt" (single penalty 10.0)
+    or "crops" (elbow over a penalty grid; fewer texture false onsets).
     """
     state_col = f"state_{obs_col[4:]}" if obs_col.startswith("obs_") else None
     steps = g["step"].to_numpy() if "step" in g.columns else np.arange(len(g))
@@ -133,10 +140,15 @@ def machine_onset(
     # Residual path: PELT on prefix-z-scored series + jump confirm.
     # (Raw-score penalty is on the wrong scale: 76 noise segments wash
     # out contrast. z-scores restore the BIC geometry.)
-    from src.onset import pelt_l2
+    from src.onset import crops_elbow, pelt_l2
 
     z = _znorm(score)
-    for cp in pelt_l2(z, penalty=10.0, min_size=5):
+    cps = (
+        crops_elbow(z, penalties=(5.0, 10.0, 20.0, 40.0, 80.0, 160.0))
+        if method == "crops"
+        else pelt_l2(z, penalty=10.0, min_size=5)
+    )
+    for cp in cps:
         if cp < start_i + 10 or cp >= len(v) - 20:
             continue
         pre = float(np.mean(z[cp - 10 : cp]))
@@ -148,7 +160,10 @@ def machine_onset(
 
 
 def diagnose_multi_origin(
-    g: pd.DataFrame, obs_cols: list[str], oracle_onset: dict[str, int] | None = None
+    g: pd.DataFrame,
+    obs_cols: list[str],
+    oracle_onset: dict[str, int] | None = None,
+    onset_method: str = "pelt",
 ) -> list[dict]:
     """One entry per affected machine, ordered by onset (multi-start).
 
@@ -167,7 +182,9 @@ def diagnose_multi_origin(
         if oracle_onset is not None and machine in oracle_onset:
             tick, kind = int(oracle_onset[machine]), "oracle"
         else:
-            tick, kind = machine_onset(g, c, float(nom[j]), float(sig[j]))
+            tick, kind = machine_onset(
+                g, c, float(nom[j]), float(sig[j]), method=onset_method
+            )
         if tick < 0:
             continue
         confirmed: int | None = tick  # machine_onset is already PELT/state-confirmed
@@ -202,6 +219,8 @@ def diagnose_multi_origin(
         # STARVED-only = downstream symptom; residual-RUN = last resort.
         if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
             return (0, r["onset"])
+        if r["own_state"] == "STARVED" and r["onset_kind"] != "counter":
+            return (3, r["onset"])
         # "oracle" (ablation GT tick) competes exactly like an estimated
         # state/counter onset: perfect information, same ranking rules.
         if r["onset_kind"] in ("state", "counter", "oracle"):
@@ -265,6 +284,7 @@ def diagnose_from_trigger(
     back: int = 16,
     oracle_onset: dict[str, int] | None = None,
     delay: int = 0,
+    onset_method: str = "pelt",
 ) -> list[dict]:
     """Trigger-gated multi-origin diagnosis (alongside frozen detector).
 
@@ -276,7 +296,9 @@ def diagnose_from_trigger(
     trigger+delay: windowed detection fires early (left overlap), so the
     true onset sits ~D ticks after the trigger, not at it.
     """
-    out = diagnose_multi_origin(g, obs_cols, oracle_onset=oracle_onset)
+    out = diagnose_multi_origin(
+        g, obs_cols, oracle_onset=oracle_onset, onset_method=onset_method
+    )
     # Ablation-only: oracle (GT) entries bypass the back gate so the true
     # root always competes; estimated entries are gated unchanged.
     kept = [
@@ -287,6 +309,8 @@ def diagnose_from_trigger(
     def _trank(r: dict) -> tuple[int, int, int]:
         if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
             base = 0
+        elif r["own_state"] == "STARVED" and r["onset_kind"] != "counter":
+            return (3, abs(r["onset"] - assoc), r["onset"])
         elif r["onset_kind"] in ("state", "counter", "oracle"):
             base = 1
         else:

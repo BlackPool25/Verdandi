@@ -209,3 +209,44 @@ def test_delay_compensated_proximity_prefers_true_onset():
         g, ["obs_A0", "obs_B9"], trigger=190, back=64, delay=60
     )
     assert isinstance(out0, list) and isinstance(out1, list)
+
+
+def test_machine_onset_crops_method_finds_shift():
+    import pandas as pd
+
+    from src.diagnose import machine_onset
+
+    n = 300
+    rng = __import__("numpy").random.default_rng(5)
+    g = pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            "obs_A0": list(rng.normal(0, 1, 200)) + list(rng.normal(0, 1, 100) + 6.0),
+            "state_A0": ["RUN"] * n,
+        }
+    )
+    tick, kind = machine_onset(g, "obs_A0", 0.0, 1.0, method="crops")
+    assert kind == "residual" and abs(tick - 200) <= 20
+
+
+def test_starved_only_sorts_below_residual_run():
+    import numpy as np
+    import pandas as pd
+
+    from src.diagnose import diagnose_from_trigger
+
+    n = 300
+    rng = np.random.default_rng(13)
+    g = pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            "obs_A0": np.concatenate([rng.normal(0, 1, 200), rng.normal(0, 1, 100) + 6.0]),
+            "obs_B9": rng.normal(0, 1, size=n),
+            "state_A0": ["RUN"] * n,
+            "state_B9": ["RUN"] * 150 + ["STARVED"] * 150,
+        }
+    )
+    out = diagnose_from_trigger(g, ["obs_A0", "obs_B9"], trigger=190, back=64)
+    assert out and out[0]["machine"] == "A0"

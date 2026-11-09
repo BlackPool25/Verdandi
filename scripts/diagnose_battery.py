@@ -31,6 +31,7 @@ def _init_worker(
     oracle: bool = False,
     abstain_hi: float = 0.9,
     assoc_delay: int = 0,
+    onset_method: str = "pelt",
 ) -> None:
     """Load the frozen model once per worker process (CPU fork-safe)."""
     from src.diagnose import confirm_trigger, diagnose_from_trigger
@@ -48,6 +49,7 @@ def _init_worker(
     _WORKER["oracle"] = bool(oracle)
     _WORKER["abstain_hi"] = float(abstain_hi)
     _WORKER["assoc_delay"] = int(assoc_delay)
+    _WORKER["onset_method"] = str(onset_method)
     _WORKER["confirm_trigger"] = confirm_trigger
     _WORKER["diagnose_from_trigger"] = diagnose_from_trigger
     _WORKER["apply_norm"] = apply_norm
@@ -66,6 +68,7 @@ def _work_episode(job: tuple) -> tuple:
     thr_prop, wait = _WORKER["thr_prop"], _WORKER["wait"]
     abstain_hi = float(_WORKER.get("abstain_hi", 0.9))
     assoc_delay = int(_WORKER.get("assoc_delay", 0))
+    onset_method = str(_WORKER.get("onset_method", "pelt"))
     oracle = _WORKER.get("oracle", False)
     confirm_trigger = _WORKER["confirm_trigger"]
     diagnose_from_trigger = _WORKER["diagnose_from_trigger"]
@@ -93,7 +96,7 @@ def _work_episode(job: tuple) -> tuple:
                 g, obs, anchor, back=back, oracle_onset={root: true_t0}
             )
         else:
-            out = diagnose_from_trigger(g, obs, anchor, back=back, delay=assoc_delay)
+            out = diagnose_from_trigger(g, obs, anchor, back=back, delay=assoc_delay, onset_method=onset_method)
     except Exception:  # noqa: BLE001 - harness records failures as rows
         return (fam, rung, root, None, None, None, True, "error", true_sp)
     if not out:
@@ -169,6 +172,12 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="association point = trigger+delay (compensates early windowed trigger)",
     )
+    ap.add_argument(
+        "--onset-method",
+        default="pelt",
+        choices=("pelt", "crops"),
+        help="residual-leg segmenter for machine onsets",
+    )
     args = ap.parse_args(argv)
 
     try:
@@ -228,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.wait,
                 args.oracle_onset,
                 args.abstain_hi,
+                args.onset_method,
             ),
         ) as ex:
             done = list(ex.map(_work_episode, jobs))
