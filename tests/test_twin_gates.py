@@ -317,11 +317,22 @@ def _grep_src(pattern):
 
 @pytest.mark.k4
 def test_quarantine_no_banned_strings():
-    assert _grep_src(_QUARANTINE_PATTERN) == []
+    # Narrow exemption (owner 2026-11-09, torch-first diagnosis decision):
+    # src/roi_head.py may reference the torch framework; every other file
+    # stays under the ban. The token check below filters that one path.
+    hits = _grep_src(_QUARANTINE_PATTERN)
+    non_exempt = [h for h in hits if not h.startswith("roi_head.py:")]
+    roi = [h for h in hits if h.startswith("roi_head.py:")]
+    assert non_exempt == []
+    # roi_head.py is exempt for the torch token only; other ban tokens
+    # (spike-string, FactorySimPy, 0.45) still apply to it.
+    assert all(
+        "torch" in h and not re.search(r"spike|FactorySimPy|0\.45", h) for h in roi
+    )
     proc = subprocess.run(
         [sys.executable, "-c", "import torch"], capture_output=True, check=False
     )
-    assert proc.returncode != 0
+    assert proc.returncode == 0  # torch is now a supported diagnosis dep
 
 
 @pytest.mark.k4
