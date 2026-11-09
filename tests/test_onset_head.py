@@ -18,7 +18,7 @@ def test_peak_pick_first_rising_edge():
     p = np.zeros(200)
     p[50:80] = 0.9
     p[150:170] = 0.95
-    assert pick_onset(p, delta=0.15, tau=0.5, refractory=25) == 50
+    assert pick_onset(p, delta=0.15, tau=0.5) == 50
 
 
 def test_peak_pick_causal_no_future_leak():
