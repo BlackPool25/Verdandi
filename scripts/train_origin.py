@@ -25,8 +25,6 @@ def _oof_predict(
     *,
     n_splits: int = 3,
     seed: int = 0,
-    machine_holdout: list[str] | None = None,
-    ep_root: dict | None = None,
 ) -> np.ndarray:
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
@@ -37,15 +35,8 @@ def _oof_predict(
     classes = np.array(sorted(set(yr.tolist())))
     y = np.searchsorted(classes, np.asarray(yr))
     oof = np.zeros(len(X), dtype=int)
-    if machine_holdout:
-        if ep_root is None:
-            raise ValueError("machine holdout needs ep_root episode->root map")
-        held_eps = {ep for ep, rt in ep_root.items() if str(rt) in set(machine_holdout)}
-        is_held = np.array([ep in held_eps for ep in np.asarray(groups).tolist()])
-        splits = [(np.flatnonzero(~is_held), np.flatnonzero(is_held))]
-    else:
-        cv = StratifiedGroupKFold(n_splits=n_splits)
-        splits = list(cv.split(X, y, groups))
+    cv = StratifiedGroupKFold(n_splits=n_splits)
+    splits = list(cv.split(X, y, groups))
     for tr, te in splits:
         med, iqr = fit_clean_norm(X[tr], (yr[tr] != "none").astype(int), n_obs)
         clf = HistGradientBoostingClassifier(max_iter=300, random_state=seed)
@@ -71,8 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--cv",
         default="episode",
-        choices=("episode", "machine"),
-        help="episode: GroupKFold over episodes; machine: hold out 5 root machines",
+        choices=("episode",),
+        help="GroupKFold over episodes (in-fleet only: closed-set classifiers "
+        "cannot name unseen machines; transfer needs open-set rankers)",
     )
     ap.add_argument("--save-oof", default="")
     args = ap.parse_args(argv)
@@ -94,28 +86,8 @@ def main(argv: list[str] | None = None) -> int:
         return_roots=True,
     )
     X, y, fam, groups, _starts, roots = out
-    hold: list[str] | None = None
-    ep_root: dict | None = None
-    if args.cv == "machine":
-        machines = sorted({str(m) for m in df["root_id_step"].unique() if str(m)})
-        rng = np.random.default_rng(args.seed)
-        hold = sorted(
-            rng.choice(machines, size=min(5, len(machines)), replace=False).tolist()
-        )
-        print(f"held-out machines: {hold} (MEASURED)")
-        ep_root = {}
-        for ep in np.unique(groups):
-            rr = [str(x) for x in np.asarray(roots)[groups == ep] if str(x) != "none"]
-            if rr:
-                ep_root[ep] = max(set(rr), key=rr.count)
     pred = _oof_predict(
-        X,
-        np.asarray(roots),
-        np.asarray(groups),
-        n_splits=args.splits,
-        seed=args.seed,
-        machine_holdout=hold,
-        ep_root=ep_root,
+        X, np.asarray(roots), np.asarray(groups), n_splits=args.splits, seed=args.seed
     )
     hit_w = ((pred == np.asarray(roots)) & (np.asarray(y) == 1)).sum()
     tot_w = int((np.asarray(y) == 1).sum())
