@@ -56,22 +56,28 @@ Window-F1 0.963 tuned, episode-hit 1.00 — measured on single-origin data;
 does not transfer (multi-origin collapse proved it). Kept as the
 dense-1-origin reference only.
 
-## Localizer verdict (trigger-gated tick onset): KILLED as specified
+## Localizer verdict (trigger-gated tick onset): PARTIAL — ship narrow
 
-Backward ROI is fundamentally broken (w128 triggers fire ~120 ticks before
-onset; the ROI never contains the fault). Forward search works mechanically
-but the signals don't separate: max-projection buries incipient 0.5σ shifts
-(noise floor ~2.5), root cycle_lag doesn't mark delay onset. Measured
-|est - t0| median: structural baseline ~60 vs localizer 12-15 (loss/breakdown
-only) and 144-186 (everything else) — bar was <=4/<=6. Surviving lead:
-per-machine (not root) counter columns may restore delay; ROI-gated point
-head (learned projection) is the remaining localization path.
+Backward ROI dead (triggers fire ~120 ticks early; ROI never contains the
+fault). Forward search splits: loss/breakdown counter onsets are precise but
+biased (median |est-t0| 13/15, p90 15/15); split-half bias calibration
+(stale -13, down -15) brings held-out error to median 2/0, p90 4/0 — inside
+the <=4 bar on the confirmation split. SHIPPED for these two families as
+counter_onset_fwd + documented per-family bias (the negative sign means the
+counter run leads the labeled onset — recorded, not explained).
+Killed: delay (root cycle_lag never marks onset, 123) and all obs families
+(111-184; max-projection buries 0.5σ shifts under ~2.5 noise floor).
+Per-machine (non-root) counters may restore delay — untested lead.
 Killed: multiclass specialist head (8-class GBM) — detection F1 0.795 <
 binary 0.846; family attribution works only for structural families
 (0.74-0.81) and is chance-level for obs families (0.13-0.18 vs 0.125 random),
 confirming the invariant representation erases family identity along with
 machine identity. Per-family thresholds on the binary head remain the family
-mechanism.
+mechanism. Killed: hybrid gate confirmer — global F1 0.8463 -> 0.8416,
+hit 0.989 -> 0.979, clean-FP unchanged 0.853: gates veto true loss windows
+(recall 0.88 -> 0.82) while clean FPs come from families gates cannot see.
+The gate is stricter than the model where it applies and blind where it
+would matter — wrong combiner, correctly killed.
 
 ## Disclosure (read as an ML engineer)
 
