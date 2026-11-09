@@ -20,6 +20,14 @@ structural counters), fold-fit clean normalization. 3-fold GroupKFold OOF.
 - Runtime: 6.8 ms/window, ~119k windows/s, reload-identical
 - Streaming delay: p50 0 ticks (early-fire on wide windows inflates this)
 - Artifact: 23 feats, `artifacts/window-gbm-w128-v2/`
+- Threshold-free triage: **VUS-PR 0.68** (buffer-integrated, per-episode mean)
+- NAB event scores (global 0.5 operating point): standard 0.41 / low-FP 0.08 /
+  low-FN 0.58 — single-number NAB retired; report the triple
+- PA%K window-F1: K=0 (any-overlap) 0.766; K>=0.25 vacuous (=0.0) — at w=128
+  even a fully-containing window overlaps ~11% fault, so overlap-fraction
+  criteria cannot score this width (width critique on record)
+- Optimism gap: tuned 0.846 vs global-0.5 0.807 = 0.039 (threshold shopping price)
+- Episode-hit clustered (by-origin) CI: [0.71, 0.81] at the 0.5 point
 
 Operating tradeoff (global threshold, OOF):
 
@@ -32,8 +40,11 @@ Operating tradeoff (global threshold, OOF):
 | 0.8 | 0.984 | 0.651 | 0.784  | 0.753 | 0.055     |
 
 Dwell (alarm iff k of trailing windows fire) at 0.6: k=2 -> hit 0.77 /
-clean 0.16; k=3 -> 0.69 / 0.09. Recommended balanced default: 0.6 + dwell-2.
-Shipped thresholds are the recall-first per-family set (documented, optimistic).
+clean 0.16; k=3 -> 0.69 / 0.09. Dwell loses to raising the threshold on every
+measured exchange (0.6->0.8 buys -0.27 clean-FP for -0.08 hit; dwell k1->k2
+buys -0.16 for -0.06 plus delay). **Locked default: global 0.8, k=1**
+(hit 0.75 / clean 0.055) — see `docs/WINDOW_GBM_RUNBOOK.md`. Shipped
+per-family tuned thresholds stay behind a high-C_FN flag only.
 
 ## v1 (superseded reference): w=32 absolute, A0-only battery
 
