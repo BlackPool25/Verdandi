@@ -133,6 +133,12 @@ def main(argv: list[str] | None = None) -> int:
         help="worker processes (model loads once per worker)",
     )
     ap.add_argument(
+        "--confirm-thr",
+        type=float,
+        default=None,
+        help="override confirm threshold (default: min family threshold, recall-first)",
+    )
+    ap.add_argument(
         "--oracle-onset",
         action="store_true",
         help="ablation only: inject GT onset for the true root (see diagnose_multi_origin)",
@@ -147,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
         thr_prop = min(float(v) for k, v in fam_thr.items() if k != "none")
     except OSError:
         thr_prop = 0.5
+    if args.confirm_thr is not None:
+        thr_prop = float(args.confirm_thr)
 
     rows: list = []
     jobs: list = []
