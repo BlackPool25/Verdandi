@@ -30,6 +30,72 @@ def counter_edge(
     return int(lo + start)
 
 
+def counter_onset_fwd(
+    counter: np.ndarray, trigger: int, *, horizon: int = 256
+) -> int | None:
+    """First tick at/after trigger where the counter turns positive.
+
+    w=128 triggers fire up to ~w ticks before onset (first overlapping
+    window); the onset lies ahead, not in a backward ROI.
+    """
+    c = np.asarray(counter, dtype=float)
+    lo, hi = max(0, trigger), min(len(c), trigger + horizon)
+    pos = np.flatnonzero(c[lo:hi] > 0)
+    if len(pos) == 0:
+        return None
+    return int(lo + pos[0])
+
+
+def cusum_onset_fwd(
+    resid: np.ndarray, trigger: int, *, k: float = 1.0, h: float = 5.0, horizon: int = 256
+) -> int | None:
+    """CUSUM forward from trigger; onset = last zero-crossing before alarm.
+
+    Baseline from the 64 ticks preceding the trigger (presumed clean).
+    """
+    r = np.asarray(resid, dtype=float)
+    lo = max(0, trigger - 64)
+    seg = r[lo : min(len(r), trigger + horizon)]
+    if len(seg) < 2:
+        return None
+    base = seg[: max(1, min(64, len(seg) // 4))]
+    mu = float(np.median(base))
+    sd = float(np.median(np.abs(base - mu)) * 1.4826) or 1.0
+    z = (seg - mu) / sd
+    g, last_zero, alarm = 0.0, 0, None
+    for i, v in enumerate(z):
+        g = max(0.0, g + abs(v) - k)
+        if g == 0.0:
+            last_zero = i
+        if g > h:
+            alarm = i
+            break
+    if alarm is None:
+        return None
+    return int(lo + min(last_zero + 1, alarm))
+
+
+def ewma_onset_fwd(
+    resid: np.ndarray, trigger: int, *, lam: float = 0.15, limit_sd: float = 3.5, horizon: int = 256
+) -> int | None:
+    """EWMA control-limit crossing forward from the trigger (drift)."""
+    r = np.asarray(resid, dtype=float)
+    lo = max(0, trigger - 64)
+    seg = r[lo : min(len(r), trigger + horizon)]
+    if len(seg) < 2:
+        return None
+    base = seg[: max(1, min(64, len(seg) // 4))]
+    mu = float(np.median(base))
+    sd = float(np.std(base)) or 1.0
+    e = mu
+    lim_mult = limit_sd * (lam / (2 - lam)) ** 0.5
+    for i, v in enumerate(seg):
+        e = lam * v + (1 - lam) * e
+        if abs(e - mu) > lim_mult * sd:
+            return int(lo + i)
+    return None
+
+
 def cusum_backtrack(
     resid: np.ndarray,
     trigger: int,

@@ -51,3 +51,23 @@ def test_ewma_finds_gradual_ramp():
     r = np.concatenate([rng.normal(0, 1, 150), np.linspace(0, 6, 50)])
     est = ewma_onset(r, trigger=175)
     assert est is not None and 140 <= est <= 185
+
+
+def test_forward_variants_find_onset_ahead_of_early_trigger():
+    import numpy as np
+
+    from src.localize import counter_onset_fwd, cusum_onset_fwd, ewma_onset_fwd
+
+    c = np.zeros(300)
+    c[200:] = np.arange(1, 101)
+    assert counter_onset_fwd(c, trigger=100) == 200
+    assert counter_onset_fwd(np.zeros(300), trigger=100) is None
+    rng = np.random.default_rng(0)
+    r = np.concatenate([rng.normal(0, 1, 200), rng.normal(0, 3, 100)])
+    est = cusum_onset_fwd(r, trigger=120, k=1.0)
+    assert est is not None and 195 <= est <= 215
+    e = ewma_onset_fwd(
+        np.concatenate([np.zeros(200), np.linspace(0, 6, 100)]), trigger=120
+    )
+    # Flat baseline never trips the limit; the ramp does, near its onset.
+    assert e is not None and 195 <= e <= 250
