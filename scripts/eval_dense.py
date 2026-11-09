@@ -30,6 +30,26 @@ def main():
         d = d[keep + feats]
         rows.append(d)
     df = pd.concat(rows, ignore_index=True)
+    # STRICT allowlist: raw telemetry only. Every derived split-head
+    # column is excluded: v6 computes several of them on GT-anchored
+    # subsets (root_idx, affected_indices) with median/zero fallbacks on
+    # clean rows — same column, GT-branched formula (state_hist_delta:
+    # clean 23/26 vs fault 2/3 proves the branch). Observable ≠ clean.
+    feats = [c for c in df.columns
+             if c.startswith("obs_") or c.startswith("current_")]
+    assert len(feats) > 50, f"telemetry allowlist too small: {len(feats)}"
+    state_cols = [c for c in df.columns if c.startswith("state_")]
+    # Plant-state flags (observable live): per-machine non-RUN + plant count.
+    for c in state_cols:
+        df[c + "__down"] = (df[c].to_numpy(dtype=str) != "RUN").astype(float)
+    flag_cols = [c + "__down" for c in state_cols]
+    df["plant_nonrun"] = df[flag_cols].sum(axis=1)
+    # Causal rolling means (window 5) of obs channels: trajectory shape.
+    for c in [c for c in feats if c.startswith("obs_")]:
+        df[c + "__rm5"] = (
+            df.groupby("episode_id")[c].transform(lambda s: s.rolling(5, min_periods=1).mean())
+        )
+    feats = feats + flag_cols + ["plant_nonrun"] + [c + "__rm5" for c in feats if c.startswith("obs_")]
     X = df[feats].to_numpy(float)
     y = (df["root_id_step"].to_numpy(dtype=str) != "none").astype(int)
     groups = df["episode_id"].to_numpy()

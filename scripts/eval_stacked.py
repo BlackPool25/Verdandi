@@ -53,7 +53,7 @@ def main():
 
     from src.twin import _MACHINE_ORDER
 
-    oof = pd.read_parquet("/tmp/oof_proba.parquet")
+    oof = pd.read_parquet("/tmp/oof_clean.parquet")
     machines = list(_MACHINE_ORDER)
     X, y, groups, fam = build_rows(oof, machines)
     famids = np.array([hash(f) % (2**31) for f in fam])
@@ -79,7 +79,7 @@ def main():
         oof_pred[te_idx] = bst.predict(X[te][order_te])
     import pandas as _pd
 
-    _oof = _pd.read_parquet("/tmp/oof_proba.parquet")
+    _oof = _pd.read_parquet("/tmp/oof_clean.parquet")
     _votable = set()
     for ep, g in _oof.groupby("ep"):
         if (g["pred"] != "none").any():

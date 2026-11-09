@@ -99,5 +99,25 @@ Naive obs argmax 0.12; coordination-count 0.372; mean-fusion 0.67; gated combine
 ## 13. Implementation status (this branch)
 
 - DONE: `best_path` + tests (`tests/test_cascade_path.py`, `src/possibility.py`); `IncidentStore` + link tests (`tests/test_incident_link.py`, `src/incidents_store.py`, sqlite backend).
-- NEXT: `src/forecast.py` `predict_cascade` (test `tests/test_forecast.py` written RED, implementation pending) → compose `db` service + `psycopg` dep → report builder → prune-recall measurement → LambdaRank Head-A harness.
+- 2026-11-09 LEAKAGE CORRECTION: `stale_hold_run`, `reject_flag_count`
+  (+ `down_run` dense-only) proven GT-anchored (clean rows exactly
+  constant; v6 root-anchored branch). VOID: identity 0.606, stacked
+  0.608/0.610, dense 1.000. Clean identity: episode top-1 **0.674**
+  (n=2665); clean stacked votable **0.673** vs stage-1 **0.671** (teacher-
+  capped again). Frozen v7 detector exposure bounded at -3.4pp
+  (0.6918→0.6575 zeroing leaked cols; legit struct carries it) — frozen
+  stays frozen. Clean silent: 1535/4200; quiet = loss 429, quality 419,
+  drift 251, bias 216, spike 214 (breakdown/delay always fire).
+  Retrieval ceiling now 0.635 — pooled ≥0.5 needs rerank ≥0.79 or
+  retrieval lift. Family 0.502 provisional (invariant path keeps frozen
+  struct; leak contribution bounded-small per v7 ablation).
+- 2026-11-10 e2e (frozen v7 + 2-of-3, thr sweep 0.315-0.8): retrieval
+  FLAT 0.507-0.568, clean-fire 0.000 throughout. Threshold tuning dead
+  (scores never rise on quiet episodes). v7 IS supplement-trained —
+  this is cross-battery detection transfer = 0.54 retrieval MEASURED.
+  Confirmed top-1 0.524-0.526, pooled 0.266-0.284. Teacher mismatch
+  (identity-fired rows vs v7-confirmed episodes) explains rerank
+  0.673→0.524. NEXT: (a) longer-window/trajectory detector features
+  for quiet families (long pole); (b) teacher-aligned stage-2
+  (v7-fired rows); (c) per-episode calibration fit; (d) held-5 table.
 - 2026-11-09 stacked verdict: stage-2 LambdaRank over window-posterior aggregates = episode top-1 **0.608 votable-only (n=3004)** vs stage-1 majority vote **0.603** — ranker matches teacher; pooled 0.455 dragged by 1196 silent episodes (retrieval, not ranking). Artifact `artifacts/stage2-rank.txt` (gitignored) regenerates via OOF + train: `train_origin.py --identity --save-oof /tmp/oof_identity.parquet` then `eval_stacked.build_rows` + `stage2.train_final` + `stage2.save` (see §8 flow). `diagnose_incident(..., scores=)` injects stage-2 scores, heuristic `_eweight` fallback otherwise.
