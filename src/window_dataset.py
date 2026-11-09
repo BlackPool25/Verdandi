@@ -109,6 +109,61 @@ def _lag_deltas(seg: pd.DataFrame, obs_cols: list[str]) -> np.ndarray:
     return np.array(out, dtype=float)
 
 
+def fit_clean_norm_regime(
+    X: np.ndarray, y: np.ndarray, regimes: np.ndarray, n_obs: int
+) -> dict:
+    """Per-regime clean median/IQR on the obs block + global fallback.
+
+    Removes state-offset texture (RUN 0 / BLOCKED -1 / STARVED -2 / DOWN -3)
+    before the model ever sees it. Fit on train-clean rows only (caller).
+    """
+    table: dict = {}
+    yc = np.asarray(y) == 0
+    for r in sorted(set(np.asarray(regimes).tolist())):
+        m = yc & (np.asarray(regimes) == r)
+        if int(m.sum()) == 0:
+            continue
+        xc = np.asarray(X)[m][:, :n_obs]
+        med = np.median(xc, axis=0)
+        iqr = np.maximum(
+            np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9
+        )
+        table[str(r)] = (np.asarray(med, dtype=float), np.asarray(iqr, dtype=float))
+    xc = np.asarray(X)[yc][:, :n_obs]
+    med = np.median(xc, axis=0)
+    iqr = np.maximum(np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9)
+    table["__global__"] = (np.asarray(med, dtype=float), np.asarray(iqr, dtype=float))
+    return table
+
+
+def apply_norm_regime(
+    X: np.ndarray,
+    table: dict,
+    regimes: np.ndarray,
+    n_obs: int,
+    fallback: str = "global",
+) -> np.ndarray:
+    """Normalize each row with its regime baseline, else global fallback."""
+    out = np.array(X, dtype=float)
+    regs = np.asarray(regimes)
+    glob = table["__global__"] if fallback == "global" else None
+    for r in sorted(set(regs.tolist())):
+        m = regs == r
+        med, iqr = table.get(str(r), glob if glob is not None else table["__global__"])
+        out[m, :n_obs] = (out[m, :n_obs] - med) / iqr
+    return out
+
+
+def _window_regime(seg: pd.DataFrame) -> str:
+    """Plant regime of a window: modal state across state_ columns."""
+    cols = [c for c in seg.columns if c.startswith("state_")]
+    if not cols:
+        return "RUN"
+    vals = np.concatenate([seg[c].to_numpy() for c in cols])
+    uniq, counts = np.unique(vals, return_counts=True)
+    return str(uniq[int(np.argmax(counts))])
+
+
 def _residual_block(
     seg: pd.DataFrame, obs_cols: list[str], nominal: np.ndarray
 ) -> np.ndarray:
@@ -138,6 +193,7 @@ def build_windows(
     return_starts: bool = False,
     lags: bool = False,
     residuals: bool = False,
+    return_regimes: bool = False,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
 
@@ -147,14 +203,15 @@ def build_windows(
     jitter>0 draws a per-episode grid offset in [0, jitter) (phase-jittered
     training: free shift augmentation, no new data).
     return_starts=True appends window start ticks (needed for point
-    aggregation) as a fifth element.
+    aggregation) as a fifth element. return_regimes=True appends the
+    plant-regime label (modal state) as the last element.
     """
     if w < 1:
         raise ValueError(f"w must be >= 1, got {w}")
     if stride < 1:
         raise ValueError(f"stride must be >= 1, got {stride}")
     obs_cols = [c for c in df.columns if c.startswith("obs_")]
-    xs, ys, fams, groups, starts = [], [], [], [], []
+    xs, ys, fams, groups, starts, regms = [], [], [], [], [], []
     rng = np.random.default_rng(seed)
     for ep, g in df.groupby("episode_id", sort=False):
         g = g.sort_values("step").reset_index(drop=True)
@@ -193,10 +250,16 @@ def build_windows(
             fams.append(str(ff[0]) if len(ff) else "none")
             groups.append(ep)
             starts.append(s)
+            regms.append(_window_regime(seg))
     X, y, fam, grp = (np.array(xs), np.array(ys), np.array(fams), np.array(groups))
+    out: tuple = (X, y, fam, grp)
     if return_starts:
-        return X, y, fam, grp, np.array(starts)
-    return X, y, fam, grp
+        out += (np.array(starts),)
+    if return_regimes:
+        out += (np.array(regms),)
+    if len(out) == 4:
+        return out
+    return out
 
 
 def aggregate_to_points(
