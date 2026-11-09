@@ -131,7 +131,9 @@ def fit_clean_norm_regime(
         table[str(r)] = (np.asarray(med, dtype=float), np.asarray(iqr, dtype=float))
     xc = np.asarray(X)[yc][:, :n_obs]
     med = np.median(xc, axis=0)
-    iqr = np.maximum(np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9)
+    iqr = np.maximum(
+        np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9
+    )
     table["__global__"] = (np.asarray(med, dtype=float), np.asarray(iqr, dtype=float))
     return table
 
@@ -152,6 +154,53 @@ def apply_norm_regime(
         med, iqr = table.get(str(r), glob if glob is not None else table["__global__"])
         out[m, :n_obs] = (out[m, :n_obs] - med) / iqr
     return out
+
+
+def _partflow_block(seg: pd.DataFrame) -> np.ndarray:
+    """Invariant part-flow block (10 feats): quality faults move parts.
+
+    funnel_rate min/mean (completions dip), scrap_flag max/mean (reject
+    surge), buffer_occ max/mean (WIP excursion), tputlag/downrun max-of-max
+    + mean-of-mean across machines (no identity survives). Missing columns
+    default to zeros. rwk_passes measured all-zero: excluded.
+    """
+    out: list[float] = []
+    for c, (lo, hi) in (
+        ("funnel_rate", (True, True)),
+        ("scrap_flag", (False, False)),
+        ("buffer_occ", (False, False)),
+    ):
+        v = seg[c].to_numpy(dtype=float) if c in seg.columns else np.zeros(len(seg))
+        out += (
+            [float(v.min()), float(v.mean())]
+            if lo
+            else [float(v.max()), float(v.mean())]
+        )
+    for prefix in ("tputlag_", "downrun_"):
+        cols = [c for c in seg.columns if c.startswith(prefix)]
+        if not cols:
+            out += [0.0, 0.0]
+            continue
+        m = np.stack([seg[c].to_numpy(dtype=float) for c in cols], axis=1)
+        out += [float(m.max()), float(m.mean())]
+    return np.array(out, dtype=float)
+
+
+def anchor_regimes_by_episode(regimes: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """Anchor each window to its episode's clean-prefix regime (first window).
+
+    Normalizing by a window's own regime washes the signal: faults *cause*
+    DOWN/STARVED, so a fault window normalized by the DOWN baseline looks
+    clean. The anchor is causal (prefix precedes every window) and fixed per
+    episode, so fault-induced regime shifts survive as deviations.
+    """
+    regs = np.asarray(regimes)
+    grps = np.asarray(groups)
+    out = np.empty(len(regs), dtype=object)
+    for ep in np.unique(grps):
+        m = grps == ep
+        out[m] = regs[m][0]
+    return np.asarray(out)
 
 
 def _window_regime(seg: pd.DataFrame) -> str:
@@ -194,6 +243,7 @@ def build_windows(
     return_starts: bool = False,
     lags: bool = False,
     residuals: bool = False,
+    partflow: bool = False,
     return_regimes: bool = False,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
@@ -244,6 +294,8 @@ def build_windows(
                 base = np.concatenate([base, _lag_deltas(seg, obs_cols)])
             if residuals:
                 base = np.concatenate([base, _residual_block(seg, obs_cols, nominal)])
+            if partflow:
+                base = np.concatenate([base, _partflow_block(seg)])
             xs.append(base)
             win_y = yv[s : s + w]
             ys.append(int(win_y.any()))

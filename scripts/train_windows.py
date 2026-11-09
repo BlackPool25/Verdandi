@@ -115,6 +115,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="opt-in per-regime clean normalization (v3)",
     )
+    ap.add_argument(
+        "--partflow", action="store_true", help="opt-in invariant part-flow block (v4)"
+    )
     ap.add_argument("--n-jobs", type=int, default=-1)
     args = ap.parse_args(argv)
     import glob as _glob
@@ -146,10 +149,16 @@ def main(argv: list[str] | None = None) -> int:
         invariant=args.invariant,
         lags=args.lags,
         residuals=args.residuals,
+        partflow=args.partflow,
         **bw,
     )
     if args.regime_norm:
         X, y, fam, groups, reg = out
+        # Anchor to the episode clean-prefix regime: a window's own regime
+        # is fault-caused (DOWN/STARVED), normalizing by it erases signal.
+        from src.window_dataset import anchor_regimes_by_episode
+
+        reg = anchor_regimes_by_episode(reg, groups)
     else:
         X, y, fam, groups = out
         reg = None
