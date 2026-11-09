@@ -36,7 +36,6 @@ def main(argv: list[str] | None = None) -> int:
 
     from src.metrics_extra import clustered_ci, pak_keep
     from src.nab import nab_event_score
-    from scripts.train_windows import episode_family
     from src.train_pipeline import compute_raw_pointwise_f1
     from src.vus_pr import vus_pr
     from src.window_dataset import aggregate_to_points, build_windows
@@ -50,10 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     spans = {
         e: (r["t0"], r["t0"] + r["dur"]) for e, r in zip(m["fault_episodes"], m["rows"])
     }
-    epfam = {e: r["class"] for e, r in zip(m["fault_episodes"], m["rows"])}
     eporg = {e: r["origin"] for e, r in zip(m["fault_episodes"], m["rows"])}
 
-    X, y, fam, groups, starts = build_windows(
+    X, y, _fam, groups, starts = build_windows(
         df, w=args.w, stride=args.stride, invariant=args.invariant, return_starts=True
     )
     assert len(X) == len(oof), f"grid {len(X)} != oof {len(oof)}"
@@ -72,7 +70,6 @@ def main(argv: list[str] | None = None) -> int:
 
     # Point aggregation + VUS-PR per episode + NAB under all profiles.
     ps, pg, pt = aggregate_to_points(scores, groups, starts, w=args.w)
-    ef = episode_family(groups, fam)
     vus_vals, hits, nc, ca, delays = [], [], 0, 0, []
     for ep in np.unique(pg):
         me = pg == ep
@@ -101,8 +98,6 @@ def main(argv: list[str] | None = None) -> int:
             f"credit={r['mean_credit']:.3f} cleanFP={r['clean_fp_rate']:.4f}",
             flush=True,
         )
-    import math
-
     dv = np.asarray(delays, dtype=float)
     print(
         f"TTD ticks: median={float(np.median(dv)) if len(dv) else None} "
