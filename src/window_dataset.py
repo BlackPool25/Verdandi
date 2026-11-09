@@ -160,6 +160,7 @@ def _window_regime(seg: pd.DataFrame) -> str:
     if not cols:
         return "RUN"
     vals = np.concatenate([seg[c].to_numpy() for c in cols])
+    vals = np.array([str(v) for v in vals])
     uniq, counts = np.unique(vals, return_counts=True)
     return str(uniq[int(np.argmax(counts))])
 
