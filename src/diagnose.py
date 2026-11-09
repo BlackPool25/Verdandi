@@ -215,6 +215,38 @@ def first_trigger(
     return int(st[hot[0]]) if len(hot) else None
 
 
+def confirm_trigger(
+    scores: np.ndarray, starts: np.ndarray, thr: float = 0.8, m: int = 2, n: int = 3
+) -> int | None:
+    """M-of-N persistence confirm: first window-start whose trailing N
+    windows contain >= M hot scores. Unconfirmed triggers stay pending
+    (caller abstains from diagnosis). k=1 is first_trigger (no confirm)."""
+    s = np.asarray(scores, dtype=float)
+    st = np.asarray(starts, dtype=int)
+    hot = (s >= thr).astype(int)
+    for i in range(len(hot)):
+        if hot[max(0, i - n + 1) : i + 1].sum() >= m:
+            return int(st[i])
+    return None
+
+
+def abstain_reason(
+    scores: np.ndarray, thr: float = 0.8, hi: float = 0.9, margin: float = 0.1
+) -> str | None:
+    """Selective-diagnosis gate: None = confident, else reason to abstain.
+
+    maxscore < hi → low-confidence; top1-top2 < margin → ambiguous.
+    (Top-2 needs per-family scores; margin check applies where available.)
+    """
+    s = np.asarray(scores, dtype=float)
+    if float(s.max()) < hi:
+        return "low-confidence"
+    top2 = np.sort(s)[-2:]
+    if len(top2) == 2 and float(top2[1] - top2[0]) < margin:
+        return "ambiguous-margin"
+    return None
+
+
 def diagnose_from_trigger(
     g: pd.DataFrame, obs_cols: list[str], trigger: int, back: int = 16
 ) -> list[dict]:

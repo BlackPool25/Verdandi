@@ -40,6 +40,14 @@ def main(argv: list[str] | None = None) -> int:
     med = np.asarray(art["norm_median"], dtype=float)
     iqr = np.asarray(art["norm_iqr"], dtype=float)
     n_obs = int(art["n_obs_features"])
+    try:
+        import json
+
+        with open(f"{args.artifact}/thresholds.json") as fh:
+            fam_thr = json.load(fh)
+        thr_prop = min(float(v) for k, v in fam_thr.items() if k != "none")
+    except OSError:
+        thr_prop = 0.5
 
     rows = []
     n_trig = 0
@@ -60,12 +68,12 @@ def main(argv: list[str] | None = None) -> int:
                 g, w=w, stride=stride, invariant=True, return_starts=True
             )
             s = np.asarray(model.predict_proba(apply_norm(X, med, iqr, n_obs))[:, 1])
-            # Diagnosis anchor: most-confident window (argmax), not first-hot.
-            # First-hot alarming stays locked at 0.8/k1 in the runbook; diagnosis
-            # wants the detector's best guess, robust to early transient fires.
-            trig = (
-                int(starts[int(np.argmax(s))]) if float(s.max()) >= args.thr else None
-            )
+            # O2 confirm (2-of-3) at recall-first propose level; O3 global
+            # confirms at dispose time (diagnose only what 0.8 would keep).
+            # O4 abstain-if-unsure: anchor maxscore < hi → low-confidence.
+            from src.diagnose import confirm_trigger
+
+            trig = confirm_trigger(s, starts, thr_prop, m=2, n=3)
             if trig is None:
                 rows.append(
                     (
@@ -76,12 +84,46 @@ def main(argv: list[str] | None = None) -> int:
                         None,
                         None,
                         False,
+                        "unconfirmed",
+                    )
+                )
+                continue
+            m_idx = (starts >= trig - 150) & (starts <= trig + 150)
+            if not m_idx.any():
+                rows.append(
+                    (
+                        r["fault_family"],
+                        r["mag_rung"],
+                        r["root_id_step"],
+                        None,
+                        None,
+                        None,
+                        True,
+                        "no-window",
+                    )
+                )
+                continue
+            anchor = int(starts[m_idx][int(np.argmax(s[m_idx]))])
+            # O4 abstain-if-unsure (low-confidence leg only; window-margin
+            # is vacuous on overlapping windows — family head needed).
+            reason = "low-confidence" if float(s[m_idx].max()) < 0.9 else None
+            if reason is not None:
+                rows.append(
+                    (
+                        r["fault_family"],
+                        r["mag_rung"],
+                        r["root_id_step"],
+                        None,
+                        None,
+                        None,
+                        True,
+                        reason,
                     )
                 )
                 continue
             n_trig += 1
             try:
-                out = diagnose_from_trigger(g, obs, int(trig))
+                out = diagnose_from_trigger(g, obs, anchor)
             except Exception:  # noqa: BLE001 - harness records failures as rows
                 rows.append(
                     (
@@ -92,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
                         None,
                         None,
                         True,
+                        "error",
                     )
                 )
                 continue
@@ -105,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                         None,
                         None,
                         True,
+                        "empty",
                     )
                 )
                 continue
@@ -126,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
                     f0["onset"] - true_t0,
                     pred_sp == r["sensor_vs_process"],
                     True,
+                    "diagnosed",
                 )
             )
         if len(rows) >= args.max_eps:
@@ -142,6 +187,9 @@ def main(argv: list[str] | None = None) -> int:
             f"onset med={float(np.median(errs)):.1f} p90={float(np.quantile(errs, 0.9)):.1f} (MEASURED)"
         )
     print(f"coord_acc={sum(1 for r in hit if r[5]) / max(1, len(hit)):.3f} (MEASURED)")
+    import collections
+
+    print("gates:", dict(collections.Counter(r[7] for r in rows)))
     for rung in ("incipient", "caricature"):
         sub = [r for r in rows if r[1] == rung and r[3] is not None]
         e = [abs(r[4]) for r in sub if r[4] is not None]

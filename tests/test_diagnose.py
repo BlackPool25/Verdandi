@@ -130,3 +130,24 @@ def test_first_trigger_picks_first_hot_window():
     st = np.array([0, 8, 16, 24])
     assert first_trigger(s, st, 0.8) == 16
     assert first_trigger(s, st, 0.99) is None
+
+
+def test_confirm_trigger_needs_persistence():
+    import numpy as np
+
+    from src.diagnose import confirm_trigger
+
+    s = np.array([0.1, 0.85, 0.1, 0.1])  # isolated spike: unconfirmed
+    st = np.array([0, 8, 16, 24])
+    assert confirm_trigger(s, st, 0.8, m=2, n=3) is None
+    s2 = np.array([0.1, 0.85, 0.86, 0.1])  # 2-of-3: confirmed at 16
+    assert confirm_trigger(s2, st, 0.8, m=2, n=3) == 16
+
+
+def test_abstain_gate_flags_low_confidence():
+    import numpy as np
+
+    from src.diagnose import abstain_reason
+
+    assert abstain_reason(np.array([0.5, 0.6]), hi=0.9) == "low-confidence"
+    assert abstain_reason(np.array([0.95, 0.5]), hi=0.9) is None
