@@ -32,7 +32,9 @@ def pak_keep(
         ov = 0
         for t0, t1 in spans:
             ov = max(ov, min(s + w, t1) - max(s, t0))
-        if ov / w >= k:
+        # K = 0 recovers the any-overlap training convention (ov > 0); K > 0
+        # additionally demands a minimum fault fraction of the window.
+        if ov > 0 and ov / w >= k:
             keep[i] = 1
     return keep
 
