@@ -14,6 +14,7 @@ def test_mass_specs_balanced_and_deterministic():
     assert fe == fe2
     fams = [faults[ep]["class"] for ep in set(fe)]
     assert {fams.count(f) for f in set(fams)} == {4}
+    assert not (set(fe) & set(ce)), "fault/clean episode IDs must be disjoint"
     origins = {faults[ep]["origin"] for ep in fe}
     assert len(origins) > 1, "faults must span machines, not a single origin"
     t0s = {faults[ep]["t0"] for ep in fe}
