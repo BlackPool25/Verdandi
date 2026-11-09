@@ -56,6 +56,17 @@ Window-F1 0.963 tuned, episode-hit 1.00 — measured on single-origin data;
 does not transfer (multi-origin collapse proved it). Kept as the
 dense-1-origin reference only.
 
+## Localizer verdict (trigger-gated tick onset): KILLED as specified
+
+Backward ROI is fundamentally broken (w128 triggers fire ~120 ticks before
+onset; the ROI never contains the fault). Forward search works mechanically
+but the signals don't separate: max-projection buries incipient 0.5σ shifts
+(noise floor ~2.5), root cycle_lag doesn't mark delay onset. Measured
+|est - t0| median: structural baseline ~60 vs localizer 12-15 (loss/breakdown
+only) and 144-186 (everything else) — bar was <=4/<=6. Surviving lead:
+per-machine (not root) counter columns may restore delay; ROI-gated point
+head (learned projection) is the remaining localization path.
+
 ## Data incident 2026-11-09 (recorded, resolved)
 
 The first dense battery had a fault/clean episode-ID collision (clean block
