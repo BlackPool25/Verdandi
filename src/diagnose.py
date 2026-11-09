@@ -140,15 +140,10 @@ def machine_onset(
     # Residual path: PELT on prefix-z-scored series + jump confirm.
     # (Raw-score penalty is on the wrong scale: 76 noise segments wash
     # out contrast. z-scores restore the BIC geometry.)
-    from src.onset import crops_elbow, pelt_l2
+    from src.onset import pelt_l2
 
     z = _znorm(score)
-    cps = (
-        crops_elbow(z, penalties=(5.0, 10.0, 20.0, 40.0, 80.0, 160.0))
-        if method == "crops"
-        else pelt_l2(z, penalty=10.0, min_size=5)
-    )
-    for cp in cps:
+    for cp in pelt_l2(z, penalty=10.0, min_size=5):
         if cp < start_i + 10 or cp >= len(v) - 20:
             continue
         pre = float(np.mean(z[cp - 10 : cp]))
@@ -163,7 +158,6 @@ def diagnose_multi_origin(
     g: pd.DataFrame,
     obs_cols: list[str],
     oracle_onset: dict[str, int] | None = None,
-    onset_method: str = "pelt",
 ) -> list[dict]:
     """One entry per affected machine, ordered by onset (multi-start).
 
@@ -182,9 +176,7 @@ def diagnose_multi_origin(
         if oracle_onset is not None and machine in oracle_onset:
             tick, kind = int(oracle_onset[machine]), "oracle"
         else:
-            tick, kind = machine_onset(
-                g, c, float(nom[j]), float(sig[j]), method=onset_method
-            )
+            tick, kind = machine_onset(g, c, float(nom[j]), float(sig[j]))
         if tick < 0:
             continue
         confirmed: int | None = tick  # machine_onset is already PELT/state-confirmed
@@ -284,7 +276,6 @@ def diagnose_from_trigger(
     back: int = 16,
     oracle_onset: dict[str, int] | None = None,
     delay: int = 0,
-    onset_method: str = "pelt",
 ) -> list[dict]:
     """Trigger-gated multi-origin diagnosis (alongside frozen detector).
 
@@ -296,9 +287,7 @@ def diagnose_from_trigger(
     trigger+delay: windowed detection fires early (left overlap), so the
     true onset sits ~D ticks after the trigger, not at it.
     """
-    out = diagnose_multi_origin(
-        g, obs_cols, oracle_onset=oracle_onset, onset_method=onset_method
-    )
+    out = diagnose_multi_origin(g, obs_cols, oracle_onset=oracle_onset)
     # Ablation-only: oracle (GT) entries bypass the back gate so the true
     # root always competes; estimated entries are gated unchanged.
     kept = [
