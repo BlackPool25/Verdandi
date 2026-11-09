@@ -67,6 +67,41 @@ only) and 144-186 (everything else) — bar was <=4/<=6. Surviving lead:
 per-machine (not root) counter columns may restore delay; ROI-gated point
 head (learned projection) is the remaining localization path.
 
+## Disclosure (read as an ML engineer)
+
+Intended use: triage ranking + per-episode alarming on 128-tick windows from
+this twin, at the locked 0.8/k1 point. Out of scope: tick-level onset
+(localizer killed), real-plant deployment without the sim2real program,
+any operating point other than a cost-elicited one.
+
+Discrimination (tuned OOF, 3-fold GroupKFold, n=96k windows):
+
+| family | n | P | R | F1 | MCC | R 95% CI |
+|---|---|---|---|---|---|---|
+| breakdown | 12,000 | 0.991 | 0.974 | 0.983 | +0.96 | .970–.978 |
+| delay | 12,000 | 0.984 | 0.945 | 0.964 | +0.92 | .939–.950 |
+| loss | 12,000 | 0.990 | 0.881 | 0.932 | +0.86 | .873–.888 |
+| bias | 12,000 | 0.768 | 0.864 | 0.813 | +0.56 | .855–.872 |
+| spike | 12,000 | 0.782 | 0.860 | 0.819 | +0.57 | .851–.868 |
+| drift | 12,000 | 0.747 | 0.857 | 0.798 | +0.52 | .848–.865 |
+| quality | 12,000 | 0.733 | 0.854 | 0.789 | +0.49 | .845–.862 |
+
+Calibration: ECE 0.017 (10 equal-mass bins) — scores are honest probabilities
+on twin data. Threshold-free: VUS-PR 0.68. Optimism gap (global-0.5 vs
+per-family tuned): 0.039 — the tuned line is validation-flattered, not test.
+
+Validation grade (Steyerberg terms): internal (GroupKFold) + internal-external
+(per-origin spread 0.82–1.00). NO external validation: twin-only, no real
+plant slice. Nested-CV honest estimate: not run (threshold optimism is the
+only selection bias; model/hyperparameters were fixed, so nested would move
+numbers by noise, not signal — recorded, not claimed).
+Episode-hit 0.99, clustered-by-origin 95% CI [0.985, 0.993].
+
+Decision: lock 0.8/k1 (deploy PPV ~28% at 3% prevalence vs 4–19% for the
+alternatives; cost-dominant for any miss:FP ratio below ~70:1). NAB triple at
+global 0.5: standard 0.41 / low-FP 0.08 / low-fn 0.58 — reported, not
+optimized; single-number NAB retired as uninterpretable.
+
 ## Data incident 2026-11-09 (recorded, resolved)
 
 The first dense battery had a fault/clean episode-ID collision (clean block
