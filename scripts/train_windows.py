@@ -105,18 +105,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--save-oof", default="")
     ap.add_argument("--invariant", action="store_true")
     ap.add_argument(
-        "--lags", action="store_true", help="opt-in intra-window lag deltas (v3)"
-    )
-    ap.add_argument(
         "--residuals", action="store_true", help="opt-in twin-residual block (v3)"
     )
     ap.add_argument(
         "--regime-norm",
         action="store_true",
         help="opt-in per-regime clean normalization (v3)",
-    )
-    ap.add_argument(
-        "--partflow", action="store_true", help="opt-in invariant part-flow block (v4)"
     )
     ap.add_argument(
         "--build-jobs",
@@ -153,9 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         w=args.w,
         stride=args.stride,
         invariant=args.invariant,
-        lags=args.lags,
         residuals=args.residuals,
-        partflow=args.partflow,
         build_jobs=args.build_jobs,
         **bw,
     )

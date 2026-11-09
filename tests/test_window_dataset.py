@@ -97,17 +97,6 @@ def test_clean_norm_centers_clean_and_preserves_shift():
     assert float(Xn[50:].mean()) > 2.0
 
 
-def test_lagged_deltas_separate_ramp_from_flat():
-    from src.window_dataset import build_windows
-
-    X0, _, _, _ = build_windows(_df(), w=16, stride=16)
-    XL, _, _, _ = build_windows(_df(), w=16, stride=16, lags=True)
-    assert XL.shape[1] > X0.shape[1] and np.isfinite(XL).all()
-    d0 = XL[0, X0.shape[1] :].mean()
-    d1 = XL[-1, X0.shape[1] :].mean()
-    assert d1 > d0
-
-
 def test_residual_block_separates_bias_from_clean():
     from src.window_dataset import build_windows
 
@@ -129,8 +118,12 @@ def test_build_jobs_equivalence():
     frames = []
     for ep in range(6):
         n = 200
-        d = {"episode_id": [ep] * n, "step": list(range(n)), "y": [0] * n,
-             "fault_family": ["none"] * n}
+        d = {
+            "episode_id": [ep] * n,
+            "step": list(range(n)),
+            "y": [0] * n,
+            "fault_family": ["none"] * n,
+        }
         for i in range(3):
             d[f"obs_M{i}"] = rng.normal(0, 1, size=n)
         d["funnel_rate"] = np.full(n, 0.13)
@@ -141,9 +134,16 @@ def test_build_jobs_equivalence():
             d[f"downrun_M{i}"] = np.zeros(n)
         frames.append(pd.DataFrame(d))
     df = pd.concat(frames, ignore_index=True)
-    kw = {"w": 32, "stride": 8, "invariant": True, "lags": True, "residuals": True,
-          "partflow": True, "jitter": 3, "seed": 7, "return_starts": True,
-          "return_regimes": True}
+    kw = {
+        "w": 32,
+        "stride": 8,
+        "invariant": True,
+        "residuals": True,
+        "jitter": 3,
+        "seed": 7,
+        "return_starts": True,
+        "return_regimes": True,
+    }
     a = build_windows(df, **kw, build_jobs=1)
     b = build_windows(df, **kw, build_jobs=2)
     assert len(a) == len(b) == 6
@@ -151,3 +151,14 @@ def test_build_jobs_equivalence():
     np.testing.assert_allclose(a[0], b[0])
     np.testing.assert_array_equal(a[1], b[1])
     assert list(a[4]) == list(b[4]) and list(a[5]) == list(b[5])
+
+
+def test_anchor_regime_is_episode_prefix():
+    import numpy as np
+
+    from src.window_dataset import anchor_regimes_by_episode
+
+    reg = np.array(["RUN", "DOWN", "DOWN", "RUN", "STARVED"])
+    grp = np.array([1, 1, 1, 2, 2])
+    out = anchor_regimes_by_episode(reg, grp)
+    assert list(out) == ["RUN", "RUN", "RUN", "RUN", "RUN"]

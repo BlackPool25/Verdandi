@@ -98,17 +98,6 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
     return np.concatenate([out, struct])
 
 
-def _lag_deltas(seg: pd.DataFrame, obs_cols: list[str]) -> np.ndarray:
-    # Intra-window level shifts: last value minus k-steps-ago (k=4,8),
-    # catches ramps/delays that mean/std wash out.
-    out = []
-    for c in obs_cols:
-        v = seg[c].to_numpy(dtype=float)
-        for k in (4, 8):
-            out.append(float(v[-1] - v[-k - 1] if len(v) > k else v[-1] - v[0]))
-    return np.array(out, dtype=float)
-
-
 def fit_clean_norm_regime(
     X: np.ndarray, y: np.ndarray, regimes: np.ndarray, n_obs: int
 ) -> dict:
@@ -154,36 +143,6 @@ def apply_norm_regime(
         med, iqr = table.get(str(r), glob if glob is not None else table["__global__"])
         out[m, :n_obs] = (out[m, :n_obs] - med) / iqr
     return out
-
-
-def _partflow_block(seg: pd.DataFrame) -> np.ndarray:
-    """Invariant part-flow block (10 feats): quality faults move parts.
-
-    funnel_rate min/mean (completions dip), scrap_flag max/mean (reject
-    surge), buffer_occ max/mean (WIP excursion), tputlag/downrun max-of-max
-    + mean-of-mean across machines (no identity survives). Missing columns
-    default to zeros. rwk_passes measured all-zero: excluded.
-    """
-    out: list[float] = []
-    for c, (lo, hi) in (
-        ("funnel_rate", (True, True)),
-        ("scrap_flag", (False, False)),
-        ("buffer_occ", (False, False)),
-    ):
-        v = seg[c].to_numpy(dtype=float) if c in seg.columns else np.zeros(len(seg))
-        out += (
-            [float(v.min()), float(v.mean())]
-            if lo
-            else [float(v.max()), float(v.mean())]
-        )
-    for prefix in ("tputlag_", "downrun_"):
-        cols = [c for c in seg.columns if c.startswith(prefix)]
-        if not cols:
-            out += [0.0, 0.0]
-            continue
-        m = np.stack([seg[c].to_numpy(dtype=float) for c in cols], axis=1)
-        out += [float(m.max()), float(m.mean())]
-    return np.array(out, dtype=float)
 
 
 def anchor_regimes_by_episode(regimes: np.ndarray, groups: np.ndarray) -> np.ndarray:
@@ -233,7 +192,7 @@ def _residual_block(
 
 def _episode_windows(job: tuple) -> tuple:
     """One episode's windows. Module-level so worker processes can pickle it."""
-    (g, obs_cols, ep, off, w, stride, invariant, lags, residuals, partflow) = job
+    (g, obs_cols, ep, off, w, stride, invariant, residuals) = job
     g = g.sort_values("step").reset_index(drop=True)
     yv = g["y"].to_numpy(dtype=int)
     famv = (
@@ -259,12 +218,8 @@ def _episode_windows(job: tuple) -> tuple:
             if invariant
             else _window_features(seg, obs_cols)
         )
-        if lags:
-            base = np.concatenate([base, _lag_deltas(seg, obs_cols)])
         if residuals:
             base = np.concatenate([base, _residual_block(seg, obs_cols, nominal)])
-        if partflow:
-            base = np.concatenate([base, _partflow_block(seg)])
         xs.append(base)
         win_y = yv[s : s + w]
         ys.append(int(win_y.any()))
@@ -286,9 +241,7 @@ def build_windows(
     jitter: int = 0,
     seed: int = 0,
     return_starts: bool = False,
-    lags: bool = False,
     residuals: bool = False,
-    partflow: bool = False,
     return_regimes: bool = False,
     build_jobs: int = 1,
 ) -> tuple:
@@ -314,9 +267,7 @@ def build_windows(
     jobs = []
     for ep, g in df.groupby("episode_id", sort=False):
         off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
-        jobs.append(
-            (g, obs_cols, ep, off, w, stride, invariant, lags, residuals, partflow)
-        )
+        jobs.append((g, obs_cols, ep, off, w, stride, invariant, residuals))
     if build_jobs == 1:
         parts = [_episode_windows(j) for j in jobs]
     else:
