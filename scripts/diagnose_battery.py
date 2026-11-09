@@ -13,12 +13,84 @@ import argparse
 import glob
 import pathlib
 import sys
+from concurrent.futures import ProcessPoolExecutor
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import pandas as pd
 from joblib import load
+
+_WORKER: dict = {}
+
+
+def _init_worker(artifact: str, thr_prop: float, wait: int) -> None:
+    """Load the frozen model once per worker process (CPU fork-safe)."""
+    from src.diagnose import confirm_trigger, diagnose_from_trigger
+    from src.window_dataset import apply_norm, build_windows
+
+    art = load(f"{artifact}/model.joblib")
+    _WORKER["model"] = art["model"]
+    _WORKER["w"] = int(art["w"])
+    _WORKER["stride"] = int(art["stride"])
+    _WORKER["med"] = np.asarray(art["norm_median"], dtype=float)
+    _WORKER["iqr"] = np.asarray(art["norm_iqr"], dtype=float)
+    _WORKER["n_obs"] = int(art["n_obs_features"])
+    _WORKER["thr_prop"] = float(thr_prop)
+    _WORKER["wait"] = int(wait)
+    _WORKER["confirm_trigger"] = confirm_trigger
+    _WORKER["diagnose_from_trigger"] = diagnose_from_trigger
+    _WORKER["apply_norm"] = apply_norm
+    _WORKER["build_windows"] = build_windows
+
+
+def _work_episode(job: tuple) -> tuple:
+    """Full per-episode pipeline: windows -> score -> confirm -> diagnose.
+
+    Runs in a worker process (or serially). Deterministic: no shared state,
+    order preserved by the caller's map.
+    """
+    g, obs, meta = job
+    model, w, stride = _WORKER["model"], _WORKER["w"], _WORKER["stride"]
+    med, iqr, n_obs = _WORKER["med"], _WORKER["iqr"], _WORKER["n_obs"]
+    thr_prop, wait = _WORKER["thr_prop"], _WORKER["wait"]
+    confirm_trigger = _WORKER["confirm_trigger"]
+    diagnose_from_trigger = _WORKER["diagnose_from_trigger"]
+    apply_norm, build_windows = _WORKER["apply_norm"], _WORKER["build_windows"]
+    fam, rung, root, true_sp, true_t0 = meta
+    X, _, _, _, starts = build_windows(g, w=w, stride=stride, invariant=True, return_starts=True)
+    s = np.asarray(model.predict_proba(apply_norm(X, med, iqr, n_obs))[:, 1])
+    trig = confirm_trigger(s, starts, thr_prop, m=2, n=3)
+    if trig is None:
+        return (fam, rung, root, None, None, None, False, "unconfirmed")
+    anchor = trig + wait
+    back = 64 + wait
+    m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
+    if not m_idx.any():
+        return (fam, rung, root, None, None, None, True, "no-window")
+    if float(s[m_idx].max()) < 0.9:
+        return (fam, rung, root, None, None, None, True, "low-confidence")
+    try:
+        out = diagnose_from_trigger(g, obs, anchor, back=back)
+    except Exception:  # noqa: BLE001 - harness records failures as rows
+        return (fam, rung, root, None, None, None, True, "error")
+    if not out:
+        return (fam, rung, root, None, None, None, True, "empty")
+    f0 = out[0]
+    struct_process = f0["onset_kind"] == "counter" or (
+        f0["onset_kind"] == "state" and f0["own_state"] in ("DOWN", "BLOCKED")
+    )
+    pred_sp = "process" if struct_process else "sensor"
+    return (
+        fam,
+        rung,
+        root,
+        f0["machine"],
+        f0["onset"] - true_t0,
+        pred_sp == true_sp,
+        True,
+        "diagnosed",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,16 +108,9 @@ def main(argv: list[str] | None = None) -> int:
         default=32,
         help="wait budget W in ticks after confirm; anchor=trig+W, past covers W+64 back",
     )
+    ap.add_argument("--n-jobs", type=int, default=1, help="worker processes (model loads once per worker)")
     args = ap.parse_args(argv)
 
-    from src.diagnose import diagnose_from_trigger
-    from src.window_dataset import apply_norm, build_windows
-
-    art = load(f"{args.artifact}/model.joblib")
-    model, w, stride = art["model"], int(art["w"]), int(art["stride"])
-    med = np.asarray(art["norm_median"], dtype=float)
-    iqr = np.asarray(art["norm_iqr"], dtype=float)
-    n_obs = int(art["n_obs_features"])
     try:
         import json
 
@@ -55,140 +120,45 @@ def main(argv: list[str] | None = None) -> int:
     except OSError:
         thr_prop = 0.5
 
-    rows = []
-    n_trig = 0
+    rows: list = []
+    jobs: list = []
     for p in sorted(glob.glob(args.glob)):
         df = pd.read_parquet(p)
         if df["y"].sum() == 0:
             continue
         obs = [c for c in df.columns if c.startswith("obs_")]
         for fe in list(df[df.y == 1]["episode_id"].unique()):
-            if len(rows) >= args.max_eps:
+            if len(jobs) >= args.max_eps:
                 break
             g = df[df.episode_id == fe].sort_values("step").reset_index(drop=True)
             r = g[g.y == 1].iloc[0]
             if args.rung and str(r["mag_rung"]) != args.rung:
                 continue
-            true_t0 = int(g[g.y == 1]["step"].min())
-            X, _, _, _grp, starts = build_windows(
-                g, w=w, stride=stride, invariant=True, return_starts=True
+            meta = (
+                str(r["fault_family"]),
+                str(r["mag_rung"]),
+                str(r["root_id_step"]),
+                str(r["sensor_vs_process"]),
+                int(g[g.y == 1]["step"].min()),
             )
-            s = np.asarray(model.predict_proba(apply_norm(X, med, iqr, n_obs))[:, 1])
-            # O2 confirm (2-of-3) at recall-first propose level; O3 global
-            # confirms at dispose time (diagnose only what 0.8 would keep).
-            # O4 abstain-if-unsure: anchor maxscore < hi → low-confidence.
-            from src.diagnose import confirm_trigger
-
-            trig = confirm_trigger(s, starts, thr_prop, m=2, n=3)
-            if trig is None:
-                rows.append(
-                    (
-                        r["fault_family"],
-                        r["mag_rung"],
-                        r["root_id_step"],
-                        None,
-                        None,
-                        None,
-                        False,
-                        "unconfirmed",
-                    )
-                )
-                continue
-            # L1 causal anchor: past + wait budget W after confirm.
-            # Anchor = trig+W (propagation arrives); past window covers back.
-            anchor = trig + args.wait
-            back = 64 + args.wait
-            m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
-            if not m_idx.any():
-                rows.append(
-                    (
-                        r["fault_family"],
-                        r["mag_rung"],
-                        r["root_id_step"],
-                        None,
-                        None,
-                        None,
-                        True,
-                        "no-window",
-                    )
-                )
-                continue
-            # L1 causal anchor: past + wait budget W after confirm.
-            # Anchor = trig+W (propagation arrives); past window covers back.
-            anchor = trig + args.wait
-            back = 64 + args.wait
-            m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
-            # O4 abstain-if-unsure (low-confidence leg only; window-margin
-            # is vacuous on overlapping windows — family head needed).
-            reason = "low-confidence" if float(s[m_idx].max()) < 0.9 else None
-            if reason is not None:
-                rows.append(
-                    (
-                        r["fault_family"],
-                        r["mag_rung"],
-                        r["root_id_step"],
-                        None,
-                        None,
-                        None,
-                        True,
-                        reason,
-                    )
-                )
-                continue
-            n_trig += 1
-            try:
-                out = diagnose_from_trigger(g, obs, anchor, back=back)
-            except Exception:  # noqa: BLE001 - harness records failures as rows
-                rows.append(
-                    (
-                        r["fault_family"],
-                        r["mag_rung"],
-                        r["root_id_step"],
-                        None,
-                        None,
-                        None,
-                        True,
-                        "error",
-                    )
-                )
-                continue
-            if not out:
-                rows.append(
-                    (
-                        r["fault_family"],
-                        r["mag_rung"],
-                        r["root_id_step"],
-                        None,
-                        None,
-                        None,
-                        True,
-                        "empty",
-                    )
-                )
-                continue
-            f0 = out[0]
-            # D2 from the root candidate's own signals (not per-machine obs
-            # counts): DOWN/counter at the root → process; residual-only or
-            # STARVED-only → sensor (STARVED without local DOWN/counter is
-            # the downstream-symptom pattern).
-            struct_process = f0["onset_kind"] == "counter" or (
-                f0["onset_kind"] == "state" and f0["own_state"] in ("DOWN", "BLOCKED")
-            )
-            pred_sp = "process" if struct_process else "sensor"
-            rows.append(
-                (
-                    r["fault_family"],
-                    r["mag_rung"],
-                    r["root_id_step"],
-                    f0["machine"],
-                    f0["onset"] - true_t0,
-                    pred_sp == r["sensor_vs_process"],
-                    True,
-                    "diagnosed",
-                )
-            )
-        if len(rows) >= args.max_eps:
+            jobs.append((g, obs, meta))
+        if len(jobs) >= args.max_eps:
             break
+
+    if args.n_jobs == 1:
+        _init_worker(args.artifact, thr_prop, args.wait)
+        done = [_work_episode(j) for j in jobs]
+    else:
+        # Forked processes: private globals per worker, model loads once.
+        # build_windows is GIL-bound pandas, so threads give no speedup.
+        with ProcessPoolExecutor(
+            max_workers=args.n_jobs,
+            initializer=_init_worker,
+            initargs=(args.artifact, thr_prop, args.wait),
+        ) as ex:
+            done = list(ex.map(_work_episode, jobs))
+    rows.extend(done)
+    n_trig = sum(1 for r in rows if r[7] in ("diagnosed", "error", "empty"))
 
     print(f"n={len(rows)} trigger_rate={n_trig / max(1, len(rows)):.3f} (MEASURED)")
     hit = [r for r in rows if r[3] is not None]

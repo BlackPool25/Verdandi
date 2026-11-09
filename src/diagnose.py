@@ -11,6 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.twin import compute_hop
+
 RUNG_CUT = 3.5
 
 
@@ -272,8 +274,6 @@ def diagnose_from_trigger(
     # hop_est from the real twin DAG: 0 at the top candidate, BFS hops
     # downstream/upstream, -1 where unreachable (no forced path).
     if kept:
-        from src.twin import compute_hop
-
         top = kept[0]["machine"]
         kept[0]["hop_est"] = 0
         for r in kept[1:]:
