@@ -117,3 +117,37 @@ def test_residual_block_separates_bias_from_clean():
     r0 = XR[0, X0.shape[1] :].mean()
     r1 = XR[-1, X0.shape[1] :].mean()
     assert r1 > r0
+
+
+def test_build_jobs_equivalence():
+    import numpy as np
+    import pandas as pd
+
+    from src.window_dataset import build_windows
+
+    rng = np.random.default_rng(0)
+    frames = []
+    for ep in range(6):
+        n = 200
+        d = {"episode_id": [ep] * n, "step": list(range(n)), "y": [0] * n,
+             "fault_family": ["none"] * n}
+        for i in range(3):
+            d[f"obs_M{i}"] = rng.normal(0, 1, size=n)
+        d["funnel_rate"] = np.full(n, 0.13)
+        d["scrap_flag"] = np.zeros(n, dtype=int)
+        d["buffer_occ"] = np.zeros(n)
+        for i in range(3):
+            d[f"tputlag_M{i}"] = np.zeros(n)
+            d[f"downrun_M{i}"] = np.zeros(n)
+        frames.append(pd.DataFrame(d))
+    df = pd.concat(frames, ignore_index=True)
+    kw = {"w": 32, "stride": 8, "invariant": True, "lags": True, "residuals": True,
+          "partflow": True, "jitter": 3, "seed": 7, "return_starts": True,
+          "return_regimes": True}
+    a = build_windows(df, **kw, build_jobs=1)
+    b = build_windows(df, **kw, build_jobs=2)
+    assert len(a) == len(b) == 6
+    np.testing.assert_array_equal(a[3], b[3])  # groups order preserved
+    np.testing.assert_allclose(a[0], b[0])
+    np.testing.assert_array_equal(a[1], b[1])
+    assert list(a[4]) == list(b[4]) and list(a[5]) == list(b[5])

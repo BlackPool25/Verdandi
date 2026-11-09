@@ -231,6 +231,51 @@ def _residual_block(
     return np.array([m.max(), m.mean(), x.max(), x.mean()], dtype=float)
 
 
+def _episode_windows(job: tuple) -> tuple:
+    """One episode's windows. Module-level so worker processes can pickle it."""
+    (g, obs_cols, ep, off, w, stride, invariant, lags, residuals, partflow) = job
+    g = g.sort_values("step").reset_index(drop=True)
+    yv = g["y"].to_numpy(dtype=int)
+    famv = (
+        g["fault_family"].to_numpy()
+        if "fault_family" in g
+        else np.array(["none"] * len(g))
+    )
+    nominal = (
+        np.array(
+            [g[c].to_numpy(dtype=float)[:30].mean() for c in obs_cols]
+            if residuals
+            else [],
+            dtype=float,
+        )
+        if obs_cols
+        else np.array([], dtype=float)
+    )
+    xs, ys, fams, groups, starts, regms = [], [], [], [], [], []
+    for s in range(off, len(g) - w + 1, stride):
+        seg = g.iloc[s : s + w]
+        base = (
+            _window_features_invariant(seg, obs_cols)
+            if invariant
+            else _window_features(seg, obs_cols)
+        )
+        if lags:
+            base = np.concatenate([base, _lag_deltas(seg, obs_cols)])
+        if residuals:
+            base = np.concatenate([base, _residual_block(seg, obs_cols, nominal)])
+        if partflow:
+            base = np.concatenate([base, _partflow_block(seg)])
+        xs.append(base)
+        win_y = yv[s : s + w]
+        ys.append(int(win_y.any()))
+        ff = famv[s : s + w][win_y == 1]
+        fams.append(str(ff[0]) if len(ff) else "none")
+        groups.append(ep)
+        starts.append(s)
+        regms.append(_window_regime(seg))
+    return (xs, ys, fams, groups, starts, regms)
+
+
 def build_windows(
     df: pd.DataFrame,
     *,
@@ -245,6 +290,7 @@ def build_windows(
     residuals: bool = False,
     partflow: bool = False,
     return_regimes: bool = False,
+    build_jobs: int = 1,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
 
@@ -256,54 +302,36 @@ def build_windows(
     return_starts=True appends window start ticks (needed for point
     aggregation) as a fifth element. return_regimes=True appends the
     plant-regime label (modal state) as the last element.
+    build_jobs>1 fans episodes out to worker processes (order-preserving;
+    jitter draws stay serial so the grid is identical to build_jobs=1).
     """
     if w < 1:
         raise ValueError(f"w must be >= 1, got {w}")
     if stride < 1:
         raise ValueError(f"stride must be >= 1, got {stride}")
     obs_cols = [c for c in df.columns if c.startswith("obs_")]
-    xs, ys, fams, groups, starts, regms = [], [], [], [], [], []
     rng = np.random.default_rng(seed)
+    jobs = []
     for ep, g in df.groupby("episode_id", sort=False):
-        g = g.sort_values("step").reset_index(drop=True)
-        yv = g["y"].to_numpy(dtype=int)
-        famv = (
-            g["fault_family"].to_numpy()
-            if "fault_family" in g
-            else np.array(["none"] * len(g))
-        )
         off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
-        nominal = (
-            np.array(
-                [g[c].to_numpy(dtype=float)[:30].mean() for c in obs_cols]
-                if residuals
-                else [],
-                dtype=float,
-            )
-            if obs_cols
-            else np.array([], dtype=float)
+        jobs.append(
+            (g, obs_cols, ep, off, w, stride, invariant, lags, residuals, partflow)
         )
-        for s in range(off, len(g) - w + 1, stride):
-            seg = g.iloc[s : s + w]
-            base = (
-                _window_features_invariant(seg, obs_cols)
-                if invariant
-                else _window_features(seg, obs_cols)
-            )
-            if lags:
-                base = np.concatenate([base, _lag_deltas(seg, obs_cols)])
-            if residuals:
-                base = np.concatenate([base, _residual_block(seg, obs_cols, nominal)])
-            if partflow:
-                base = np.concatenate([base, _partflow_block(seg)])
-            xs.append(base)
-            win_y = yv[s : s + w]
-            ys.append(int(win_y.any()))
-            ff = famv[s : s + w][win_y == 1]
-            fams.append(str(ff[0]) if len(ff) else "none")
-            groups.append(ep)
-            starts.append(s)
-            regms.append(_window_regime(seg))
+    if build_jobs == 1:
+        parts = [_episode_windows(j) for j in jobs]
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=build_jobs) as ex:
+            parts = list(ex.map(_episode_windows, jobs))
+    xs, ys, fams, groups, starts, regms = [], [], [], [], [], []
+    for px, py, pf, pg, ps, pr in parts:
+        xs += px
+        ys += py
+        fams += pf
+        groups += pg
+        starts += ps
+        regms += pr
     X, y, fam, grp = (np.array(xs), np.array(ys), np.array(fams), np.array(groups))
     out: tuple = (X, y, fam, grp)
     if return_starts:

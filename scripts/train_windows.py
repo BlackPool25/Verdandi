@@ -118,6 +118,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--partflow", action="store_true", help="opt-in invariant part-flow block (v4)"
     )
+    ap.add_argument(
+        "--build-jobs",
+        type=int,
+        default=1,
+        help="worker processes for window building (episodes are independent)",
+    )
     ap.add_argument("--n-jobs", type=int, default=-1)
     args = ap.parse_args(argv)
     import glob as _glob
@@ -150,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         lags=args.lags,
         residuals=args.residuals,
         partflow=args.partflow,
+        build_jobs=args.build_jobs,
         **bw,
     )
     if args.regime_norm:
@@ -184,7 +191,12 @@ def main(argv: list[str] | None = None) -> int:
             clf.predict_proba(apply_norm(X[te], med, iqr, n_obs))[:, 1]
         )
 
-    for te, scores in Parallel(n_jobs=args.n_jobs)(
+    # Outer level fans over folds only (3 tasks): spawning more workers than
+    # folds just burns process-spawn + oversubscribes OpenMP inside HistGBM
+    # (sklearn docs: OpenMP estimators self-limit via threadpoolctl, but
+    # idle loky workers still cost RAM/spawn time).
+    n_outer = args.splits if args.n_jobs in (-1, 0) else min(args.n_jobs, args.splits)
+    for te, scores in Parallel(n_jobs=n_outer)(
         delayed(_fit_fold)(tr, te) for tr, te in cv.split(X, y, groups)
     ):
         oof[te] = scores
