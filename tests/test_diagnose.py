@@ -51,5 +51,5 @@ def test_diagnose_window_shape():
     out = diagnose_window(
         _seg(shift=(0, 8.0)), cols, episode_nominal(g, cols), robust_sigma(g, cols)
     )
-    assert set(out) == {"machine", "score_sigma", "sensor_vs_process", "rung", "hop"}
-    assert out["hop"] == 0
+    assert set(out) == {"machine", "score_sigma", "coord_class", "rung", "hop_est"}
+    assert out["hop_est"] == 0

@@ -77,7 +77,7 @@ def diagnose_window(
     return {
         "machine": machine,
         "score_sigma": round(float(score), 3),
-        "sensor_vs_process": coord,
+        "coord_class": coord,
         "rung": rung,
-        "hop": 0,
+        "hop_est": 0,
     }
