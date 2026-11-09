@@ -304,12 +304,7 @@ def _validate(seed, fault):
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
     if fault is None:
         return []
-    if (
-        isinstance(fault, tuple)
-        and fault
-        and isinstance(fault[0], str)
-        or isinstance(fault, dict)
-    ):
+    if isinstance(fault, tuple) and fault and isinstance(fault[0], str) or isinstance(fault, dict):
         raw_list = [fault]
     elif isinstance(fault, (list, tuple)):
         raw_list = list(fault)
@@ -424,7 +419,8 @@ def _spawn_streams(seed):
     agv = np.random.default_rng(children[34])
     fail = np.random.default_rng(children[35])
     eta_rngs = [
-        np.random.default_rng(children[MACHINE_INDEX[m]].spawn(1)[0]) for m in order
+        np.random.default_rng(children[MACHINE_INDEX[m]].spawn(1)[0])
+        for m in order
     ]
     eta = np.empty((N_MACHINES, T))
     for i, (g, m) in enumerate(zip(eta_rngs, order)):
@@ -534,14 +530,13 @@ def _update_wear_bias(shared: dict, idx: int, st: str, sigma: float) -> float:
     if st == "RUN":
         w = min(
             WEAR_EXP["CAP_SIGMA"],
-            w
-            + WEAR_EXP["ALPHA"]
-            * math.exp(min(w, WEAR_EXP["CAP_SIGMA"]) / WEAR_EXP["TAU"]),
+            w + WEAR_EXP["ALPHA"] * math.exp(min(w, WEAR_EXP["CAP_SIGMA"]) / WEAR_EXP["TAU"]),
         )
         wear_list[idx] = w
     capped_w = min(w, WEAR_EXP["CAP_SIGMA"])
     run_mult = 1.0 if st == "RUN" else 0.5
     return float(WEAR_EXP["GAMMA_SIGMA"] * capped_w * sigma * run_mult)
+
 
 
 def _degrade_at(fx, t):
@@ -560,7 +555,9 @@ def _degrade_spec(fx, t):
         s
         for s in fx
         if s["t0"] <= t < s["t1"]
-        and (s["class"] in ("drift", "bias", "delay", "loss") or s["class"] == _PULSE)
+        and (
+            s["class"] in ("drift", "bias", "delay", "loss") or s["class"] == _PULSE
+        )
     ]
     if not candidates:
         return None
@@ -969,23 +966,14 @@ def _line_process(env, spec, shared):
             part["flag"] = "DEGRADE"
             if shared.get("ladder"):
                 f_spec = _degrade_spec(fx, t)
-                spec_sev = (
-                    float(f_spec.get("mag_sigma", f_spec.get("mag", 0.0)))
-                    if f_spec is not None
-                    else 0.0
-                )
+                spec_sev = float(f_spec.get("mag_sigma", f_spec.get("mag", 0.0))) if f_spec is not None else 0.0
                 part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng,
-            st,
-            t,
-            cfg,
-            ar,
-            _fault_dev(fx, t, sigma) + wear_bias,
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
             tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
@@ -1068,20 +1056,12 @@ def _insp0_process(env, up, down, shared):
                     part["flag"] = "DEGRADE"
                     if shared.get("ladder"):
                         spec = _degrade_spec(fx, t)
-                        spec_sev = (
-                            float(spec.get("mag_sigma", spec.get("mag", 0.0)))
-                            if spec is not None
-                            else 0.0
-                        )
+                        spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
                         part["sev"] = max(part.get("sev", 0.0), spec_sev)
                 elif shared.get("ladder"):
                     spec = _degrade_spec(fx, t)
                     if spec is not None or "sev" in part:
-                        spec_sev = (
-                            float(spec.get("mag_sigma", spec.get("mag", 0.0)))
-                            if spec is not None
-                            else 0.0
-                        )
+                        spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
                         part["sev"] = max(part.get("sev", 0.0), spec_sev)
             _emit(
                 shared,
@@ -1100,23 +1080,14 @@ def _insp0_process(env, up, down, shared):
             part["flag"] = "DEGRADE"
             if shared.get("ladder"):
                 spec = _degrade_spec(fx, t)
-                spec_sev = (
-                    float(spec.get("mag_sigma", spec.get("mag", 0.0)))
-                    if spec is not None
-                    else 0.0
-                )
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
                 part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng,
-            st,
-            t,
-            cfg,
-            ar,
-            _fault_dev(fx, t, sigma) + wear_bias,
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
             tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
@@ -1231,12 +1202,10 @@ def _agv_dispatcher(
         if agv_priority == "default":
             ordered_tails = tails
         elif agv_priority == "starvation":
-
             def _tail_key(item):
                 store, name = item
                 line = _TAIL_LINE[name]
                 return (len(kit[line]), -len(store.items))
-
             ordered_tails = sorted(tails, key=_tail_key)
         elif agv_priority == "seeded":
             rot = (seed + int(env.now)) % len(tails)
@@ -1244,13 +1213,11 @@ def _agv_dispatcher(
         elif agv_priority == "rework":
             rwk = stores.get("RWK_RET")
             rework_pending = len(rwk.items) if rwk is not None else 0
-
             def _rework_key(item, pending=rework_pending):
                 store, name = item
                 line = _TAIL_LINE[name]
                 bonus = -10 if (line == "C" and pending > 0) else 0
                 return (len(kit[line]) + bonus, -len(store.items))
-
             ordered_tails = sorted(tails, key=_rework_key)
         else:
             ordered_tails = tails
@@ -1353,23 +1320,14 @@ def _asm0_process(env, asm01, kit, shared):
                 p["flag"] = "DEGRADE"
                 if shared.get("ladder"):
                     spec = _degrade_spec(fx, t)
-                    spec_sev = (
-                        float(spec.get("mag_sigma", spec.get("mag", 0.0)))
-                        if spec is not None
-                        else 0.0
-                    )
+                    spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
                     p["sev"] = max(p.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, detail, fault_id=fid)
         prev = st
         shared["held"][idx] = {"batch": True} if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng,
-            st,
-            t,
-            cfg,
-            ar,
-            _fault_dev(fx, t, sigma) + wear_bias,
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
             tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
@@ -1501,23 +1459,14 @@ def _asm_mid_process(env, name, up, down, shared):
             part["flag"] = "DEGRADE"
             if shared.get("ladder"):
                 spec = _degrade_spec(fx, t)
-                spec_sev = (
-                    float(spec.get("mag_sigma", spec.get("mag", 0.0)))
-                    if spec is not None
-                    else 0.0
-                )
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
                 part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng,
-            st,
-            t,
-            cfg,
-            ar,
-            _fault_dev(fx, t, sigma) + wear_bias,
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
             tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
@@ -1639,23 +1588,14 @@ def _rwk0_process(env, shared):
             part["flag"] = "DEGRADE"
             if shared.get("ladder"):
                 spec = _degrade_spec(fx, t)
-                spec_sev = (
-                    float(spec.get("mag_sigma", spec.get("mag", 0.0)))
-                    if spec is not None
-                    else 0.0
-                )
+                spec_sev = float(spec.get("mag_sigma", spec.get("mag", 0.0))) if spec is not None else 0.0
                 part["sev"] = max(part.get("sev", 0.0), spec_sev)
         _transition(shared, idx, name, prev, st, t, fault_id=fid)
         prev = st
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng,
-            st,
-            t,
-            cfg,
-            ar,
-            _fault_dev(fx, t, sigma) + wear_bias,
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
             tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
@@ -1673,9 +1613,7 @@ def _fault_clock(env, shared):
     for spec in shared["specs"]:
         marks.append((spec["t0"], 0, "FAULT_START", spec))
         if is_ladder and spec["class"] == "breakdown":
-            t_end = spec["t0"] + math.ceil(
-                spec["dur"] * float(spec.get("mttr_mult", 1.0))
-            )
+            t_end = spec["t0"] + math.ceil(spec["dur"] * float(spec.get("mttr_mult", 1.0)))
         else:
             t_end = spec["t1"]
         marks.append((t_end, 1, "FAULT_END", spec))
@@ -1729,62 +1667,28 @@ def classify_sensor_vs_process(fault_class: str | None) -> str:
     return "sensor" if "sensor" in cls else "process"
 
 
+
 # Downstream and upstream topology adjacency for propagation derivation (depth <= 3)
 _DOWNSTREAM_MACHINES = {
-    "A0": ["A1"],
-    "A1": ["A2"],
-    "A2": ["A7"],
-    "A7": ["A8"],
-    "A8": ["A9"],
+    "A0": ["A1"], "A1": ["A2"], "A2": ["A7"], "A7": ["A8"], "A8": ["A9"],
     "A9": ["ASM0"],
-    "B0": ["B1"],
-    "B1": ["B2"],
-    "B2": ["B7P", "B7S"],
-    "B7P": ["B8"],
-    "B7S": ["B8"],
-    "B8": ["B9"],
-    "B9": ["ASM0"],
-    "C0": ["C1"],
-    "C1": ["C2"],
-    "C2": ["C6"],
-    "C6": ["C7"],
+    "B0": ["B1"], "B1": ["B2"], "B2": ["B7P", "B7S"],
+    "B7P": ["B8"], "B7S": ["B8"], "B8": ["B9"], "B9": ["ASM0"],
+    "C0": ["C1"], "C1": ["C2"], "C2": ["C6"], "C6": ["C7"],
     "C7": ["PKG0", "ASM0"],
     "PKG0": ["PKG1", "PKG2"],
-    "PKG1": [],
-    "PKG2": [],
-    "ASM0": ["ASM1"],
-    "ASM1": ["INSP0"],
-    "INSP0": ["ASM2"],
-    "ASM2": ["RWK0"],
-    "RWK0": ["C0"],
+    "PKG1": [], "PKG2": [],
+    "ASM0": ["ASM1"], "ASM1": ["INSP0"], "INSP0": ["ASM2"],
+    "ASM2": ["RWK0"], "RWK0": ["C0"],
 }
 _UPSTREAM_MACHINES = {
-    "A0": [],
-    "A1": ["A0"],
-    "A2": ["A1"],
-    "A7": ["A2"],
-    "A8": ["A7"],
-    "A9": ["A8"],
-    "B0": [],
-    "B1": ["B0"],
-    "B2": ["B1"],
-    "B7P": ["B2"],
-    "B7S": ["B2"],
-    "B8": ["B7P", "B7S"],
-    "B9": ["B8"],
-    "C0": ["RWK0"],
-    "C1": ["C0"],
-    "C2": ["C1"],
-    "C6": ["C2"],
-    "C7": ["C6"],
-    "PKG0": ["C7"],
-    "PKG1": ["PKG0"],
-    "PKG2": ["PKG0"],
-    "ASM0": ["A9", "B9", "C7"],
-    "ASM1": ["ASM0"],
-    "INSP0": ["ASM1"],
-    "ASM2": ["INSP0"],
-    "RWK0": ["ASM2"],
+    "A0": [], "A1": ["A0"], "A2": ["A1"], "A7": ["A2"], "A8": ["A7"], "A9": ["A8"],
+    "B0": [], "B1": ["B0"], "B2": ["B1"], "B7P": ["B2"], "B7S": ["B2"],
+    "B8": ["B7P", "B7S"], "B9": ["B8"],
+    "C0": ["RWK0"], "C1": ["C0"], "C2": ["C1"], "C6": ["C2"], "C7": ["C6"],
+    "PKG0": ["C7"], "PKG1": ["PKG0"], "PKG2": ["PKG0"],
+    "ASM0": ["A9", "B9", "C7"], "ASM1": ["ASM0"], "INSP0": ["ASM1"],
+    "ASM2": ["INSP0"], "RWK0": ["ASM2"],
 }
 
 
@@ -1807,9 +1711,7 @@ def compute_hop(
         curr, d = queue.pop(0)
         if d >= max_depth:
             continue
-        neighbors = _DOWNSTREAM_MACHINES.get(curr, []) + _UPSTREAM_MACHINES.get(
-            curr, []
-        )
+        neighbors = _DOWNSTREAM_MACHINES.get(curr, []) + _UPSTREAM_MACHINES.get(curr, [])
         for n in neighbors:
             if n not in visited:
                 visited[n] = d + 1
@@ -1931,7 +1833,9 @@ def _episode_len_override(fn):
             or not isinstance(episode_len, int)
             or episode_len < 1
         ):
-            raise ValueError(f"episode_len must be a positive int, got {episode_len!r}")
+            raise ValueError(
+                f"episode_len must be a positive int, got {episode_len!r}"
+            )
         tex = _validate_texture(texture)
         prev, T = T, episode_len if episode_len is not None else T
         try:
@@ -1995,11 +1899,7 @@ def run_episode(
         if not isinstance(maintenance, list):
             raise ValueError("maintenance must be a list of {machine, t} dicts or None")
         for entry in maintenance:
-            if (
-                not isinstance(entry, dict)
-                or "machine" not in entry
-                or "t" not in entry
-            ):
+            if not isinstance(entry, dict) or "machine" not in entry or "t" not in entry:
                 raise ValueError("maintenance entries must be {machine, t} dicts")
             name = entry["machine"]
             t = entry["t"]
@@ -2019,7 +1919,10 @@ def run_episode(
             or var_dict.get("variant_id") == VARIANT_ID
             or variant == VARIANT_ID
         )
-        non_exempt = [s for s in specs if not s.get("rep") and s.get("id") != "F-25"]
+        non_exempt = [
+            s for s in specs
+            if not s.get("rep") and s.get("id") != "F-25"
+        ]
         # Rep pins are oracle-comparability fixtures; F-25 is the documented
         # known-breach (12x2=24 > 14.4) exempted to keep the baseline oracle
         # byte-identical. Single-fault rep episodes skip the budget loudly
@@ -2046,11 +1949,7 @@ def run_episode(
 
     env = simpy.Environment()
     agv = simpy.Resource(env, capacity=AGV_CAP)
-    stores = {
-        n: simpy.Store(env, capacity=c)
-        for n, c in effective_caps.items()
-        if n != "_C7TAIL"
-    }
+    stores = {n: simpy.Store(env, capacity=c) for n, c in effective_caps.items() if n != "_C7TAIL"}
     stores["_C7TAIL"] = simpy.Store(
         env, capacity=c7_cap
     )  # AGV drains this; dedicated cap-15 tail store (==15), never the C67 gap
@@ -2245,9 +2144,7 @@ def run_episode(
                 _kit_c += 1
     _cell_wait = sum(1 for i in _cell_idx for t in range(T) if _st[i][t] == "STARVED")
     _rwk_idle = sum(1 for t in range(T) if _st[_rwk0][t] == "STARVED")
-    _raw_st = sum(
-        1 for m in range(N_MACHINES) for t in range(T) if _st[m][t] == "STARVED"
-    )
+    _raw_st = sum(1 for m in range(N_MACHINES) for t in range(T) if _st[m][t] == "STARVED")
     assert _feed_wait + _kit_a + _kit_b + _kit_c + _cell_wait + _rwk_idle == _raw_st
     flow_stats["starved_split"] = {
         "feed_wait": _feed_wait,
@@ -2264,9 +2161,7 @@ def run_episode(
         family = specs[0]["class"]
         mode = (
             _FAULT_MODE_PHYSICAL
-            if any(
-                classify_fault_mode(s["class"]) == _FAULT_MODE_PHYSICAL for s in specs
-            )
+            if any(classify_fault_mode(s["class"]) == _FAULT_MODE_PHYSICAL for s in specs)
             else _FAULT_MODE_OBSERVATION
         )
     else:
@@ -2285,16 +2180,11 @@ def run_episode(
             }
 
         # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
-        active_machines = sorted(
-            [m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED]
-        )
+        active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
         total_active_steps = len(active_machines) * denom
         active_indices = [MACHINE_INDEX[m] for m in active_machines]
         plant_shares = {
-            st: sum(
-                1 for idx in active_indices for s in _st[idx][WARMUP_STEPS:] if s == st
-            )
-            / total_active_steps
+            st: sum(1 for idx in active_indices for s in _st[idx][WARMUP_STEPS:] if s == st) / total_active_steps
             for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
         }
         plant_state_rollup = {
@@ -2312,14 +2202,11 @@ def run_episode(
             }
 
         # Plant rollup over 24 machines (STANDBY_EXCLUDED: B7S, RWK0 excluded)
-        active_machines = sorted(
-            [m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED]
-        )
+        active_machines = sorted([m for m in MACHINE_INDEX if m not in STANDBY_EXCLUDED])
         total_active_steps = len(active_machines) * T
         active_indices = [MACHINE_INDEX[m] for m in active_machines]
         plant_shares = {
-            st: sum(1 for idx in active_indices for s in _st[idx] if s == st)
-            / total_active_steps
+            st: sum(1 for idx in active_indices for s in _st[idx] if s == st) / total_active_steps
             for st in ("RUN", "STARVED", "BLOCKED", "DOWN")
         }
         plant_state_rollup = {
@@ -2360,23 +2247,16 @@ def run_episode(
     flow_stats["energy"] = _energy_header(
         shared["currents"], shared["flow"]["packaged"]
     )
-    stat_probe = probe_stationarity(
-        {
-            "states": shared["states"],
-            "buffers": buf_rows,
-            "T": T,
-        }
-    )
+    stat_probe = probe_stationarity({
+        "states": shared["states"],
+        "buffers": buf_rows,
+        "T": T,
+    })
     maint_resets: dict[str, set[int]] = {}
     for entry in maint_entries:
         maint_resets.setdefault(entry["machine"], set()).add(entry["t"])
         shared["events"].append(
-            {
-                "event": "MAINT_EVENT",
-                "t": entry["t"],
-                "machine": entry["machine"],
-                "detail": {},
-            }
+            {"event": "MAINT_EVENT", "t": entry["t"], "machine": entry["machine"], "detail": {}}
         )
     if maint_entries:
         shared["events"].sort(key=lambda e: int(e.get("t", 0)))
@@ -2409,9 +2289,7 @@ def run_episode(
         "strat": {
             "episode_id": seed,
             "wear_endpoint": float(max(wstate)),
-            "wstate_per_machine": {
-                name: float(wstate[MACHINE_INDEX[name]]) for name in _MACHINE_ORDER
-            },
+            "wstate_per_machine": {name: float(wstate[MACHINE_INDEX[name]]) for name in _MACHINE_ORDER},
             "maint_flag": has_maint,
             "maint_flag_unvalidated": not has_maint,
             "family": family,
@@ -2462,18 +2340,12 @@ def probe_stationarity(record: dict) -> dict[str, Any]:
     n_bufs = len(buffers) if buffers else 1
 
     transient_starved = (
-        sum(1 for m in states for s in m[:w0_steps] if s == "STARVED")
-        / (n_mach * w0_steps)
+        sum(1 for m in states for s in m[:w0_steps] if s == "STARVED") / (n_mach * w0_steps)
         if w0_steps > 0
         else 0.0
     )
     post_starved = (
-        sum(
-            1
-            for m in states
-            for s in m[w0_steps : w0_steps + w1_steps]
-            if s == "STARVED"
-        )
+        sum(1 for m in states for s in m[w0_steps : w0_steps + w1_steps] if s == "STARVED")
         / (n_mach * w1_steps)
         if w1_steps > 0
         else 0.0
@@ -2485,17 +2357,14 @@ def probe_stationarity(record: dict) -> dict[str, Any]:
         else 0.0
     )
     post_buf = (
-        sum(sum(b[w0_steps : w0_steps + w1_steps]) for b in buffers)
-        / (n_bufs * w1_steps)
+        sum(sum(b[w0_steps : w0_steps + w1_steps]) for b in buffers) / (n_bufs * w1_steps)
         if w1_steps > 0 and n_bufs > 0
         else 0.0
     )
 
     return {
         "transient_window": (0, w0_steps - 1) if w0_steps > 0 else (0, 0),
-        "post_window": (w0_steps, w0_steps + w1_steps - 1)
-        if w1_steps > 0
-        else (w0_steps, w0_steps),
+        "post_window": (w0_steps, w0_steps + w1_steps - 1) if w1_steps > 0 else (w0_steps, w0_steps),
         "transient_starved_share": transient_starved,
         "post_starved_share": post_starved,
         "starved_delta": post_starved - transient_starved,
@@ -2726,9 +2595,7 @@ def build_faults(seed: int = 12345, episode_len: int | None = None) -> list[dict
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
     if episode_len is not None and (
-        isinstance(episode_len, bool)
-        or not isinstance(episode_len, int)
-        or episode_len < 1
+        isinstance(episode_len, bool) or not isinstance(episode_len, int) or episode_len < 1
     ):
         raise ValueError(f"episode_len must be a positive int, got {episode_len!r}")
     H = T if episode_len is None else episode_len
@@ -2854,11 +2721,7 @@ def build_faults_variant(
     manifest (docs-battery-ladder-variant-182.json).
     """
     effective_seed = master if master != 12345 and seed == 12345 else seed
-    if (
-        isinstance(effective_seed, bool)
-        or not isinstance(effective_seed, int)
-        or effective_seed < 0
-    ):
+    if isinstance(effective_seed, bool) or not isinstance(effective_seed, int) or effective_seed < 0:
         raise ValueError(f"seed must be a non-negative int, got {effective_seed!r}")
     seq = np.random.SeedSequence((effective_seed,))
     children = seq.spawn(36)
@@ -2875,49 +2738,35 @@ def build_faults_variant(
         raw_mag = float(rng_place.uniform(mlo, mhi))
         u = (raw_mag - mlo) / (mhi - mlo)
         if rung == "incipient":
-            mag = (
-                MAG_LADDER["incipient"][0]
-                + (MAG_LADDER["incipient"][1] - MAG_LADDER["incipient"][0]) * u
-            )
+            mag = MAG_LADDER["incipient"][0] + (MAG_LADDER["incipient"][1] - MAG_LADDER["incipient"][0]) * u
         else:
             mag = raw_mag
 
         if cls == "delay" and "d" not in extra:
             raw_d = int(rng_place.integers(ddlo, ddhi + 1))
             if rung == "incipient":
-                extra["d"] = (
-                    LOW_RUNG_DELAY_D[0] if (raw_d - ddlo) < 2 else LOW_RUNG_DELAY_D[1]
-                )
+                extra["d"] = LOW_RUNG_DELAY_D[0] if (raw_d - ddlo) < 2 else LOW_RUNG_DELAY_D[1]
             else:
                 extra["d"] = raw_d
         elif cls == "loss" and "drop_rate" not in extra:
             raw_drop = float(rng_place.uniform(rlo, rhi))
             if rung == "incipient":
                 u_extra = (raw_drop - rlo) / (rhi - rlo)
-                extra["drop_rate"] = float(
-                    LOW_RUNG_DROP_RATE[0]
-                    + (LOW_RUNG_DROP_RATE[1] - LOW_RUNG_DROP_RATE[0]) * u_extra
-                )
+                extra["drop_rate"] = float(LOW_RUNG_DROP_RATE[0] + (LOW_RUNG_DROP_RATE[1] - LOW_RUNG_DROP_RATE[0]) * u_extra)
             else:
                 extra["drop_rate"] = raw_drop
         elif cls == "breakdown" and "mttr_mult" not in extra:
             raw_mult = float(rng_place.uniform(mulo, muhi))
             if rung == "incipient":
                 u_extra = (raw_mult - mulo) / (muhi - mulo)
-                extra["mttr_mult"] = float(
-                    LOW_RUNG_MTTR_MULT[0]
-                    + (LOW_RUNG_MTTR_MULT[1] - LOW_RUNG_MTTR_MULT[0]) * u_extra
-                )
+                extra["mttr_mult"] = float(LOW_RUNG_MTTR_MULT[0] + (LOW_RUNG_MTTR_MULT[1] - LOW_RUNG_MTTR_MULT[0]) * u_extra)
             else:
                 extra["mttr_mult"] = raw_mult
         elif cls == "quality" and "reject_rate" not in extra:
             raw_reject = float(rng_place.uniform(rjlo, rjhi))
             if rung == "incipient":
                 u_extra = (raw_reject - rjlo) / (rjhi - rjlo)
-                extra["reject_rate"] = float(
-                    LOW_RUNG_REJECT_RATE[0]
-                    + (LOW_RUNG_REJECT_RATE[1] - LOW_RUNG_REJECT_RATE[0]) * u_extra
-                )
+                extra["reject_rate"] = float(LOW_RUNG_REJECT_RATE[0] + (LOW_RUNG_REJECT_RATE[1] - LOW_RUNG_REJECT_RATE[0]) * u_extra)
             else:
                 extra["reject_rate"] = raw_reject
         return mag
@@ -3096,8 +2945,7 @@ def replay_digest(record):
             f"{record.get('schema_version')!r}, want {TWIN_SCHEMA}"
         )
     scrubbed = {
-        k: v
-        for k, v in record.items()
+        k: v for k, v in record.items()
         if k not in _WALLCLOCK_KEYS and k not in _DIGEST_SCRUB_RECORD_KEYS
     }
     _fs = scrubbed.get("flow_stats")
@@ -3506,13 +3354,10 @@ def main(argv=None):
             "variant_id": funnel_res["variant_id"],
             "seeds": list(funnel_res["seeds"]),
             "jobs": args.jobs,
-            "env": funnel_res.get(
-                "env",
-                {
-                    "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
-                    "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
-                },
-            ),
+            "env": funnel_res.get("env", {
+                "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+                "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+            }),
         }
         _write_json(
             evdir / "wall_report.json",
@@ -3607,13 +3452,10 @@ def _write_partial(args, manifest, rows, master, cal_mean, budget_cap):
         "variant_id": funnel_res["variant_id"],
         "seeds": list(funnel_res["seeds"]),
         "jobs": jobs_val,
-        "env": funnel_res.get(
-            "env",
-            {
-                "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
-                "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
-            },
-        ),
+        "env": funnel_res.get("env", {
+            "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "7"),
+            "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", "1"),
+        }),
     }
     _write_json(
         evdir / "wall_report.json",
