@@ -11,4 +11,5 @@ stumpy==1.14.1
 pandas==2.2.3
 pyarrow==25.0.0
 scikit-learn==1.5.0
+psycopg[binary]==3.2.4  # live incident store (tests use stdlib sqlite)
 

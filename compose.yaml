@@ -45,9 +45,27 @@ services:
       retries: 5
       start_period: 10s
 
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: verdandi
+      POSTGRES_USER: verdandi
+      POSTGRES_PASSWORD: verdandi
+    volumes:
+      - verdandi-pgdata:/var/lib/postgresql/data
+    networks:
+      - app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verdandi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 networks:
   app:
     driver: bridge
 
 volumes:
   verdandi-artifacts:
+  verdandi-pgdata:
