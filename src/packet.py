@@ -12,7 +12,7 @@ def emit_packet(
     *,
     trigger: int,
     sensor_verdict: str,
-    family: str | None,
+    fault_family: str | None,
     onset_err_tol: int = 10,
 ) -> dict:
     """Build the evidence packet. Empty diag -> abstain verdict."""
@@ -22,7 +22,7 @@ def emit_packet(
             "onset": None,
             "trigger": int(trigger),
             "sensor_verdict": sensor_verdict,
-            "family": family,
+            "fault_family": fault_family,
             "verdict": "abstain",
             "trace": [],
         }
@@ -32,7 +32,7 @@ def emit_packet(
         "onset": int(top["onset"]),
         "trigger": int(trigger),
         "sensor_verdict": sensor_verdict,
-        "family": family,
+        "fault_family": fault_family,
         "verdict": "diagnosed",
         "onset_kind": top.get("onset_kind"),
         "own_state": top.get("own_state"),
