@@ -379,6 +379,7 @@ def export(
                     sensor_vs_process_val = twin.classify_sensor_vs_process(
                         fault_family_val
                     )
+                    t0_step_val = int(win_f.get("t0", -1))
                 elif symptom_candidates:
                     symptom_candidates.sort(key=lambda x: (x[0], x[1]))
                     win_h, _, win_f = symptom_candidates[0]
@@ -404,6 +405,7 @@ def export(
                     sensor_vs_process_val = twin.classify_sensor_vs_process(
                         fault_family_val
                     )
+                    t0_step_val = int(win_f.get("t0", -1))
                 else:
                     y_val = 0
                     fault_mask_val = 0
@@ -415,6 +417,7 @@ def export(
                     mag_sigma_val = 0.0
                     mag_rung_val = "none"
                     sensor_vs_process_val = "unknown"
+                    t0_step_val = -1
 
                 if effective_schema_version == 5:
                     # Legacy v5 root-only window without symptom separation
@@ -435,6 +438,7 @@ def export(
                         )
                         root_id_step_val = str(af.get("origin", "none"))
                         hop_step_val = 0
+                        t0_step_val = int(af.get("t0", -1))
                     else:
                         y_val = 0
                         fault_mask_val = 0
@@ -442,6 +446,7 @@ def export(
                         fault_mode_val = "normal"
                         root_id_step_val = "none"
                         hop_step_val = -1
+                        t0_step_val = -1
 
                 max_stale = max(stale_counts)
                 if max_stale >= 6:
@@ -495,6 +500,7 @@ def export(
                     row["is_down"] = is_down_val
                     row["root_id_step"] = root_id_step_val
                     row["hop_step"] = hop_step_val
+                    row["t0_step"] = int(t0_step_val)
 
                     # H-state split-head features
                     row["dwell_steps"] = int(max(dwell_counts))
@@ -546,6 +552,7 @@ def export(
                     row["is_down"] = bool(is_down_val)
                     row["root_id_step"] = str(root_id_step_val)
                     row["hop_step"] = int(hop_step_val)
+                    row["t0_step"] = int(t0_step_val)
 
                     # H-state split-head features (v6 root-anchored counters)
                     if (
