@@ -92,13 +92,33 @@ def test_episode_family_labels_clean_windows_with_episode_family():
 def test_save_oof_writes_scored_windows(tmp_path):
     import pandas as pd
 
+    from scripts.gen_mass_battery import main as gen_main
     from scripts.train_windows import main
 
+    assert (
+        gen_main(
+            [
+                "--n-per-cell",
+                "1",
+                "--n-clean",
+                "2",
+                "--seed",
+                "0",
+                "--manifest",
+                str(tmp_path / "m.json"),
+                "--out",
+                str(tmp_path / "mass.parquet"),
+                "--shard-eps",
+                "8",
+            ]
+        )
+        == 0
+    )
     out = tmp_path / "oof.parquet"
     rc = main(
         [
             "--parquet",
-            "/tmp/opencode/msh_*.parquet",
+            str(tmp_path / "mass_*.parquet"),
             "--splits",
             "2",
             "--save-oof",
