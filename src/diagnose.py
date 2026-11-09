@@ -316,3 +316,90 @@ def diagnose_from_trigger(
             h = compute_hop(top, r["machine"], max_depth=3)
             r["hop_est"] = int(h) if h is not None else -1
     return kept
+
+
+def diagnose_incident(
+    g,
+    obs_cols: list[str],
+    trigger: int,
+    edges: dict[str, list[str]],
+    store=None,
+    seed: int = 0,
+    fault_family: str = "unknown",
+    back: int = 16,
+    h: int = 150,
+    forecast_fn=None,
+) -> dict:
+    """Full gated diagnosis: onsets → radius-2 candidates → rank → path → link → report.
+
+    forecast_fn(root, t_det) -> [(machine, tick, hop_est)]; default None
+    (no forecast branch). store: IncidentStore or None (no persistence).
+    Silent-on-clean shape: empty kept entries -> abstain report, never a guess.
+    """
+    from src.incidents_store import IncidentStore  # noqa: F401 (re-export hint)
+    from src.possibility import best_path, neighborhood, rank_nodes
+    from src.report import build_report
+
+    kept = diagnose_from_trigger(g, obs_cols, trigger, back=back)
+    if not kept:
+        return {
+            "root": None, "fault_family": fault_family, "path": [],
+            "path_prob": 0.0, "nodes": [], "upstream": "", "downstream": [],
+            "linked": [], "abstain": "silent-clean",
+        }
+    changed = {r["machine"] for r in kept}
+    anchor = max(kept, key=lambda r: r["onset"])["machine"]
+    nb = neighborhood(anchor, changed, edges, radius=2)
+
+    def _eweight(r: dict) -> float:
+        # Direction signature first (mirrors diagnose_from_trigger):
+        # state-DOWN origin beats everything; STARVED-only is a symptom.
+        if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
+            return 1.0
+        if r["own_state"] == "STARVED" and r["onset_kind"] != "counter":
+            return 0.1
+        if r["onset_kind"] in ("state", "counter", "oracle"):
+            return 0.6
+        return 0.3
+
+    evidence = {
+        r["machine"]: {"onset": r["onset"], "score": _eweight(r)}
+        for r in kept if r["machine"] in nb
+    }
+    if not evidence:
+        return {
+            "root": None, "fault_family": fault_family, "path": [],
+            "path_prob": 0.0, "nodes": [], "upstream": "", "downstream": [],
+            "linked": [], "abstain": "low-recall",
+        }
+    probs = rank_nodes(
+        evidence, {k: list(v) for k, v in edges.items()}, trigger=anchor
+    )
+    if isinstance(probs, tuple):
+        probs = probs[0]
+    path, path_prob = best_path(probs, edges, anchor)
+    root = path[0]
+    t0 = next((r["onset"] for r in kept if r["machine"] == root), trigger)
+    forecast = list(forecast_fn(root, t0)) if forecast_fn else []
+    meta = {
+        r["machine"]: {
+            "onset": r["onset"], "own_state": r["own_state"],
+            "metrics": [(f"obs_{r['machine']}", r["onset_kind"])],
+        }
+        for r in kept
+    }
+    linked: list = []
+    if store is not None:
+        inc = store.create_incident(root, fault_family, t0, seed)
+        if forecast:
+            store.save_prediction(inc, forecast)
+        for m in path:
+            mo = next((r["onset"] for r in kept if r["machine"] == m), t0)
+            st = next((r["own_state"] for r in kept if r["machine"] == m), "RUN")
+            _, ok = store.link_or_create(m, mo, st, seed, h=h)
+            if ok:
+                linked.append((m, mo))
+    return build_report(
+        root=root, fault_family=fault_family, scores=probs, edges=edges,
+        anchor=anchor, forecast=forecast, meta=meta, linked=linked,
+    )
