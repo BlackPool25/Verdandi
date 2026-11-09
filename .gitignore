@@ -28,4 +28,3 @@ playwright-report/
 frontend/qa-*
 .commandcode/
 docs/synopsis/
-docs/m0b_mass_manifest.json
