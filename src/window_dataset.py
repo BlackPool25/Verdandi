@@ -99,11 +99,18 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
 
 
 def build_windows(
-    df: pd.DataFrame, *, w: int = 32, stride: int = 8, invariant: bool = False
+    df: pd.DataFrame,
+    *,
+    w: int = 32,
+    stride: int = 8,
+    invariant: bool = False,
+    offset: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Slide windows over each episode; return (X, y, fam, groups).
 
     invariant=True emits origin-invariant features (no channel identity).
+    offset shifts the grid phase (streaming inference never aligns to the
+    training grid; offset=stride//2 is the worst case to test).
     """
     if w < 1:
         raise ValueError(f"w must be >= 1, got {w}")
@@ -119,7 +126,7 @@ def build_windows(
             if "fault_family" in g
             else np.array(["none"] * len(g))
         )
-        for s in range(0, len(g) - w + 1, stride):
+        for s in range(offset, len(g) - w + 1, stride):
             seg = g.iloc[s : s + w]
             xs.append(
                 _window_features_invariant(seg, obs_cols)
