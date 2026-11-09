@@ -17,7 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 BATTERY_ID = "m0b-mass-balanced-v1"
 MANIFEST_OUT = "docs/m0b_mass_manifest.json"
 PARQUET_OUT = "artifacts/m0b_mass.parquet"
-BASE_EP, BASE_CLEAN = 40000, 42000
+BASE_SEED_EP = 40000
 FAMILIES = ("bias", "breakdown", "delay", "drift", "loss", "quality", "spike")
 RUNGS = ("incipient", "caricature")
 
@@ -32,6 +32,12 @@ def build_specs(
     faults: dict[int, dict] = {}
     fault_eps: list[int] = []
     k = 0
+    # Fault IDs come first; clean IDs start past the whole fault block — no
+    # overlap, ever (at n_per_cell=100 the ranges happened to miss; at 300
+    # the clean block landed inside the fault block and 200 clean episodes
+    # silently became faults).
+    n_fault = len(FAMILIES) * len(RUNGS) * n_per_cell
+    base_fault, base_clean = BASE_SEED_EP, BASE_SEED_EP + n_fault + 1000
     # Faults strike any machine at any valid onset (uniform over machines and
     # the feasible onset window). A single origin/onset teaches the model one
     # machine's baselines — and invites memorizing (machine, time) instead of
@@ -43,7 +49,7 @@ def build_specs(
     for fam in FAMILIES:
         for rung in RUNGS:
             for j in range(n_per_cell):
-                ep = BASE_EP + k
+                ep = base_fault + k
                 k += 1
                 mag = 0.5 if rung == "incipient" else 4.0
                 # Twin rate budget: fault union <= 14 steps/ep (0.08*180).
@@ -68,7 +74,8 @@ def build_specs(
                     "t0": int(rng.integers(config.CAL_WIN, config.T - dur - 5)),
                 }
                 fault_eps.append(ep)
-    clean_eps = [BASE_CLEAN + i for i in range(n_clean)]
+    clean_eps = [base_clean + i for i in range(n_clean)]
+    assert not (set(fault_eps) & set(clean_eps)), "fault/clean episode ID collision"
     return fault_eps, clean_eps, faults
 
 
