@@ -20,6 +20,10 @@ structural counters), fold-fit clean normalization. 3-fold GroupKFold OOF.
 - Runtime: 6.8 ms/window, ~119k windows/s, reload-identical
 - Streaming delay: p50 0 ticks (early-fire on wide windows inflates this)
 - Artifact: 23 feats, `artifacts/window-gbm-w128-v2/`
+- Wide-battery check (rug=wide: 3x noise floors, drift/gain, 1% dropouts):
+  tuned F1 **0.818** (vs 0.846 dense, -0.036), episode-hit 0.986, per-family
+  recall all >= 0.87 (drift 0.88, quality 0.91 — *up* vs dense), per-origin
+  0.81-1.00. Randomization costs precision, buys recall on weak families.
 - Threshold-free triage: **VUS-PR 0.68** (buffer-integrated, per-episode mean)
 - NAB event scores (global 0.5 operating point): standard 0.41 / low-FP 0.08 /
   low-FN 0.58 — single-number NAB retired; report the triple
