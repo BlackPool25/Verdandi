@@ -138,3 +138,35 @@ def test_build_jobs_equivalence():
     np.testing.assert_allclose(a[0], b[0])
     np.testing.assert_array_equal(a[1], b[1])
     assert list(a[4]) == list(b[4])  # starts identical across backends
+
+
+def test_window_roots_majority_vote():
+    import numpy as np
+    import pandas as pd
+
+    from src.window_dataset import build_windows
+
+    n = 100
+    d = {
+        "episode_id": [1] * n,
+        "step": list(range(n)),
+        "y": [0] * 40 + [1] * 20 + [0] * 40,
+        "fault_family": ["none"] * 40 + ["bias"] * 20 + ["none"] * 40,
+        "root_id_step": [""] * 40 + ["M0"] * 12 + ["M1"] * 8 + [""] * 40,
+    }
+    rng = np.random.default_rng(0)
+    for i in range(3):
+        d[f"obs_M{i}"] = rng.normal(0, 1, size=n)
+    df = pd.DataFrame(d)
+    X, _y, _fam, _grp, roots = build_windows(
+        df, w=16, stride=8, invariant=True, return_roots=True
+    )
+    assert len(roots) == len(X)
+    assert set(roots.tolist()) <= {"", "none", "M0", "M1"}
+    assert "M0" in roots.tolist() and "none" in roots.tolist()
+    # windows fully inside the M0 block vote M0
+    assert all(
+        r == "M0"
+        for r, s in zip(roots.tolist(), range(0, n - 16 + 1, 8))
+        if 40 <= s and s + 16 <= 52
+    )

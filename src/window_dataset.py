@@ -108,7 +108,9 @@ def _episode_windows(job: tuple) -> tuple:
         if "fault_family" in g
         else np.array(["none"] * len(g))
     )
-    xs, ys, fams, groups, starts = [], [], [], [], []
+    xs, ys, fams, groups, starts, roots = [], [], [], [], [], []
+    has_root = "root_id_step" in g.columns
+    rootv = g["root_id_step"].to_numpy() if has_root else np.array([""] * len(g))
     for s in range(off, len(g) - w + 1, stride):
         seg = g.iloc[s : s + w]
         base = (
@@ -123,7 +125,13 @@ def _episode_windows(job: tuple) -> tuple:
         fams.append(str(ff[0]) if len(ff) else "none")
         groups.append(ep)
         starts.append(s)
-    return (xs, ys, fams, groups, starts)
+        rr = rootv[s : s + w][win_y == 1]
+        if len(rr):
+            vals, counts = np.unique(rr.astype(str), return_counts=True)
+            roots.append(str(vals[int(np.argmax(counts))]))
+        else:
+            roots.append("none")
+    return (xs, ys, fams, groups, starts, roots)
 
 
 def build_windows(
@@ -136,6 +144,7 @@ def build_windows(
     jitter: int = 0,
     seed: int = 0,
     return_starts: bool = False,
+    return_roots: bool = False,
     build_jobs: int = 1,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
@@ -146,7 +155,9 @@ def build_windows(
     jitter>0 draws a per-episode grid offset in [0, jitter) (phase-jittered
     training: free shift augmentation, no new data).
     return_starts=True appends window start ticks (needed for point
-    aggregation) as a fifth element. return_regimes=True appends the
+    aggregation) as a fifth element. return_roots=True appends the
+    per-window root machine (mode of root_id_step over fault steps,
+    "none" when clean) as the last element.
     build_jobs>1 fans episodes out to worker processes (order-preserving;
     jitter draws stay serial so the grid is identical to build_jobs=1).
     """
@@ -167,17 +178,20 @@ def build_windows(
 
         with ProcessPoolExecutor(max_workers=build_jobs) as ex:
             parts = list(ex.map(_episode_windows, jobs))
-    xs, ys, fams, groups, starts = [], [], [], [], []
-    for px, py, pf, pg, ps in parts:
+    xs, ys, fams, groups, starts, roots = [], [], [], [], [], []
+    for px, py, pf, pg, ps, pr in parts:
         xs += px
         ys += py
         fams += pf
         groups += pg
         starts += ps
+        roots += pr
     X, y, fam, grp = (np.array(xs), np.array(ys), np.array(fams), np.array(groups))
     out: tuple = (X, y, fam, grp)
     if return_starts:
         out += (np.array(starts),)
+    if return_roots:
+        out += (np.array(roots),)
     return out
 
 
