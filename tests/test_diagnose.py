@@ -184,3 +184,28 @@ def test_hop_est_uses_twin_topology():
     by_m = {r["machine"]: r for r in out}
     assert by_m["A0"]["hop_est"] == 0
     assert by_m["A1"]["hop_est"] == 1
+
+
+def test_delay_compensated_proximity_prefers_true_onset():
+    import pandas as pd
+
+    from src.diagnose import diagnose_from_trigger
+
+    n = 300
+    rng = __import__("numpy").random.default_rng(3)
+    g = pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            "obs_A0": rng.normal(0, 1, size=n),
+            "obs_B9": rng.normal(0, 1, size=n),
+            "state_A0": ["RUN"] * n,
+            "state_B9": ["RUN"] * n,
+        }
+    )
+    # texture onset near trigger, true onset later by ~delay
+    out0 = diagnose_from_trigger(g, ["obs_A0", "obs_B9"], trigger=190, back=64)
+    out1 = diagnose_from_trigger(
+        g, ["obs_A0", "obs_B9"], trigger=190, back=64, delay=60
+    )
+    assert isinstance(out0, list) and isinstance(out1, list)

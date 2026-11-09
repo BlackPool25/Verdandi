@@ -264,6 +264,7 @@ def diagnose_from_trigger(
     trigger: int,
     back: int = 16,
     oracle_onset: dict[str, int] | None = None,
+    delay: int = 0,
 ) -> list[dict]:
     """Trigger-gated multi-origin diagnosis (alongside frozen detector).
 
@@ -271,16 +272,17 @@ def diagnose_from_trigger(
     fault), then ranks by direction signature and onset distance to the
     trigger. Silent on clean: caller only invokes on fired windows.
     oracle_onset maps machine -> GT tick (ablation only, see
-    diagnose_multi_origin).
+    diagnose_multi_origin). delay shifts the association point to
+    trigger+delay: windowed detection fires early (left overlap), so the
+    true onset sits ~D ticks after the trigger, not at it.
     """
     out = diagnose_multi_origin(g, obs_cols, oracle_onset=oracle_onset)
     # Ablation-only: oracle (GT) entries bypass the back gate so the true
     # root always competes; estimated entries are gated unchanged.
     kept = [
-        r
-        for r in out
-        if r["onset"] >= trigger - back or r["onset_kind"] == "oracle"
+        r for r in out if r["onset"] >= trigger - back or r["onset_kind"] == "oracle"
     ]
+    assoc = trigger + delay
 
     def _trank(r: dict) -> tuple[int, int, int]:
         if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
@@ -289,7 +291,7 @@ def diagnose_from_trigger(
             base = 1
         else:
             base = 2
-        return (base, abs(r["onset"] - trigger), r["onset"])
+        return (base, abs(r["onset"] - assoc), r["onset"])
 
     kept.sort(key=_trank)
     # hop_est from the real twin DAG: 0 at the top candidate, BFS hops

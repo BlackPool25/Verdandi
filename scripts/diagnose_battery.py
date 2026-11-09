@@ -29,7 +29,8 @@ def _init_worker(
     thr_prop: float,
     wait: int,
     oracle: bool = False,
-    abstain_conf: float = 0.8,
+    abstain_hi: float = 0.9,
+    assoc_delay: int = 0,
 ) -> None:
     """Load the frozen model once per worker process (CPU fork-safe)."""
     from src.diagnose import confirm_trigger, diagnose_from_trigger
@@ -45,7 +46,8 @@ def _init_worker(
     _WORKER["thr_prop"] = float(thr_prop)
     _WORKER["wait"] = int(wait)
     _WORKER["oracle"] = bool(oracle)
-    _WORKER["abstain_conf"] = float(abstain_conf)
+    _WORKER["abstain_hi"] = float(abstain_hi)
+    _WORKER["assoc_delay"] = int(assoc_delay)
     _WORKER["confirm_trigger"] = confirm_trigger
     _WORKER["diagnose_from_trigger"] = diagnose_from_trigger
     _WORKER["apply_norm"] = apply_norm
@@ -62,7 +64,8 @@ def _work_episode(job: tuple) -> tuple:
     model, w, stride = _WORKER["model"], _WORKER["w"], _WORKER["stride"]
     med, iqr, n_obs = _WORKER["med"], _WORKER["iqr"], _WORKER["n_obs"]
     thr_prop, wait = _WORKER["thr_prop"], _WORKER["wait"]
-    abstain_conf = float(_WORKER.get("abstain_conf", 0.8))
+    abstain_hi = float(_WORKER.get("abstain_hi", 0.9))
+    assoc_delay = int(_WORKER.get("assoc_delay", 0))
     oracle = _WORKER.get("oracle", False)
     confirm_trigger = _WORKER["confirm_trigger"]
     diagnose_from_trigger = _WORKER["diagnose_from_trigger"]
@@ -80,7 +83,7 @@ def _work_episode(job: tuple) -> tuple:
     m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
     if not m_idx.any():
         return (fam, rung, root, None, None, None, True, "no-window", true_sp)
-    if float(np.abs(s[m_idx] - 0.5).max() * 2) < abstain_conf:
+    if float(s[m_idx].max()) < abstain_hi:
         return (fam, rung, root, None, None, None, True, "low-confidence", true_sp)
     try:
         if oracle:
@@ -90,7 +93,7 @@ def _work_episode(job: tuple) -> tuple:
                 g, obs, anchor, back=back, oracle_onset={root: true_t0}
             )
         else:
-            out = diagnose_from_trigger(g, obs, anchor, back=back)
+            out = diagnose_from_trigger(g, obs, anchor, back=back, delay=assoc_delay)
     except Exception:  # noqa: BLE001 - harness records failures as rows
         return (fam, rung, root, None, None, None, True, "error", true_sp)
     if not out:
@@ -150,15 +153,21 @@ def main(argv: list[str] | None = None) -> int:
         help="override confirm threshold (default: min family threshold, recall-first)",
     )
     ap.add_argument(
-        "--abstain-conf",
+        "--abstain-hi",
         type=float,
-        default=0.8,
-        help="abstain unless an anchor window reaches this confidence |s-0.5|*2 (replaces hand-tuned maxscore gate)",
+        default=0.9,
+        help="abstain unless anchor maxscore reaches hi (risk-coverage curve: tau 0.8 at 2%% risk <-> one-sided 0.9)",
     )
     ap.add_argument(
         "--oracle-onset",
         action="store_true",
         help="ablation only: inject GT onset for the true root (see diagnose_multi_origin)",
+    )
+    ap.add_argument(
+        "--assoc-delay",
+        type=int,
+        default=0,
+        help="association point = trigger+delay (compensates early windowed trigger)",
     )
     args = ap.parse_args(argv)
 
@@ -204,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.n_jobs == 1:
         _init_worker(
-            args.artifact, thr_prop, args.wait, args.oracle_onset, args.abstain_conf
+            args.artifact, thr_prop, args.wait, args.oracle_onset, args.abstain_hi
         )
         done = [_work_episode(j) for j in jobs]
     else:
@@ -218,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
                 thr_prop,
                 args.wait,
                 args.oracle_onset,
-                args.abstain_conf,
+                args.abstain_hi,
             ),
         ) as ex:
             done = list(ex.map(_work_episode, jobs))
