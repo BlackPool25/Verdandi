@@ -135,6 +135,11 @@ def main(argv: list[str] | None = None) -> int:
         help="comma-separated fault_family substring filter (e.g. breakdown,delay)",
     )
     ap.add_argument(
+        "--machine",
+        default="",
+        help="comma-separated root machine substring filter (e.g. ASM1,B7P)",
+    )
+    ap.add_argument(
         "--wait",
         type=int,
         default=32,
@@ -198,6 +203,10 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if args.family and not any(
                 f in str(r["fault_family"]) for f in args.family.split(",")
+            ):
+                continue
+            if args.machine and not any(
+                m in str(r["root_id_step"]) for m in args.machine.split(",")
             ):
                 continue
             meta = (
