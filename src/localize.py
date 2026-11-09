@@ -5,8 +5,8 @@ statistic inside a bounded ROI around the trigger — never from blending
 window scores (killed twice: mean-fusion 0.67, gated-combiner 0.63).
 - Structural families (delay/loss/breakdown): counter-run edge — counters are
   step functions at onset; the first tick of the overlapping positive run.
-- Abrupt obs families (spike/bias/quality): Page-CUSUM backtrack on the
-  residual projection; onset = last zero-crossing of g before the trigger.
+- Abrupt obs families: Page-CUSUM backtrack on the residual projection, onset
+  at the last zero-crossing of g before the trigger.
 - Gradual (drift): EWMA(0.15) control-limit crossing on the same projection.
 """
 
