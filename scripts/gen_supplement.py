@@ -102,7 +102,10 @@ def build_supplement_specs(
                 # (measured 18/20 quality eps with 0 rejects). Frozen
                 # FAULT_RANGES untouched.
                 extra = (
-                    {"reject_rate": float(rng.uniform(0.3, 0.5))}
+                    {
+                        "reject_rate": float(rng.uniform(0.3, 0.5)),
+                        "sink_all": True,
+                    }
                     if fam == "quality"
                     else None
                 )
@@ -131,7 +134,7 @@ def build_supplement_specs(
                 d1,
                 _mag("caricature", rng),
                 k,
-                extra={"reject_rate": float(rng.uniform(0.3, 0.5))}
+                extra={"reject_rate": float(rng.uniform(0.3, 0.5)), "sink_all": True}
                 if f1 == "quality"
                 else None,
             ),
@@ -143,7 +146,7 @@ def build_supplement_specs(
                 d2,
                 _mag("caricature", rng),
                 k + 1,
-                extra={"reject_rate": float(rng.uniform(0.3, 0.5))}
+                extra={"reject_rate": float(rng.uniform(0.3, 0.5)), "sink_all": True}
                 if f2 == "quality"
                 else None,
             ),
