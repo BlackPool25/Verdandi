@@ -30,6 +30,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--rung", default="", help="filter to mag_rung (incipient/caricature)"
     )
+    ap.add_argument(
+        "--wait",
+        type=int,
+        default=32,
+        help="wait budget W in ticks after confirm; anchor=trig+W, past covers W+64 back",
+    )
     args = ap.parse_args(argv)
 
     from src.diagnose import diagnose_from_trigger
@@ -88,7 +94,11 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
                 continue
-            m_idx = (starts >= trig - 150) & (starts <= trig + 150)
+            # L1 causal anchor: past + wait budget W after confirm.
+            # Anchor = trig+W (propagation arrives); past window covers back.
+            anchor = trig + args.wait
+            back = 64 + args.wait
+            m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
             if not m_idx.any():
                 rows.append(
                     (
@@ -103,7 +113,11 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
                 continue
-            anchor = int(starts[m_idx][int(np.argmax(s[m_idx]))])
+            # L1 causal anchor: past + wait budget W after confirm.
+            # Anchor = trig+W (propagation arrives); past window covers back.
+            anchor = trig + args.wait
+            back = 64 + args.wait
+            m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
             # O4 abstain-if-unsure (low-confidence leg only; window-margin
             # is vacuous on overlapping windows — family head needed).
             reason = "low-confidence" if float(s[m_idx].max()) < 0.9 else None
@@ -123,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             n_trig += 1
             try:
-                out = diagnose_from_trigger(g, obs, anchor)
+                out = diagnose_from_trigger(g, obs, anchor, back=back)
             except Exception:  # noqa: BLE001 - harness records failures as rows
                 rows.append(
                     (
