@@ -55,13 +55,16 @@ def finalize(
     seed: int = 0,
     battery_id: str = "m0b-mass-balanced-v1",
     invariant: bool = False,
+    build_jobs: int = 1,
 ) -> dict:
     """Train, calibrate, threshold, save. Returns validation metrics + paths."""
     from sklearn.calibration import CalibratedClassifierCV  # type: ignore[import-untyped]
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
 
     obs_cols = [c for c in df.columns if c.startswith("obs_")]
-    X, y, fam, groups = build_windows(df, w=w, stride=stride, invariant=invariant)
+    X, y, fam, groups = build_windows(
+        df, w=w, stride=stride, invariant=invariant, build_jobs=build_jobs
+    )
     eps = sorted(pd.unique(groups))
     cal_eps = set(eps[2::3])
     cal = np.array([e in cal_eps for e in groups])
@@ -135,6 +138,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--invariant", action="store_true")
+    ap.add_argument(
+        "--build-jobs",
+        type=int,
+        default=1,
+        help="worker processes for window building (episodes are independent)",
+    )
+    ap.add_argument("--battery-id", default="m0b-mass-balanced-v1")
     args = ap.parse_args(argv)
     import glob as _glob
 
@@ -149,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
         stride=args.stride,
         seed=args.seed,
         invariant=args.invariant,
+        battery_id=args.battery_id,
+        build_jobs=args.build_jobs,
     )
     print(
         f"finalized -> {r['out_dir']}: val window-F1={r['window_f1']:.4f} "
