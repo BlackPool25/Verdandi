@@ -68,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--w-b", type=int, default=128)
     ap.add_argument("--stride", type=int, default=8)
     ap.add_argument("--parquet", default="artifacts/m0b_mass_*.parquet")
+    ap.add_argument("--manifest", default="docs/m0b_mass_manifest.json")
     args = ap.parse_args(argv)
     import json
 
@@ -80,9 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     fused, ep, st = fuse_point_scores(
         oof_a, oof_b, df, w_a=args.w_a, w_b=args.w_b, stride=args.stride
     )
-    manifest = json.loads(
-        pathlib.Path("docs/m0b_mass_manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads(pathlib.Path(args.manifest).read_text(encoding="utf-8"))
     y = np.zeros(len(ep))
 
     # Point labels from the battery rows (fault spans), not window labels.
