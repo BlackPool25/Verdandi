@@ -109,6 +109,23 @@ def _lag_deltas(seg: pd.DataFrame, obs_cols: list[str]) -> np.ndarray:
     return np.array(out, dtype=float)
 
 
+def _residual_block(
+    seg: pd.DataFrame, obs_cols: list[str], nominal: np.ndarray
+) -> np.ndarray:
+    # Twin-residual: |seg - nominal| per channel, summarized without
+    # identity (max/mean across channels of mean-abs and max-abs).
+    # nominal = per-channel mean of episode clean prefix (causal).
+    means, maxs = [], []
+    for j, c in enumerate(obs_cols):
+        v = seg[c].to_numpy(dtype=float)
+        r = np.abs(v - nominal[j])
+        means.append(float(r.mean()))
+        maxs.append(float(r.max()))
+    m = np.array(means)
+    x = np.array(maxs)
+    return np.array([m.max(), m.mean(), x.max(), x.mean()], dtype=float)
+
+
 def build_windows(
     df: pd.DataFrame,
     *,
@@ -120,6 +137,7 @@ def build_windows(
     seed: int = 0,
     return_starts: bool = False,
     lags: bool = False,
+    residuals: bool = False,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
 
@@ -147,6 +165,16 @@ def build_windows(
             else np.array(["none"] * len(g))
         )
         off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
+        nominal = (
+            np.array(
+                [g[c].to_numpy(dtype=float)[:30].mean() for c in obs_cols]
+                if residuals
+                else [],
+                dtype=float,
+            )
+            if obs_cols
+            else np.array([], dtype=float)
+        )
         for s in range(off, len(g) - w + 1, stride):
             seg = g.iloc[s : s + w]
             base = (
@@ -156,6 +184,8 @@ def build_windows(
             )
             if lags:
                 base = np.concatenate([base, _lag_deltas(seg, obs_cols)])
+            if residuals:
+                base = np.concatenate([base, _residual_block(seg, obs_cols, nominal)])
             xs.append(base)
             win_y = yv[s : s + w]
             ys.append(int(win_y.any()))

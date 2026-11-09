@@ -106,3 +106,14 @@ def test_lagged_deltas_separate_ramp_from_flat():
     d0 = XL[0, X0.shape[1] :].mean()
     d1 = XL[-1, X0.shape[1] :].mean()
     assert d1 > d0
+
+
+def test_residual_block_separates_bias_from_clean():
+    from src.window_dataset import build_windows
+
+    X0, _, _, _ = build_windows(_df(), w=16, stride=16)
+    XR, _, _, _ = build_windows(_df(), w=16, stride=16, residuals=True)
+    assert XR.shape[1] > X0.shape[1] and np.isfinite(XR).all()
+    r0 = XR[0, X0.shape[1] :].mean()
+    r1 = XR[-1, X0.shape[1] :].mean()
+    assert r1 > r0
