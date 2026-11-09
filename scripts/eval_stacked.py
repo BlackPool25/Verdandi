@@ -5,6 +5,8 @@ import pandas as pd
 
 
 def build_rows(oof: pd.DataFrame, machines: list[str]):
+    pcols = {m: f"proba_{m}" for m in machines if f"proba_{m}" in oof.columns}
+    use_proba = len(pcols) == len(machines)
     rows, y, groups, fam = [], [], [], []
     for ep, g in oof.groupby("ep"):
         truth = g[g["y"] == 1]
@@ -15,12 +17,16 @@ def build_rows(oof: pd.DataFrame, machines: list[str]):
             continue
         family = str(truth["fam"].mode().iloc[0])
         pm = g[g["pred"] != "none"]
-        shares, mx, mean = {}, {}, {}
+        shares, mx = {}, {}
         for m in machines:
-            s = (pm["pred"] == m)
-            shares[m] = float(s.mean()) if len(pm) else 0.0
-            mx[m] = float(s.max()) if len(s) else 0.0
-            mean[m] = shares[m]
+            if use_proba:
+                s = g[pcols[m]].to_numpy(float)
+                shares[m] = float(s.mean())
+                mx[m] = float(s.max())
+            else:
+                s = (pm["pred"] == m)
+                shares[m] = float(s.mean()) if len(pm) else 0.0
+                mx[m] = float(s.max()) if len(s) else 0.0
         order = sorted(machines, key=lambda m: -shares[m])
         rank = {m: i + 1 for i, m in enumerate(order)}
         vals = np.array([shares[m] for m in machines])
@@ -47,7 +53,7 @@ def main():
 
     from src.twin import _MACHINE_ORDER
 
-    oof = pd.read_parquet("/tmp/oof_identity.parquet")
+    oof = pd.read_parquet("/tmp/oof_proba.parquet")
     machines = list(_MACHINE_ORDER)
     X, y, groups, fam = build_rows(oof, machines)
     famids = np.array([hash(f) % (2**31) for f in fam])
@@ -73,7 +79,7 @@ def main():
         oof_pred[te_idx] = bst.predict(X[te][order_te])
     import pandas as _pd
 
-    _oof = _pd.read_parquet("/tmp/oof_identity.parquet")
+    _oof = _pd.read_parquet("/tmp/oof_proba.parquet")
     _votable = set()
     for ep, g in _oof.groupby("ep"):
         if (g["pred"] != "none").any():
