@@ -68,7 +68,7 @@ def test_invariant_width_and_channel_permutation_invariance():
     Xs, _, _, _ = build_windows(swapped, w=16, stride=16, invariant=True)
     assert np.array_equal(Xi, Xs)
     Xa, _, _, _ = build_windows(df, w=16, stride=16, invariant=False)
-    assert Xa.shape[1] == 2 * 5 + 8  # absolute width scales with channel count
+    assert Xa.shape[1] == 2 * 5 + 4  # absolute width scales with channel count
     Xas, _, _, _ = build_windows(swapped, w=16, stride=16, invariant=False)
     assert not np.array_equal(Xa, Xas)  # absolute keys on which channel moved
 

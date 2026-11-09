@@ -10,7 +10,7 @@ def main():
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.model_selection import StratifiedGroupKFold
 
-    from src.window_dataset import STRUCT_COLS, apply_norm, build_windows, fit_clean_norm
+    from src.window_dataset import OBS_STRUCT_COLS, apply_norm, build_windows, fit_clean_norm
 
     paths = sorted(glob.glob("artifacts/m0b_mass_*.parquet"))
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
@@ -20,7 +20,7 @@ def main():
     )
     X, y, fam, groups, starts, roots = out
     fam = np.asarray(fam)
-    n_obs = X.shape[1] - 2 * len(STRUCT_COLS)
+    n_obs = 15  # invariant=True hardcoded above
 
     # 1. family classification on fault windows only
     m = (np.asarray(y) == 1) & (fam != "none")

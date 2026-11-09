@@ -23,7 +23,7 @@ import pandas as pd  # type: ignore[import-untyped]
 
 from scripts.train_windows import episode_family, pick_per_family_thresholds
 from src.train_pipeline import compute_raw_pointwise_f1, pick_threshold_max_f1
-from src.window_dataset import STRUCT_COLS, apply_norm, build_windows, fit_clean_norm
+from src.window_dataset import OBS_STRUCT_COLS, STRUCT_COLS, apply_norm, build_windows, fit_clean_norm, struct_cols_for
 
 STATS = ("mean", "std", "min", "max", "slope")
 
@@ -36,7 +36,7 @@ def feature_names(obs_cols: list[str], *, invariant: bool = False) -> list[str]:
         names = [f"any.{s}.{k}" for k in STATS for s in INVARIANT_STATS]
     else:
         names = [f"{c}.{s}" for c in obs_cols for s in STATS]
-    for c in STRUCT_COLS:
+    for c in struct_cols_for(invariant=invariant):
         if c == "stale_hold_run":
             names += [f"{c}.rate", f"{c}.max"]
         elif c == "cycle_lag":
@@ -68,7 +68,7 @@ def finalize(
     eps = sorted(pd.unique(groups))
     cal_eps = set(eps[2::3])
     cal = np.array([e in cal_eps for e in groups])
-    n_obs = 15 if invariant else X.shape[1] - 2 * len(STRUCT_COLS)
+    n_obs = 15 if invariant else X.shape[1] - 2 * len(OBS_STRUCT_COLS)
     norm_med, norm_iqr = fit_clean_norm(X[~cal], y[~cal], n_obs)
     Xn, Xc = (
         apply_norm(X[~cal], norm_med, norm_iqr, n_obs),
@@ -114,7 +114,7 @@ def finalize(
                 "w": w,
                 "stride": stride,
                 "obs_cols": obs_cols,
-                "struct_cols": list(STRUCT_COLS),
+                "struct_cols": list(struct_cols_for(invariant=bool(invariant))),
                 "features": names,
                 "battery_id": battery_id,
             },

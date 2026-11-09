@@ -25,13 +25,15 @@ def _oof_predict(
     *,
     n_splits: int = 3,
     seed: int = 0,
-) -> np.ndarray:
+    invariant: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
-    from src.window_dataset import STRUCT_COLS, apply_norm, fit_clean_norm
+    from src.window_dataset import OBS_STRUCT_COLS, STRUCT_COLS, apply_norm, fit_clean_norm
 
-    n_obs = X.shape[1] - 2 * len(STRUCT_COLS)
+    n_struct = len(STRUCT_COLS) if invariant else len(OBS_STRUCT_COLS)
+    n_obs = 15 if invariant else X.shape[1] - 2 * n_struct
     classes = np.array(sorted(set(yr.tolist())))
     y = np.searchsorted(classes, np.asarray(yr))
     oof = np.zeros(len(X), dtype=int)
@@ -89,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     X, y, fam, groups, _starts, roots = out
     pred, proba, oof_classes = _oof_predict(
-        X, np.asarray(roots), np.asarray(groups), n_splits=args.splits, seed=args.seed
+        X, np.asarray(roots), np.asarray(groups), n_splits=args.splits, seed=args.seed,
+        invariant=not args.identity,
     )
     hit_w = ((pred == np.asarray(roots)) & (np.asarray(y) == 1)).sum()
     tot_w = int((np.asarray(y) == 1).sum())

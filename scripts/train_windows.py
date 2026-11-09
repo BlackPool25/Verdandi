@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from src.train_pipeline import compute_raw_pointwise_f1, pick_threshold_max_f1
     from src.window_dataset import (
-        STRUCT_COLS,
+        OBS_STRUCT_COLS,
         apply_norm,
         build_windows,
         fit_clean_norm,
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         build_jobs=args.build_jobs,
     )
     X, y, fam, groups = out
-    n_obs = 15 if args.invariant else X.shape[1] - 2 * len(STRUCT_COLS)
+    n_obs = 15 if args.invariant else X.shape[1] - 2 * len(OBS_STRUCT_COLS)
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)
     oof = np.zeros(len(X))

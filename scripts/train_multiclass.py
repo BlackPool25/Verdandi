@@ -31,9 +31,9 @@ def train_multiclass_oof(
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
-    from src.window_dataset import STRUCT_COLS, apply_norm
+    from src.window_dataset import OBS_STRUCT_COLS, apply_norm
 
-    n_obs = X.shape[1] - 2 * len(STRUCT_COLS)
+    n_obs = 15  # invariant=True hardcoded above
     classes = np.array(sorted(set(fam.tolist())))
     y = np.searchsorted(classes, np.asarray(fam))
     cv = StratifiedGroupKFold(n_splits=n_splits)

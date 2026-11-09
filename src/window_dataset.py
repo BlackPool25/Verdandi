@@ -13,7 +13,30 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-STRUCT_COLS = ("cycle_lag", "stale_hold_run", "reject_flag_count", "degrade_flag_count")
+# STRUCT_COLS 2026-11-09: stale_hold_run + reject_flag_count BANNED from
+# the identity path — proven GT-anchored in this battery (clean rows
+# exactly constant: stale_hold_run 108151/108151 zeros, reject_flag_count
+# single value; v6 root-anchored branch with zero fallback). cycle_lag +
+# degrade_flag_count kept: clean rows vary (19/5 uniques), v5-style
+# causal max/median computation, computable at serve time.
+# FROZEN EXCEPTION: the invariant path (v7 detector, 23-feat quarantine)
+# keeps all four until the stale/reject-importance ablation in v7 lands.
+STRUCT_COLS: tuple = ("cycle_lag", "stale_hold_run", "reject_flag_count", "degrade_flag_count")
+OBS_STRUCT_COLS: tuple = ("cycle_lag", "degrade_flag_count")
+
+
+def struct_cols_for(*, invariant: bool) -> tuple:
+    """Struct cols per path: frozen four for invariant, clean two otherwise."""
+    return STRUCT_COLS if invariant else OBS_STRUCT_COLS
+
+# Proven GT-anchored in m0b-mass battery (clean rows exactly constant,
+# v6 root-anchored branch with zero fallback): stale_hold_run, down_run,
+# reject_flag_count — plus label columns by prefix. dwell_steps,
+# cycle_lag, state_hist_delta, degrade_flag_count, buffer_occ vary on
+# clean rows (v5-style causal computation) and stay allowed.
+GT_ANCHORED_COLS = (
+    "stale_hold_run", "down_run", "reject_flag_count",
+)
 
 
 def n_obs_features(n_obs_cols: int) -> int:
@@ -46,12 +69,14 @@ def apply_norm(
     return out
 
 
-def _window_features(seg: pd.DataFrame, obs_cols: list[str]) -> np.ndarray:
+def _window_features(
+    seg: pd.DataFrame, obs_cols: list[str], struct_cols: tuple = OBS_STRUCT_COLS
+) -> np.ndarray:
     parts = []
     for c in obs_cols:
         v = seg[c].to_numpy(dtype=float)
         parts += [v.mean(), v.std(), v.min(), v.max(), v[-1] - v[0]]
-    for c in STRUCT_COLS:
+    for c in struct_cols:
         if c not in seg:
             parts += [0.0, 0.0]
             continue
@@ -94,7 +119,8 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
         col = stats[:, j]
         parts += [float(col.max()), float(col.mean()), float(col.std())]
     out = np.array(parts, dtype=float)
-    struct = _window_features(seg, [])[-8:]
+    # Frozen: invariant detector (v7, 23 feats) keeps all four struct cols.
+    struct = _window_features(seg, [], STRUCT_COLS)[-8:]
     return np.concatenate([out, struct])
 
 

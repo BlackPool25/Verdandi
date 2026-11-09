@@ -16,14 +16,22 @@ def main():
     for f in paths:
         d = pd.read_parquet(f)
         num = d.select_dtypes(include=[np.number]).columns.tolist()
-        drop = {"episode_id", "step", "T", "cal_win", "t0_step", "hop_step",
+        drop = {"episode_id", "step", "T", "cal_win", "hop_step",
                 "code_version", "mag_sigma"}
-        feats = [c for c in num if c not in drop and not c.startswith("buffer_")]
-        d = d[["episode_id", "step", "t0_step"] + feats]
+        gt_prefix = ("fault_", "hop", "root_", "symptom_", "mag_",
+                     "sensor_vs", "coord_", "rung")
+        from src.window_dataset import GT_ANCHORED_COLS
+
+        feats = [c for c in num
+                 if c not in drop and not c.startswith("buffer_")
+                 and not c.startswith(gt_prefix)
+                 and c not in GT_ANCHORED_COLS]
+        keep = [c for c in ["episode_id", "step", "root_id_step", "root_id"] if c in d.columns]
+        d = d[keep + feats]
         rows.append(d)
     df = pd.concat(rows, ignore_index=True)
     X = df[feats].to_numpy(float)
-    y = (df["t0_step"].to_numpy() >= 0).astype(int)
+    y = (df["root_id_step"].to_numpy(dtype=str) != "none").astype(int)
     groups = df["episode_id"].to_numpy()
     oof = np.zeros(len(df))
     cv = GroupKFold(n_splits=3)
@@ -37,10 +45,10 @@ def main():
 
     errs, fired, n = [], 0, 0
     for ep, g in df.groupby("episode_id"):
-        t0s = g[g["t0_step"] >= 0]["t0_step"].to_numpy()
-        if len(t0s) == 0:
+        nn = g[g["root_id_step"].to_numpy(dtype=str) != "none"]
+        if len(nn) == 0:
             continue
-        t0 = int(np.median(t0s))
+        t0 = int(nn["step"].min())
         n += 1
         g = g.sort_values("step")
         s = smooth_causal(g["p"].to_numpy())
