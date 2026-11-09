@@ -57,6 +57,45 @@ def neighborhood(
     return base | extra
 
 
+def best_path(
+    scores: dict[str, float],
+    edges: dict[str, list[str]],
+    anchor: str,
+    max_len: int = 3,
+) -> tuple[list[str], float]:
+    """Best root→anchor path (DP over reverse DAG, uniform edge weights).
+
+    Enumerates paths ending at anchor with <= max_len nodes, scores each
+    as product of node possibilities, normalizes over enumerated paths.
+    Returns (path, prob). Single-node [anchor] if anchor isolated.
+    """
+    rev = _reverse(edges)
+    paths: list[list[str]] = [[anchor]]
+    stack: list[list[str]] = [[anchor]]
+    while stack:
+        cur = stack.pop()
+        if len(cur) >= max_len:
+            continue
+        for u in rev.get(cur[0], []):
+            if u in cur or u not in scores:
+                continue
+            nxt = [u] + cur
+            paths.append(nxt)
+            stack.append(nxt)
+    cands = [p for p in paths if all(n in scores for n in p)]
+    if not cands:
+        return [anchor], 1.0
+    raw = []
+    for p in cands:
+        s = 1.0
+        for n in p:
+            s *= max(float(scores[n]), 1e-12)
+        raw.append(s ** (1.0 / len(p)))  # geomean: comparable across lengths
+    tot = sum(raw) or 1.0
+    i = max(range(len(cands)), key=lambda k: raw[k])
+    return cands[i], raw[i] / tot
+
+
 def rank_nodes(
     evidence: dict[str, dict],
     edges: dict[str, list[str]],
