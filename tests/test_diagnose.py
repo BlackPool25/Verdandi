@@ -151,3 +151,36 @@ def test_abstain_gate_flags_low_confidence():
 
     assert abstain_reason(np.array([0.5, 0.6]), hi=0.9) == "low-confidence"
     assert abstain_reason(np.array([0.95, 0.5]), hi=0.9) is None
+
+
+def test_hop_est_uses_twin_topology():
+    import pandas as pd
+
+    from src.diagnose import diagnose_from_trigger
+
+    n = 300
+    rng = __import__("numpy").random.default_rng(4)
+    g = pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            **{f"obs_M{i}": rng.normal(0, 1, size=n) for i in range(3)},
+            "state_M0": ["RUN"] * 200 + ["DOWN"] * 100,
+            "state_M1": ["RUN"] * 205 + ["STARVED"] * 95,
+            "state_M2": ["RUN"] * 210 + ["STARVED"] * 90,
+        }
+    )
+    g = g.rename(
+        columns={
+            "obs_M0": "obs_A0",
+            "obs_M1": "obs_A1",
+            "obs_M2": "obs_A2",
+            "state_M0": "state_A0",
+            "state_M1": "state_A1",
+            "state_M2": "state_A2",
+        }
+    )
+    out = diagnose_from_trigger(g, ["obs_A0", "obs_A1", "obs_A2"], trigger=190, back=64)
+    by_m = {r["machine"]: r for r in out}
+    assert by_m["A0"]["hop_est"] == 0
+    assert by_m["A1"]["hop_est"] == 1
