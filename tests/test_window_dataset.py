@@ -95,3 +95,14 @@ def test_clean_norm_centers_clean_and_preserves_shift():
     Xn = apply_norm(X, med, iqr, n_obs=10)
     assert abs(float(Xn[:50].mean())) < 0.2
     assert float(Xn[50:].mean()) > 2.0
+
+
+def test_lagged_deltas_separate_ramp_from_flat():
+    from src.window_dataset import build_windows
+
+    X0, _, _, _ = build_windows(_df(), w=16, stride=16)
+    XL, _, _, _ = build_windows(_df(), w=16, stride=16, lags=True)
+    assert XL.shape[1] > X0.shape[1] and np.isfinite(XL).all()
+    d0 = XL[0, X0.shape[1] :].mean()
+    d1 = XL[-1, X0.shape[1] :].mean()
+    assert d1 > d0

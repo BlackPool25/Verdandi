@@ -98,6 +98,17 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
     return np.concatenate([out, struct])
 
 
+def _lag_deltas(seg: pd.DataFrame, obs_cols: list[str]) -> np.ndarray:
+    # Intra-window level shifts: last value minus k-steps-ago (k=4,8),
+    # catches ramps/delays that mean/std wash out.
+    out = []
+    for c in obs_cols:
+        v = seg[c].to_numpy(dtype=float)
+        for k in (4, 8):
+            out.append(float(v[-1] - v[-k - 1] if len(v) > k else v[-1] - v[0]))
+    return np.array(out, dtype=float)
+
+
 def build_windows(
     df: pd.DataFrame,
     *,
@@ -108,6 +119,7 @@ def build_windows(
     jitter: int = 0,
     seed: int = 0,
     return_starts: bool = False,
+    lags: bool = False,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
 
@@ -137,11 +149,14 @@ def build_windows(
         off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
         for s in range(off, len(g) - w + 1, stride):
             seg = g.iloc[s : s + w]
-            xs.append(
+            base = (
                 _window_features_invariant(seg, obs_cols)
                 if invariant
                 else _window_features(seg, obs_cols)
             )
+            if lags:
+                base = np.concatenate([base, _lag_deltas(seg, obs_cols)])
+            xs.append(base)
             win_y = yv[s : s + w]
             ys.append(int(win_y.any()))
             ff = famv[s : s + w][win_y == 1]
