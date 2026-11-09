@@ -35,14 +35,16 @@ def _oof_predict(
     classes = np.array(sorted(set(yr.tolist())))
     y = np.searchsorted(classes, np.asarray(yr))
     oof = np.zeros(len(X), dtype=int)
+    proba = np.zeros((len(X), len(classes)))
     cv = StratifiedGroupKFold(n_splits=n_splits)
     splits = list(cv.split(X, y, groups))
     for tr, te in splits:
         med, iqr = fit_clean_norm(X[tr], (yr[tr] != "none").astype(int), n_obs)
         clf = HistGradientBoostingClassifier(max_iter=300, random_state=seed)
         clf.fit(apply_norm(X[tr], med, iqr, n_obs), y[tr])
+        proba[te] = clf.predict_proba(apply_norm(X[te], med, iqr, n_obs))
         oof[te] = clf.predict(apply_norm(X[te], med, iqr, n_obs))
-    return classes[oof]
+    return classes[oof], proba, classes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         return_roots=True,
     )
     X, y, fam, groups, _starts, roots = out
-    pred = _oof_predict(
+    pred, proba, oof_classes = _oof_predict(
         X, np.asarray(roots), np.asarray(groups), n_splits=args.splits, seed=args.seed
     )
     hit_w = ((pred == np.asarray(roots)) & (np.asarray(y) == 1)).sum()
@@ -112,9 +114,12 @@ def main(argv: list[str] | None = None) -> int:
         ep_n += 1
     print(f"episode top1={ep_hit / max(1, ep_n):.3f} (MEASURED, n={ep_n})")
     if args.save_oof:
-        pd.DataFrame(
+        frame = pd.DataFrame(
             {"pred": pred, "y": y, "fam": fam, "ep": groups, "root": np.asarray(roots)}
-        ).to_parquet(args.save_oof, index=False)
+        )
+        for i, c in enumerate(oof_classes):
+            frame[f"proba_{c}"] = proba[:, i]
+        frame.to_parquet(args.save_oof, index=False)
         print(f"oof saved -> {args.save_oof}")
     return 0
 
