@@ -64,8 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--build-jobs", type=int, default=1)
     ap.add_argument("--identity", action="store_true",
                     help="O2 ablation: per-channel (identity-carrying) features instead of invariant")
-    ap.add_argument("--variation", action="store_true",
-                    help="per-machine rate-of-change vs own clean behavior (attribution only)")
+
     ap.add_argument(
         "--cv",
         default="episode",
@@ -87,7 +86,6 @@ def main(argv: list[str] | None = None) -> int:
         w=args.w,
         stride=args.stride,
         invariant=not args.identity,
-        variation=args.variation,
         build_jobs=args.build_jobs,
         return_starts=True,
         return_roots=True,
