@@ -130,6 +130,52 @@ def test_save_oof_writes_scored_windows(tmp_path):
     assert {"score", "dec", "y", "fam", "ep"} <= set(df.columns) and len(df) > 0
 
 
+def test_parallel_folds_match_serial_oof(tmp_path):
+    import pandas as pd
+
+    from scripts.gen_mass_battery import main as gen_main
+    from scripts.train_windows import main
+
+    assert (
+        gen_main(
+            [
+                "--n-per-cell",
+                "1",
+                "--n-clean",
+                "2",
+                "--seed",
+                "0",
+                "--manifest",
+                str(tmp_path / "m.json"),
+                "--out",
+                str(tmp_path / "mass.parquet"),
+                "--shard-eps",
+                "32",
+            ]
+        )
+        == 0
+    )
+    outs = []
+    for j in ("1", "2"):
+        out = tmp_path / f"oof{j}.parquet"
+        rc = main(
+            [
+                "--parquet",
+                str(tmp_path / "mass_*.parquet"),
+                "--splits",
+                "2",
+                "--save-oof",
+                str(out),
+                "--n-jobs",
+                j,
+                "--invariant",
+            ]
+        )
+        assert rc == 0
+        outs.append(pd.read_parquet(out))
+    assert np.array_equal(outs[0]["score"].to_numpy(), outs[1]["score"].to_numpy())
+
+
 def test_binary_gbm_separates_windows_and_episode_hit():
     from scripts.train_windows import episode_hit_rate, train_binary_gbm
 

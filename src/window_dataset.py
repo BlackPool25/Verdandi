@@ -99,18 +99,33 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
 
 
 def build_windows(
-    df: pd.DataFrame, *, w: int = 32, stride: int = 8, invariant: bool = False
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    df: pd.DataFrame,
+    *,
+    w: int = 32,
+    stride: int = 8,
+    invariant: bool = False,
+    offset: int = 0,
+    jitter: int = 0,
+    seed: int = 0,
+    return_starts: bool = False,
+) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
 
     invariant=True emits origin-invariant features (no channel identity).
+    offset shifts the grid phase (streaming inference never aligns to the
+    training grid; offset=stride//2 is the worst case to test).
+    jitter>0 draws a per-episode grid offset in [0, jitter) (phase-jittered
+    training: free shift augmentation, no new data).
+    return_starts=True appends window start ticks (needed for point
+    aggregation) as a fifth element.
     """
     if w < 1:
         raise ValueError(f"w must be >= 1, got {w}")
     if stride < 1:
         raise ValueError(f"stride must be >= 1, got {stride}")
     obs_cols = [c for c in df.columns if c.startswith("obs_")]
-    xs, ys, fams, groups = [], [], [], []
+    xs, ys, fams, groups, starts = [], [], [], [], []
+    rng = np.random.default_rng(seed)
     for ep, g in df.groupby("episode_id", sort=False):
         g = g.sort_values("step").reset_index(drop=True)
         yv = g["y"].to_numpy(dtype=int)
@@ -119,7 +134,8 @@ def build_windows(
             if "fault_family" in g
             else np.array(["none"] * len(g))
         )
-        for s in range(0, len(g) - w + 1, stride):
+        off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
+        for s in range(off, len(g) - w + 1, stride):
             seg = g.iloc[s : s + w]
             xs.append(
                 _window_features_invariant(seg, obs_cols)
@@ -131,4 +147,42 @@ def build_windows(
             ff = famv[s : s + w][win_y == 1]
             fams.append(str(ff[0]) if len(ff) else "none")
             groups.append(ep)
-    return np.array(xs), np.array(ys), np.array(fams), np.array(groups)
+            starts.append(s)
+    X, y, fam, grp = (np.array(xs), np.array(ys), np.array(fams), np.array(groups))
+    if return_starts:
+        return X, y, fam, grp, np.array(starts)
+    return X, y, fam, grp
+
+
+def aggregate_to_points(
+    scores: np.ndarray,
+    groups: np.ndarray,
+    starts: np.ndarray,
+    *,
+    w: int,
+    n_steps: int | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Darts-pattern dense inference: point score = mean over covering windows.
+
+    Returns (point_scores, point_episode, point_step): one row per tick covered
+    by at least one window. A tick covered by k windows averages k scores, so
+    detections localize to ticks instead of 128-wide blocks and grid phase
+    washes out with dense stride.
+    """
+    s = np.asarray(scores, dtype=float)
+    g = np.asarray(groups)
+    st = np.asarray(starts, dtype=int)
+    out_s, out_g, out_t = [], [], []
+    for ep in np.unique(g):
+        m = g == ep
+        se, ss = st[m], s[m]
+        t_max = int((se + w).max()) if len(se) else 0
+        if n_steps is not None:
+            t_max = min(t_max, int(n_steps))
+        for t in range(t_max):
+            cov = ss[(se <= t) & (t < se + w)]
+            if len(cov):
+                out_s.append(float(cov.mean()))
+                out_g.append(ep)
+                out_t.append(t)
+    return np.array(out_s), np.array(out_g), np.array(out_t)

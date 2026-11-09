@@ -73,6 +73,16 @@ def test_invariant_width_and_channel_permutation_invariance():
     assert not np.array_equal(Xa, Xas)  # absolute keys on which channel moved
 
 
+def test_offset_shifts_grid_phase_without_breaking_labels():
+    from src.window_dataset import build_windows
+
+    X0, _y0, _, _ = build_windows(_df(), w=16, stride=8)
+    X4, y4, _, _ = build_windows(_df(), w=16, stride=8, offset=4)
+    assert len(X4) == len(X0) - 1 or len(X4) == len(X0)
+    assert set(np.unique(y4)) <= {0, 1} and y4[0] == 0
+    assert not np.array_equal(X0[: len(X4)], X4)
+
+
 def test_clean_norm_centers_clean_and_preserves_shift():
     from src.window_dataset import apply_norm, fit_clean_norm
 
