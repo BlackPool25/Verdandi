@@ -80,7 +80,7 @@ def ewma_onset(
         return None
     mu = float(np.median(seg[: max(1, len(seg) // 4)]))
     sd = float(np.std(seg[: max(1, len(seg) // 4)])) or 1.0
-    z, e = mu, mu
+    e = mu
     for i, v in enumerate(seg):
         e = lam * v + (1 - lam) * e
         lim = limit_sd * sd * (lam / (2 - lam)) ** 0.5
