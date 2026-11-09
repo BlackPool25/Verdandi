@@ -5,25 +5,49 @@ per-episode-family max-F1 thresholds.
 
 ## v2 (current release): w=128 invariant, multi-origin dense battery
 
-Battery: `m0b-mass-balanced-v1` dense cut (4,200 fault across 7 families x 2
-rungs x 26 origins + 600 clean; 1.37M rows). Features: 23 origin-invariant
-(max/mean/spread across channels per stat + structural counters), fold-fit
-clean normalization.
+Battery: `m0b-mass-balanced-v1` dense cut, collision-free (4,200 fault across
+7 families x 2 rungs x 26 origins + 600 clean; seeds from 40000/45200).
+Features: 23 origin-invariant (max/mean/spread across channels per stat +
+structural counters), fold-fit clean normalization. 3-fold GroupKFold OOF.
 
-- Window-F1: **0.854** tuned (0.822 untuned), 3-fold GroupKFold OOF
-- Episode-hit: **0.987**, clean episode FP: **0.000**
-- Per-family recall: breakdown 0.98, delay 0.94, bias 0.88, quality 0.86,
-  spike 0.86, loss 0.86, drift 0.69
-- Per-origin recall: **0.75 - 1.00** (worst B1 0.748)
-- Runtime: 7.1 ms/window, ~112k windows/s, reload-identical
-- Streaming delay: p50 0 ticks, max 288 ticks (one late catch)
-- Artifact: 23 feats, `artifacts/window-gbm-w128-v1/`
+- Window-F1: **0.846** tuned (0.807 untuned @0.5)
+- Episode-hit: **0.990** tuned (0.910 untuned), clean-episode alarm rate at
+  tuned point: **0.853** — high by design (recall-first point)
+- Per-family window recall: breakdown 0.97, delay 0.94, loss 0.88, bias 0.86,
+  quality 0.85, spike 0.86, drift 0.86
+- Per-family episode hit: 0.93 - 1.00 (loss 0.928 lowest)
+- Per-origin window recall: **0.82 - 1.00** (worst C7 0.820)
+- Runtime: 6.8 ms/window, ~119k windows/s, reload-identical
+- Streaming delay: p50 0 ticks (early-fire on wide windows inflates this)
+- Artifact: 23 feats, `artifacts/window-gbm-w128-v2/`
+
+Operating tradeoff (global threshold, OOF):
+
+| thr | win-P | win-R | win-F1 | epHit | cleanEpFP |
+|-----|-------|-------|--------|-------|-----------|
+| 0.3 | 0.750 | 0.856 | 0.799  | 0.995 | 0.987     |
+| 0.5 | 0.904 | 0.729 | 0.807  | 0.910 | 0.630     |
+| 0.6 | 0.951 | 0.695 | 0.803  | 0.831 | 0.325     |
+| 0.7 | 0.972 | 0.672 | 0.794  | 0.788 | 0.145     |
+| 0.8 | 0.984 | 0.651 | 0.784  | 0.753 | 0.055     |
+
+Dwell (alarm iff k of trailing windows fire) at 0.6: k=2 -> hit 0.77 /
+clean 0.16; k=3 -> 0.69 / 0.09. Recommended balanced default: 0.6 + dwell-2.
+Shipped thresholds are the recall-first per-family set (documented, optimistic).
 
 ## v1 (superseded reference): w=32 absolute, A0-only battery
 
 Window-F1 0.963 tuned, episode-hit 1.00 — measured on single-origin data;
-does not transfer (multi-origin collapse to 0.75 proved it). Kept as the
+does not transfer (multi-origin collapse proved it). Kept as the
 dense-1-origin reference only.
+
+## Data incident 2026-11-09 (recorded, resolved)
+
+The first dense battery had a fault/clean episode-ID collision (clean block
+landed inside the fault block): ~200 clean episodes silently became faults
+and clean-FP 0.000 was vacuous. Fixed with disjoint ID blocks + assertion +
+regression test; all v2 numbers above are from the collision-free rebuild
+(4,800 unique episodes verified).
 
 ## Killed alternatives (do not revive without new evidence)
 
@@ -32,7 +56,7 @@ dense-1-origin reference only.
 - 16-config GBM sweep (flat 0.905-0.918); quality w64 head (F1 0.0).
 - Fold-fit unit normalization alone (0.7457, unchanged — scale was not it).
 - Origin-invariant w=32 (0.738 — identity was not it either).
-- Density alone at w=32 (3x data, 0.724 — coverage was not it).
+- Density alone at w=32 (0.724 — coverage was not it).
 - Diagnosis that survived: sparse families needed accumulation time (w=128),
   structural families (delay/loss/breakdown) transfer via root counters.
 
@@ -40,5 +64,6 @@ dense-1-origin reference only.
 
 - Fixed episode length 300; onset uniform in [120, 300-dur-5].
 - No real-plant validation data exists in this repo.
-- Bench peak RAM (~16 GB dense / ~5 GB v1) is shard loading, not the model
+- Bench peak RAM (~10 GB dense) is shard loading, not the model
   (model files total < 5 MB).
+- OOF-picked thresholds are validation-optimistic; untuned lines are citable.
