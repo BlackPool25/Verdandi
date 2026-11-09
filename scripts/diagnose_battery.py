@@ -96,7 +96,9 @@ def _work_episode(job: tuple) -> tuple:
                 g, obs, anchor, back=back, oracle_onset={root: true_t0}
             )
         else:
-            out = diagnose_from_trigger(g, obs, anchor, back=back, delay=assoc_delay, onset_method=onset_method)
+            out = diagnose_from_trigger(
+                g, obs, anchor, back=back, delay=assoc_delay, onset_method=onset_method
+            )
     except Exception:  # noqa: BLE001 - harness records failures as rows
         return (fam, rung, root, None, None, None, True, "error", true_sp)
     if not out:
@@ -222,7 +224,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.n_jobs == 1:
         _init_worker(
-            args.artifact, thr_prop, args.wait, args.oracle_onset, args.abstain_hi
+            args.artifact,
+            thr_prop,
+            args.wait,
+            args.oracle_onset,
+            args.abstain_hi,
+            args.assoc_delay,
+            args.onset_method,
         )
         done = [_work_episode(j) for j in jobs]
     else:
@@ -237,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.wait,
                 args.oracle_onset,
                 args.abstain_hi,
+                args.assoc_delay,
                 args.onset_method,
             ),
         ) as ex:
