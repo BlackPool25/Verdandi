@@ -63,3 +63,16 @@ def test_dr_texture_capped_for_snr_floor():
     for t in textures.values():
         assert 0.3 <= t["eps_scale"] <= 0.5
         assert 0.0 <= t["sine_amp"] <= 1.0
+
+
+def test_quality_faults_carry_rate_floor():
+    from scripts.gen_supplement import build_supplement_specs
+
+    _, _, faults, _, _ = build_supplement_specs(
+        n_per_cell=4, n_clean=2, n_doubles=4, episode_len=1000, seed=11
+    )
+    rates = [
+        f["extra"]["reject_rate"] for f in faults.values()
+        if isinstance(f, dict) and f["class"] == "quality"
+    ]
+    assert rates and min(rates) >= 0.3

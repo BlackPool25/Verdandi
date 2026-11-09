@@ -97,7 +97,18 @@ def build_supplement_specs(
                 dur = dur_for(fam)
                 t0 = int(rng.integers(config.CAL_WIN, episode_len - dur - 5))
                 m = str(rng.choice(machines))
-                faults[ep] = _fault_dict(fam, rung, m, t0, dur, _mag(rung, rng), k)
+                # Rate floor (twin lever, supplement-only): sub-0.3 rolls
+                # emit ~zero events per window at 1 completion / 7 steps
+                # (measured 18/20 quality eps with 0 rejects). Frozen
+                # FAULT_RANGES untouched.
+                extra = (
+                    {"reject_rate": float(rng.uniform(0.3, 0.5))}
+                    if fam == "quality"
+                    else None
+                )
+                faults[ep] = _fault_dict(
+                    fam, rung, m, t0, dur, _mag(rung, rng), k, extra=extra
+                )
                 textures[ep] = tex()
                 fault_eps.append(ep)
                 ep += 1
@@ -112,8 +123,30 @@ def build_supplement_specs(
         d2 = dur_for(str(f2))
         t2 = min(t1 + gap, episode_len - d2 - 5)
         f = [
-            _fault_dict(f1, "caricature", str(m1), t1, d1, _mag("caricature", rng), k),
-            _fault_dict(f2, "caricature", str(m2), t2, d2, _mag("caricature", rng), k + 1),
+            _fault_dict(
+                f1,
+                "caricature",
+                str(m1),
+                t1,
+                d1,
+                _mag("caricature", rng),
+                k,
+                extra={"reject_rate": float(rng.uniform(0.3, 0.5))}
+                if f1 == "quality"
+                else None,
+            ),
+            _fault_dict(
+                f2,
+                "caricature",
+                str(m2),
+                t2,
+                d2,
+                _mag("caricature", rng),
+                k + 1,
+                extra={"reject_rate": float(rng.uniform(0.3, 0.5))}
+                if f2 == "quality"
+                else None,
+            ),
         ]
         faults[ep] = f
         textures[ep] = tex()
@@ -154,7 +187,9 @@ def main(argv: list[str] | None = None) -> int:
     out_base = pathlib.Path(args.out)
     for i in range(0, len(all_eps), args.shard_eps):
         shard_eps = all_eps[i : i + args.shard_eps]
-        shard_out = str(out_base.with_name(f"{out_base.stem}_{i // args.shard_eps:02d}.parquet"))
+        shard_out = str(
+            out_base.with_name(f"{out_base.stem}_{i // args.shard_eps:02d}.parquet")
+        )
         shard_faults = {ep: faults[ep] for ep in shard_eps if ep in faults}
         shard_tex = {ep: textures[ep] for ep in shard_eps if ep in textures}
         dataset_export.export_v6(
@@ -184,7 +219,9 @@ def main(argv: list[str] | None = None) -> int:
         "shards": shards,
     }
     pathlib.Path(args.manifest).write_text(json.dumps(manifest, indent=2))
-    print(f"battery {BATTERY_ID}: {len(fault_eps)} fault + {len(clean_eps)} clean -> {args.manifest}")
+    print(
+        f"battery {BATTERY_ID}: {len(fault_eps)} fault + {len(clean_eps)} clean -> {args.manifest}"
+    )
     return 0
 
 
