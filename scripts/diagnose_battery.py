@@ -121,6 +121,11 @@ def main(argv: list[str] | None = None) -> int:
         "--rung", default="", help="filter to mag_rung (incipient/caricature)"
     )
     ap.add_argument(
+        "--family",
+        default="",
+        help="comma-separated fault_family substring filter (e.g. breakdown,delay)",
+    )
+    ap.add_argument(
         "--wait",
         type=int,
         default=32,
@@ -169,6 +174,10 @@ def main(argv: list[str] | None = None) -> int:
             g = df[df.episode_id == fe].sort_values("step").reset_index(drop=True)
             r = g[g.y == 1].iloc[0]
             if args.rung and str(r["mag_rung"]) != args.rung:
+                continue
+            if args.family and not any(
+                f in str(r["fault_family"]) for f in args.family.split(",")
+            ):
                 continue
             meta = (
                 str(r["fault_family"]),
