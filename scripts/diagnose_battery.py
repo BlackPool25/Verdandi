@@ -24,7 +24,9 @@ from joblib import load
 _WORKER: dict = {}
 
 
-def _init_worker(artifact: str, thr_prop: float, wait: int) -> None:
+def _init_worker(
+    artifact: str, thr_prop: float, wait: int, oracle: bool = False
+) -> None:
     """Load the frozen model once per worker process (CPU fork-safe)."""
     from src.diagnose import confirm_trigger, diagnose_from_trigger
     from src.window_dataset import apply_norm, build_windows
@@ -38,6 +40,7 @@ def _init_worker(artifact: str, thr_prop: float, wait: int) -> None:
     _WORKER["n_obs"] = int(art["n_obs_features"])
     _WORKER["thr_prop"] = float(thr_prop)
     _WORKER["wait"] = int(wait)
+    _WORKER["oracle"] = bool(oracle)
     _WORKER["confirm_trigger"] = confirm_trigger
     _WORKER["diagnose_from_trigger"] = diagnose_from_trigger
     _WORKER["apply_norm"] = apply_norm
@@ -54,32 +57,46 @@ def _work_episode(job: tuple) -> tuple:
     model, w, stride = _WORKER["model"], _WORKER["w"], _WORKER["stride"]
     med, iqr, n_obs = _WORKER["med"], _WORKER["iqr"], _WORKER["n_obs"]
     thr_prop, wait = _WORKER["thr_prop"], _WORKER["wait"]
+    oracle = _WORKER.get("oracle", False)
     confirm_trigger = _WORKER["confirm_trigger"]
     diagnose_from_trigger = _WORKER["diagnose_from_trigger"]
     apply_norm, build_windows = _WORKER["apply_norm"], _WORKER["build_windows"]
     fam, rung, root, true_sp, true_t0 = meta
-    X, _, _, _, starts = build_windows(g, w=w, stride=stride, invariant=True, return_starts=True)
+    X, _, _, _, starts = build_windows(
+        g, w=w, stride=stride, invariant=True, return_starts=True
+    )
     s = np.asarray(model.predict_proba(apply_norm(X, med, iqr, n_obs))[:, 1])
     trig = confirm_trigger(s, starts, thr_prop, m=2, n=3)
     if trig is None:
-        return (fam, rung, root, None, None, None, False, "unconfirmed")
+        return (fam, rung, root, None, None, None, False, "unconfirmed", true_sp)
     anchor = trig + wait
     back = 64 + wait
     m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
     if not m_idx.any():
-        return (fam, rung, root, None, None, None, True, "no-window")
+        return (fam, rung, root, None, None, None, True, "no-window", true_sp)
     if float(s[m_idx].max()) < 0.9:
-        return (fam, rung, root, None, None, None, True, "low-confidence")
+        return (fam, rung, root, None, None, None, True, "low-confidence", true_sp)
     try:
-        out = diagnose_from_trigger(g, obs, anchor, back=back)
+        if oracle:
+            # Ablation only: GT onset for the true root (see
+            # diagnose_multi_origin). Ranking rules unchanged.
+            out = diagnose_from_trigger(
+                g, obs, anchor, back=back, oracle_onset={root: true_t0}
+            )
+        else:
+            out = diagnose_from_trigger(g, obs, anchor, back=back)
     except Exception:  # noqa: BLE001 - harness records failures as rows
-        return (fam, rung, root, None, None, None, True, "error")
+        return (fam, rung, root, None, None, None, True, "error", true_sp)
     if not out:
-        return (fam, rung, root, None, None, None, True, "empty")
+        return (fam, rung, root, None, None, None, True, "empty", true_sp)
     f0 = out[0]
-    struct_process = f0["onset_kind"] == "counter" or (
-        f0["onset_kind"] == "state" and f0["own_state"] in ("DOWN", "BLOCKED")
-    )
+    if oracle and f0["onset_kind"] == "oracle":
+        # D2 from the state at the GT tick (estimator bypassed by design).
+        struct_process = f0["own_state"] in ("DOWN", "BLOCKED")
+    else:
+        struct_process = f0["onset_kind"] == "counter" or (
+            f0["onset_kind"] == "state" and f0["own_state"] in ("DOWN", "BLOCKED")
+        )
     pred_sp = "process" if struct_process else "sensor"
     return (
         fam,
@@ -90,6 +107,7 @@ def _work_episode(job: tuple) -> tuple:
         pred_sp == true_sp,
         True,
         "diagnosed",
+        true_sp,
     )
 
 
@@ -108,7 +126,17 @@ def main(argv: list[str] | None = None) -> int:
         default=32,
         help="wait budget W in ticks after confirm; anchor=trig+W, past covers W+64 back",
     )
-    ap.add_argument("--n-jobs", type=int, default=1, help="worker processes (model loads once per worker)")
+    ap.add_argument(
+        "--n-jobs",
+        type=int,
+        default=1,
+        help="worker processes (model loads once per worker)",
+    )
+    ap.add_argument(
+        "--oracle-onset",
+        action="store_true",
+        help="ablation only: inject GT onset for the true root (see diagnose_multi_origin)",
+    )
     args = ap.parse_args(argv)
 
     try:
@@ -146,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
             break
 
     if args.n_jobs == 1:
-        _init_worker(args.artifact, thr_prop, args.wait)
+        _init_worker(args.artifact, thr_prop, args.wait, args.oracle_onset)
         done = [_work_episode(j) for j in jobs]
     else:
         # Forked processes: private globals per worker, model loads once.
@@ -154,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         with ProcessPoolExecutor(
             max_workers=args.n_jobs,
             initializer=_init_worker,
-            initargs=(args.artifact, thr_prop, args.wait),
+            initargs=(args.artifact, thr_prop, args.wait, args.oracle_onset),
         ) as ex:
             done = list(ex.map(_work_episode, jobs))
     rows.extend(done)
@@ -182,6 +210,15 @@ def main(argv: list[str] | None = None) -> int:
             f"mederr={float(np.median(e)):.1f} (MEASURED)"
             if e
             else f"{rung} n={len(sub)} empty"
+        )
+    for sp in ("sensor", "process"):
+        sub = [r for r in rows if len(r) > 8 and r[8] == sp and r[3] is not None]
+        e = [abs(r[4]) for r in sub if r[4] is not None]
+        print(
+            f"{sp} n={len(sub)} top1={sum(1 for r in sub if r[2] == r[3]) / max(1, len(sub)):.3f} "
+            f"mederr={float(np.median(e)):.1f} (MEASURED)"
+            if e
+            else f"{sp} n={len(sub)} empty"
         )
     return 0
 

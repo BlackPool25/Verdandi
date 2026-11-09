@@ -147,24 +147,31 @@ def machine_onset(
     return -1, "none"
 
 
-def diagnose_multi_origin(g: pd.DataFrame, obs_cols: list[str]) -> list[dict]:
+def diagnose_multi_origin(
+    g: pd.DataFrame, obs_cols: list[str], oracle_onset: dict[str, int] | None = None
+) -> list[dict]:
     """One entry per affected machine, ordered by onset (multi-start).
 
     Structural coordination: own DOWN/BLOCKED at onset → process-origin
     candidate; STARVED-only → downstream symptom; obs-only residual with
     states clean → sensor. Silent on clean: machines with no onset omitted.
+    oracle_onset maps machine -> GT tick (ablation only: GT as input to
+    isolate onset quality from ranking quality; never in production).
     """
     g = g.sort_values("step").reset_index(drop=True) if "step" in g.columns else g
     nom = episode_nominal(g, obs_cols)
     sig = robust_sigma(g, obs_cols)
     entries = []
     for j, c in enumerate(obs_cols):
-        tick, kind = machine_onset(g, c, float(nom[j]), float(sig[j]))
+        machine = c.removeprefix("obs_")
+        if oracle_onset is not None and machine in oracle_onset:
+            tick, kind = int(oracle_onset[machine]), "oracle"
+        else:
+            tick, kind = machine_onset(g, c, float(nom[j]), float(sig[j]))
         if tick < 0:
             continue
         confirmed: int | None = tick  # machine_onset is already PELT/state-confirmed
         v = g[c].to_numpy(dtype=float)
-        machine = c.removeprefix("obs_")
         state_col = f"state_{machine}"
         own = (
             str(g[g["step"] == tick][state_col].iloc[0])
@@ -195,7 +202,9 @@ def diagnose_multi_origin(g: pd.DataFrame, obs_cols: list[str]) -> list[dict]:
         # STARVED-only = downstream symptom; residual-RUN = last resort.
         if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
             return (0, r["onset"])
-        if r["onset_kind"] in ("state", "counter"):
+        # "oracle" (ablation GT tick) competes exactly like an estimated
+        # state/counter onset: perfect information, same ranking rules.
+        if r["onset_kind"] in ("state", "counter", "oracle"):
             return (1, r["onset"])
         return (2, r["onset"])
 
@@ -250,21 +259,33 @@ def abstain_reason(
 
 
 def diagnose_from_trigger(
-    g: pd.DataFrame, obs_cols: list[str], trigger: int, back: int = 16
+    g: pd.DataFrame,
+    obs_cols: list[str],
+    trigger: int,
+    back: int = 16,
+    oracle_onset: dict[str, int] | None = None,
 ) -> list[dict]:
     """Trigger-gated multi-origin diagnosis (alongside frozen detector).
 
     Drops onsets before trigger-back (pre-trigger texture is not the
     fault), then ranks by direction signature and onset distance to the
     trigger. Silent on clean: caller only invokes on fired windows.
+    oracle_onset maps machine -> GT tick (ablation only, see
+    diagnose_multi_origin).
     """
-    out = diagnose_multi_origin(g, obs_cols)
-    kept = [r for r in out if r["onset"] >= trigger - back]
+    out = diagnose_multi_origin(g, obs_cols, oracle_onset=oracle_onset)
+    # Ablation-only: oracle (GT) entries bypass the back gate so the true
+    # root always competes; estimated entries are gated unchanged.
+    kept = [
+        r
+        for r in out
+        if r["onset"] >= trigger - back or r["onset_kind"] == "oracle"
+    ]
 
     def _trank(r: dict) -> tuple[int, int, int]:
         if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
             base = 0
-        elif r["onset_kind"] in ("state", "counter"):
+        elif r["onset_kind"] in ("state", "counter", "oracle"):
             base = 1
         else:
             base = 2
