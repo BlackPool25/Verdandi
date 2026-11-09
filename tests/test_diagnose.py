@@ -53,3 +53,46 @@ def test_diagnose_window_shape():
     )
     assert set(out) == {"machine", "score_sigma", "coord_class", "rung", "hop_est"}
     assert out["hop_est"] == 0
+
+
+def _multi_df():
+    n = 300
+    rng = np.random.default_rng(1)
+    d = {
+        "episode_id": [1] * n,
+        "step": list(range(n)),
+        "obs_A0": np.concatenate([rng.normal(0, 1, 160), rng.normal(0, 1, 140) + 6.0]),
+        "obs_B0": np.concatenate([rng.normal(0, 1, 200), rng.normal(0, 1, 100) + 6.0]),
+        "state_A0": ["RUN"] * 160 + ["DOWN"] * 140,
+        "state_B0": ["RUN"] * 200 + ["STARVED"] * 100,
+    }
+    return pd.DataFrame(d)
+
+
+def test_multi_origin_orders_by_onset():
+    from src.diagnose import diagnose_multi_origin
+
+    g = _multi_df()
+    out = diagnose_multi_origin(g, ["obs_A0", "obs_B0"])
+    assert [r["machine"] for r in out] == ["A0", "B0"]
+    assert out[0]["onset"] <= out[1]["onset"]
+    assert out[0]["own_state"] == "DOWN" and out[1]["own_state"] == "STARVED"
+
+
+def test_counter_onset_finds_delay_step():
+    from src.diagnose import machine_onset
+
+    n = 300
+    rng = np.random.default_rng(2)
+    g = pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            "obs_C2": rng.normal(0, 1, size=n),
+            "state_C2": ["RUN"] * n,
+            "tputlag_C2": [0] * 150 + [4] * 150,
+            "downrun_C2": [0] * n,
+        }
+    )
+    tick, kind = machine_onset(g, "obs_C2", 0.0, 1.0)
+    assert kind == "counter" and abs(tick - 150) <= 4
