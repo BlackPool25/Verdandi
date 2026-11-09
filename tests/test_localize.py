@@ -15,12 +15,33 @@ def test_counter_edge_finds_run_start_at_onset():
 
 
 def test_cusum_backtrack_finds_abrupt_shift_near_onset():
+    import numpy as np
+
     from src.localize import cusum_backtrack
 
     rng = np.random.default_rng(0)
     r = np.concatenate([rng.normal(0, 1, 150), rng.normal(3, 1, 50)])
     est = cusum_backtrack(r, trigger=170, k=1.0)
     assert est is not None and abs(est - 150) <= 6
+
+
+def test_eval_one_is_deterministic(tmp_path):
+    import numpy as np
+    import pandas as pd
+
+    from scripts.evaluate_localize import _eval_one
+
+    n = 200
+    g = pd.DataFrame(
+        {"cycle_lag": [0] * 100 + list(range(100)), "stale_hold_run": [0] * n,
+         "down_run": [0] * n,
+         **{f"obs_A{i}": np.zeros(n) for i in range(3)}}
+    )
+    ow = pd.DataFrame({"score": np.linspace(0, 1, 9)})
+    r = {"class": "delay", "t0": 100}
+    a = _eval_one(1, g, ow, r, ["obs_A0", "obs_A1", "obs_A2"])
+    b = _eval_one(1, g, ow, r, ["obs_A0", "obs_A1", "obs_A2"])
+    assert a == b
 
 
 def test_ewma_finds_gradual_ramp():

@@ -24,6 +24,36 @@ import pandas as pd  # type: ignore[import-untyped]
 
 STRUCT_COUNTER = {"delay": "cycle_lag", "loss": "stale_hold_run", "breakdown": "down_run"}
 
+NEED_COLS = ["episode_id", "step"]
+
+
+def _eval_one(ep, g, ow, r, obs_cols):
+    """Onset errors for one episode; pure function (parallel-safe)."""
+    from src.localize import counter_edge, cusum_backtrack, ewma_onset
+
+    fam, t0 = r["class"], int(r["t0"])
+    starts = np.arange(0, len(g) - 128 + 1, 8)[: len(ow)]
+    hot = np.flatnonzero(
+        (ow["score"].to_numpy(dtype=float) >= 0.8) & (starts >= t0 - 128)
+    )
+    if not len(hot):
+        return None
+    trig = int(starts[hot[0]])
+    base = trig + 64
+    proj = np.abs(
+        g[obs_cols].to_numpy(dtype=float)
+        - np.median(g[obs_cols].to_numpy(dtype=float), axis=0)
+    ).max(axis=1)
+    if fam in STRUCT_COUNTER and STRUCT_COUNTER[fam] in g:
+        est = counter_edge(g[STRUCT_COUNTER[fam]].to_numpy(), trig)
+    elif fam == "drift":
+        est = ewma_onset(proj, trig)
+    else:
+        est = cusum_backtrack(proj, trig)
+    if est is None:
+        return None
+    return (fam, float(abs(base - t0)), float(abs(est - t0)))
+
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="localization error vs heuristic")
@@ -31,59 +61,41 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--parquet", default="artifacts/m0b_mass_*.parquet")
     ap.add_argument("--manifest", default="docs/m0b_mass_manifest.json")
     ap.add_argument("--max-eps", type=int, default=0)
+    ap.add_argument("--n-jobs", type=int, default=-1)
     args = ap.parse_args(argv)
 
-    from src.localize import counter_edge, cusum_backtrack, ewma_onset
+    from joblib import Parallel, delayed  # type: ignore[import-untyped]
 
     oof = pd.read_parquet(args.oof)
+    keep = ["episode_id", "step", "cycle_lag", "stale_hold_run", "down_run"]
+    paths = sorted(glob.glob(args.parquet))
+    first = pd.read_parquet(paths[0])
+    obs_cols = [c for c in first.columns if c.startswith("obs_")]
     df = pd.concat(
-        [pd.read_parquet(p) for p in sorted(glob.glob(args.parquet))],
+        [pd.read_parquet(p, columns=keep + obs_cols) for p in paths],
         ignore_index=True,
     )
     m = json.loads(pathlib.Path(args.manifest).read_text(encoding="utf-8"))
     info = {e: r for e, r in zip(m["fault_episodes"], m["rows"])}
-    obs_cols = [c for c in df.columns if c.startswith("obs_")]
+    # Single groupby pass: no per-episode full-frame scans.
+    frames = {ep: g.sort_values("step") for ep, g in df.groupby("episode_id", sort=False)}
+    oofs = {ep: g for ep, g in oof.groupby("ep", sort=False)}
 
     errs_base: dict[str, list[float]] = {}
     errs_loc: dict[str, list[float]] = {}
     eps = sorted(oof["ep"].unique())
     if args.max_eps:
         eps = eps[: args.max_eps]
-    for ep in eps:
-        if int(ep) not in info:
+    tasks = [(ep, frames[int(ep)], oofs[ep], info[int(ep)], obs_cols)
+             for ep in eps if int(ep) in info and int(ep) in frames]
+    for res in Parallel(n_jobs=args.n_jobs)(
+        delayed(_eval_one)(*t) for t in tasks
+    ):
+        if res is None:
             continue
-        r = info[int(ep)]
-        fam, t0 = r["class"], int(r["t0"])
-        g = df[df.episode_id == ep].sort_values("step").reset_index(drop=True)
-        ow = oof[oof.ep == ep].reset_index(drop=True)
-        # Rebuild w128/stride-8 starts to map OOF rows to ticks.
-        starts = np.arange(0, len(g) - 128 + 1, 8)[: len(ow)]
-        # Trigger from the LOCKED operating point (global 0.8), not the
-        # recall-first tuned decisions: tuned thresholds fire on clean smear
-        # far ahead of onset, which no localizer can recover.
-        hot = np.flatnonzero(
-            (ow["score"].to_numpy(dtype=float) >= 0.8)
-            & (starts >= t0 - 128)
-        )
-        if not len(hot):
-            continue
-        trig = int(starts[hot[0]])
-        base = trig + 64
-        proj = np.abs(
-            g[obs_cols].to_numpy(dtype=float)
-            - np.median(g[obs_cols].to_numpy(dtype=float), axis=0)
-        ).max(axis=1)
-        if fam in STRUCT_COUNTER and STRUCT_COUNTER[fam] in g:
-            est = counter_edge(g[STRUCT_COUNTER[fam]].to_numpy(), trig)
-        elif fam == "drift":
-            est = ewma_onset(proj, trig)
-        else:
-            est = cusum_backtrack(proj, trig)
-        if est is None:
-            continue
-        errs_base.setdefault(fam, []).append(abs(base - t0))
-        errs_loc.setdefault(fam, []).append(abs(est - t0))
-        print(f"ep={ep} fam={fam} t0={t0} trig={trig} base_err={abs(base-t0)} loc_err={abs(est-t0)}", flush=True)
+        fam, b, v = res
+        errs_base.setdefault(fam, []).append(b)
+        errs_loc.setdefault(fam, []).append(v)
     for fam in sorted(set(errs_base) | set(errs_loc)):
         b = np.asarray(errs_base.get(fam, [float("nan")]), dtype=float)
         v = np.asarray(errs_loc.get(fam, [float("nan")]), dtype=float)
