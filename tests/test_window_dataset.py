@@ -97,17 +97,6 @@ def test_clean_norm_centers_clean_and_preserves_shift():
     assert float(Xn[50:].mean()) > 2.0
 
 
-def test_residual_block_separates_bias_from_clean():
-    from src.window_dataset import build_windows
-
-    X0, _, _, _ = build_windows(_df(), w=16, stride=16)
-    XR, _, _, _ = build_windows(_df(), w=16, stride=16, residuals=True)
-    assert XR.shape[1] > X0.shape[1] and np.isfinite(XR).all()
-    r0 = XR[0, X0.shape[1] :].mean()
-    r1 = XR[-1, X0.shape[1] :].mean()
-    assert r1 > r0
-
-
 def test_build_jobs_equivalence():
     import numpy as np
     import pandas as pd
@@ -138,27 +127,14 @@ def test_build_jobs_equivalence():
         "w": 32,
         "stride": 8,
         "invariant": True,
-        "residuals": True,
         "jitter": 3,
         "seed": 7,
         "return_starts": True,
-        "return_regimes": True,
     }
     a = build_windows(df, **kw, build_jobs=1)
     b = build_windows(df, **kw, build_jobs=2)
-    assert len(a) == len(b) == 6
+    assert len(a) == len(b) == 5
     np.testing.assert_array_equal(a[3], b[3])  # groups order preserved
     np.testing.assert_allclose(a[0], b[0])
     np.testing.assert_array_equal(a[1], b[1])
-    assert list(a[4]) == list(b[4]) and list(a[5]) == list(b[5])
-
-
-def test_anchor_regime_is_episode_prefix():
-    import numpy as np
-
-    from src.window_dataset import anchor_regimes_by_episode
-
-    reg = np.array(["RUN", "DOWN", "DOWN", "RUN", "STARVED"])
-    grp = np.array([1, 1, 1, 2, 2])
-    out = anchor_regimes_by_episode(reg, grp)
-    assert list(out) == ["RUN", "RUN", "RUN", "RUN", "RUN"]
+    assert list(a[4]) == list(b[4])  # starts identical across backends

@@ -105,14 +105,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--save-oof", default="")
     ap.add_argument("--invariant", action="store_true")
     ap.add_argument(
-        "--residuals", action="store_true", help="opt-in twin-residual block (v3)"
-    )
-    ap.add_argument(
-        "--regime-norm",
-        action="store_true",
-        help="opt-in per-regime clean normalization (v3)",
-    )
-    ap.add_argument(
         "--build-jobs",
         type=int,
         default=1,
@@ -129,38 +121,22 @@ def main(argv: list[str] | None = None) -> int:
     from src.window_dataset import (
         STRUCT_COLS,
         apply_norm,
-        apply_norm_regime,
         build_windows,
         fit_clean_norm,
-        fit_clean_norm_regime,
     )
 
     paths = sorted(_glob.glob(args.parquet))
     if not paths:
         raise SystemExit(f"no parquet shards match {args.parquet}")
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-    bw: dict = {}
-    if args.regime_norm:
-        bw["return_regimes"] = True
     out = build_windows(
         df,
         w=args.w,
         stride=args.stride,
         invariant=args.invariant,
-        residuals=args.residuals,
         build_jobs=args.build_jobs,
-        **bw,
     )
-    if args.regime_norm:
-        X, y, fam, groups, reg = out
-        # Anchor to the episode clean-prefix regime: a window's own regime
-        # is fault-caused (DOWN/STARVED), normalizing by it erases signal.
-        from src.window_dataset import anchor_regimes_by_episode
-
-        reg = anchor_regimes_by_episode(reg, groups)
-    else:
-        X, y, fam, groups = out
-        reg = None
+    X, y, fam, groups = out
     n_obs = 15 if args.invariant else X.shape[1] - 2 * len(STRUCT_COLS)
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)
@@ -171,12 +147,6 @@ def main(argv: list[str] | None = None) -> int:
         # train-clean windows and applied blind to the held-out episodes.
         # Runs in a worker process: HistGBM threads internally, so the outer
         # level parallelizes over folds while inner threading stays per-fit.
-        if args.regime_norm:
-            tab = fit_clean_norm_regime(X[tr], y[tr], reg[tr], n_obs)
-            clf = train_binary_gbm(apply_norm_regime(X[tr], tab, reg[tr], n_obs), y[tr])
-            return te, np.asarray(
-                clf.predict_proba(apply_norm_regime(X[te], tab, reg[te], n_obs))[:, 1]
-            )
         med, iqr = fit_clean_norm(X[tr], y[tr], n_obs)
         clf = train_binary_gbm(apply_norm(X[tr], med, iqr, n_obs), y[tr])
         return te, np.asarray(

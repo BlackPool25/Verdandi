@@ -98,101 +98,9 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
     return np.concatenate([out, struct])
 
 
-def fit_clean_norm_regime(
-    X: np.ndarray, y: np.ndarray, regimes: np.ndarray, n_obs: int
-) -> dict:
-    """Per-regime clean median/IQR on the obs block + global fallback.
-
-    Removes state-offset texture (RUN 0 / BLOCKED -1 / STARVED -2 / DOWN -3)
-    before the model ever sees it. Fit on train-clean rows only (caller).
-    """
-    table: dict = {}
-    yc = np.asarray(y) == 0
-    for r in sorted(set(np.asarray(regimes).tolist())):
-        m = yc & (np.asarray(regimes) == r)
-        if int(m.sum()) == 0:
-            continue
-        xc = np.asarray(X)[m][:, :n_obs]
-        med = np.median(xc, axis=0)
-        iqr = np.maximum(
-            np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9
-        )
-        table[str(r)] = (np.asarray(med, dtype=float), np.asarray(iqr, dtype=float))
-    xc = np.asarray(X)[yc][:, :n_obs]
-    med = np.median(xc, axis=0)
-    iqr = np.maximum(
-        np.quantile(xc, 0.75, axis=0) - np.quantile(xc, 0.25, axis=0), 1e-9
-    )
-    table["__global__"] = (np.asarray(med, dtype=float), np.asarray(iqr, dtype=float))
-    return table
-
-
-def apply_norm_regime(
-    X: np.ndarray,
-    table: dict,
-    regimes: np.ndarray,
-    n_obs: int,
-    fallback: str = "global",
-) -> np.ndarray:
-    """Normalize each row with its regime baseline, else global fallback."""
-    out = np.array(X, dtype=float)
-    regs = np.asarray(regimes)
-    glob = table["__global__"] if fallback == "global" else None
-    for r in sorted(set(regs.tolist())):
-        m = regs == r
-        med, iqr = table.get(str(r), glob if glob is not None else table["__global__"])
-        out[m, :n_obs] = (out[m, :n_obs] - med) / iqr
-    return out
-
-
-def anchor_regimes_by_episode(regimes: np.ndarray, groups: np.ndarray) -> np.ndarray:
-    """Anchor each window to its episode's clean-prefix regime (first window).
-
-    Normalizing by a window's own regime washes the signal: faults *cause*
-    DOWN/STARVED, so a fault window normalized by the DOWN baseline looks
-    clean. The anchor is causal (prefix precedes every window) and fixed per
-    episode, so fault-induced regime shifts survive as deviations.
-    """
-    regs = np.asarray(regimes)
-    grps = np.asarray(groups)
-    out = np.empty(len(regs), dtype=object)
-    for ep in np.unique(grps):
-        m = grps == ep
-        out[m] = regs[m][0]
-    return np.asarray(out)
-
-
-def _window_regime(seg: pd.DataFrame) -> str:
-    """Plant regime of a window: modal state across state_ columns."""
-    cols = [c for c in seg.columns if c.startswith("state_")]
-    if not cols:
-        return "RUN"
-    vals = np.concatenate([seg[c].to_numpy() for c in cols])
-    vals = np.array([str(v) for v in vals])
-    uniq, counts = np.unique(vals, return_counts=True)
-    return str(uniq[int(np.argmax(counts))])
-
-
-def _residual_block(
-    seg: pd.DataFrame, obs_cols: list[str], nominal: np.ndarray
-) -> np.ndarray:
-    # Twin-residual: |seg - nominal| per channel, summarized without
-    # identity (max/mean across channels of mean-abs and max-abs).
-    # nominal = per-channel mean of episode clean prefix (causal).
-    means, maxs = [], []
-    for j, c in enumerate(obs_cols):
-        v = seg[c].to_numpy(dtype=float)
-        r = np.abs(v - nominal[j])
-        means.append(float(r.mean()))
-        maxs.append(float(r.max()))
-    m = np.array(means)
-    x = np.array(maxs)
-    return np.array([m.max(), m.mean(), x.max(), x.mean()], dtype=float)
-
-
 def _episode_windows(job: tuple) -> tuple:
     """One episode's windows. Module-level so worker processes can pickle it."""
-    (g, obs_cols, ep, off, w, stride, invariant, residuals) = job
+    (g, obs_cols, ep, off, w, stride, invariant) = job
     g = g.sort_values("step").reset_index(drop=True)
     yv = g["y"].to_numpy(dtype=int)
     famv = (
@@ -200,17 +108,7 @@ def _episode_windows(job: tuple) -> tuple:
         if "fault_family" in g
         else np.array(["none"] * len(g))
     )
-    nominal = (
-        np.array(
-            [g[c].to_numpy(dtype=float)[:30].mean() for c in obs_cols]
-            if residuals
-            else [],
-            dtype=float,
-        )
-        if obs_cols
-        else np.array([], dtype=float)
-    )
-    xs, ys, fams, groups, starts, regms = [], [], [], [], [], []
+    xs, ys, fams, groups, starts = [], [], [], [], []
     for s in range(off, len(g) - w + 1, stride):
         seg = g.iloc[s : s + w]
         base = (
@@ -218,8 +116,6 @@ def _episode_windows(job: tuple) -> tuple:
             if invariant
             else _window_features(seg, obs_cols)
         )
-        if residuals:
-            base = np.concatenate([base, _residual_block(seg, obs_cols, nominal)])
         xs.append(base)
         win_y = yv[s : s + w]
         ys.append(int(win_y.any()))
@@ -227,8 +123,7 @@ def _episode_windows(job: tuple) -> tuple:
         fams.append(str(ff[0]) if len(ff) else "none")
         groups.append(ep)
         starts.append(s)
-        regms.append(_window_regime(seg))
-    return (xs, ys, fams, groups, starts, regms)
+    return (xs, ys, fams, groups, starts)
 
 
 def build_windows(
@@ -241,8 +136,6 @@ def build_windows(
     jitter: int = 0,
     seed: int = 0,
     return_starts: bool = False,
-    residuals: bool = False,
-    return_regimes: bool = False,
     build_jobs: int = 1,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
@@ -254,7 +147,6 @@ def build_windows(
     training: free shift augmentation, no new data).
     return_starts=True appends window start ticks (needed for point
     aggregation) as a fifth element. return_regimes=True appends the
-    plant-regime label (modal state) as the last element.
     build_jobs>1 fans episodes out to worker processes (order-preserving;
     jitter draws stay serial so the grid is identical to build_jobs=1).
     """
@@ -267,7 +159,7 @@ def build_windows(
     jobs = []
     for ep, g in df.groupby("episode_id", sort=False):
         off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
-        jobs.append((g, obs_cols, ep, off, w, stride, invariant, residuals))
+        jobs.append((g, obs_cols, ep, off, w, stride, invariant))
     if build_jobs == 1:
         parts = [_episode_windows(j) for j in jobs]
     else:
@@ -275,22 +167,17 @@ def build_windows(
 
         with ProcessPoolExecutor(max_workers=build_jobs) as ex:
             parts = list(ex.map(_episode_windows, jobs))
-    xs, ys, fams, groups, starts, regms = [], [], [], [], [], []
-    for px, py, pf, pg, ps, pr in parts:
+    xs, ys, fams, groups, starts = [], [], [], [], []
+    for px, py, pf, pg, ps in parts:
         xs += px
         ys += py
         fams += pf
         groups += pg
         starts += ps
-        regms += pr
     X, y, fam, grp = (np.array(xs), np.array(ys), np.array(fams), np.array(groups))
     out: tuple = (X, y, fam, grp)
     if return_starts:
         out += (np.array(starts),)
-    if return_regimes:
-        out += (np.array(regms),)
-    if len(out) == 4:
-        return out
     return out
 
 
