@@ -26,6 +26,7 @@ def _oof_predict(
     n_splits: int = 3,
     seed: int = 0,
     machine_holdout: list[str] | None = None,
+    ep_root: dict | None = None,
 ) -> np.ndarray:
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
@@ -37,12 +38,11 @@ def _oof_predict(
     y = np.searchsorted(classes, np.asarray(yr))
     oof = np.zeros(len(X), dtype=int)
     if machine_holdout:
-        splits = [
-            (
-                np.flatnonzero(~np.isin(groups, machine_holdout)),
-                np.flatnonzero(np.isin(groups, machine_holdout)),
-            )
-        ]
+        if ep_root is None:
+            raise ValueError("machine holdout needs ep_root episode->root map")
+        held_eps = {ep for ep, rt in ep_root.items() if str(rt) in set(machine_holdout)}
+        is_held = np.array([ep in held_eps for ep in np.asarray(groups).tolist()])
+        splits = [(np.flatnonzero(~is_held), np.flatnonzero(is_held))]
     else:
         cv = StratifiedGroupKFold(n_splits=n_splits)
         splits = list(cv.split(X, y, groups))
@@ -64,6 +64,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--build-jobs", type=int, default=1)
     ap.add_argument("--identity", action="store_true",
                     help="O2 ablation: per-channel (identity-carrying) features instead of invariant")
+    ap.add_argument("--variation", action="store_true",
+                    help="per-machine rate-of-change vs own clean behavior (attribution only)")
     ap.add_argument(
         "--cv",
         default="episode",
@@ -85,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         w=args.w,
         stride=args.stride,
         invariant=not args.identity,
+        variation=args.variation,
         build_jobs=args.build_jobs,
         return_starts=True,
         return_roots=True,

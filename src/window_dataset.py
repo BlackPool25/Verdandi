@@ -98,9 +98,34 @@ def _window_features_invariant(seg: pd.DataFrame, obs_cols: list[str]) -> np.nda
     return np.concatenate([out, struct])
 
 
+def _variation_block(
+    seg: pd.DataFrame, obs_cols: list[str], ref: dict[str, tuple[float, float]]
+) -> np.ndarray:
+    """Per-machine rate-of-change vs that machine's own clean behavior.
+
+    ref[m] = (mean|step-diff|, std(step-diff)) from the episode clean
+    prefix (how this machine usually moves). Returns per machine
+    [z-scored mean|d|, z-scored std(d)] over the window: high values mean
+    the machine moves unusually for ITSELF — texture level can't blind it
+    because the baseline is per-machine, not global. Identity-carrying
+    by design (attribution input, never detection).
+    """
+    out: list[float] = []
+    for c in obs_cols:
+        m = c.removeprefix("obs_")
+        v = seg[c].to_numpy(dtype=float)
+        d = np.abs(np.diff(v)) if len(v) > 1 else np.array([0.0])
+        rmean, rstd = ref.get(m, (float(np.mean(d)) or 1e-9, float(np.std(d)) or 1e-9))
+        out += [
+            float((float(np.mean(d)) - rmean) / max(rstd, 1e-9)),
+            float((float(np.std(d)) - rstd) / max(rstd, 1e-9)),
+        ]
+    return np.array(out, dtype=float)
+
+
 def _episode_windows(job: tuple) -> tuple:
     """One episode's windows. Module-level so worker processes can pickle it."""
-    (g, obs_cols, ep, off, w, stride, invariant) = job
+    (g, obs_cols, ep, off, w, stride, invariant, variation) = job
     g = g.sort_values("step").reset_index(drop=True)
     yv = g["y"].to_numpy(dtype=int)
     famv = (
@@ -109,6 +134,12 @@ def _episode_windows(job: tuple) -> tuple:
         else np.array(["none"] * len(g))
     )
     xs, ys, fams, groups, starts, roots = [], [], [], [], [], []
+    ref: dict[str, tuple[float, float]] = {}
+    if variation:
+        for c in obs_cols:
+            pv = g[c].to_numpy(dtype=float)[:30]
+            pd_ = np.abs(np.diff(pv)) if len(pv) > 1 else np.array([0.0])
+            ref[c.removeprefix("obs_")] = (float(np.mean(pd_)), max(float(np.std(pd_)), 1e-9))
     has_root = "root_id_step" in g.columns
     rootv = g["root_id_step"].to_numpy() if has_root else np.array([""] * len(g))
     for s in range(off, len(g) - w + 1, stride):
@@ -118,6 +149,8 @@ def _episode_windows(job: tuple) -> tuple:
             if invariant
             else _window_features(seg, obs_cols)
         )
+        if variation:
+            base = np.concatenate([base, _variation_block(seg, obs_cols, ref)])
         xs.append(base)
         win_y = yv[s : s + w]
         ys.append(int(win_y.any()))
@@ -145,6 +178,7 @@ def build_windows(
     seed: int = 0,
     return_starts: bool = False,
     return_roots: bool = False,
+    variation: bool = False,
     build_jobs: int = 1,
 ) -> tuple:
     """Slide windows over each episode; return (X, y, fam, groups).
@@ -170,7 +204,7 @@ def build_windows(
     jobs = []
     for ep, g in df.groupby("episode_id", sort=False):
         off = offset + (int(rng.integers(0, max(1, jitter))) if jitter else 0)
-        jobs.append((g, obs_cols, ep, off, w, stride, invariant))
+        jobs.append((g, obs_cols, ep, off, w, stride, invariant, variation))
     if build_jobs == 1:
         parts = [_episode_windows(j) for j in jobs]
     else:

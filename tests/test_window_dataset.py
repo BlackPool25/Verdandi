@@ -170,3 +170,30 @@ def test_window_roots_majority_vote():
         for r, s in zip(roots.tolist(), range(0, n - 16 + 1, 8))
         if 40 <= s and s + 16 <= 52
     )
+
+
+def test_variation_block_flags_chattery_machine():
+    import numpy as np
+    import pandas as pd
+
+    from src.window_dataset import build_windows
+
+    n = 100
+    rng = np.random.default_rng(4)
+    d = {
+        "episode_id": [1] * n,
+        "step": list(range(n)),
+        "y": [0] * n,
+        "fault_family": ["none"] * n,
+    }
+    # clean prefix calm everywhere; window region: M1 chatters
+    a0 = rng.normal(0, 1, size=n)
+    a1 = np.concatenate([rng.normal(0, 1, 30), rng.normal(0, 4, n - 30)])
+    for i, v in enumerate([a0, a1]):
+        d[f"obs_M{i}"] = v
+    df = pd.DataFrame(d)
+    X0, _, _, _ = build_windows(df, w=16, stride=8, invariant=False)
+    X1, _, _, _ = build_windows(df, w=16, stride=8, invariant=False, variation=True)
+    assert X1.shape[1] - X0.shape[1] == 4  # 2 machines x 2 stats
+    tail = X1[-1, -4:].reshape(2, 2)
+    assert tail[1].mean() > tail[0].mean()  # M1 more unusual vs its own calm
