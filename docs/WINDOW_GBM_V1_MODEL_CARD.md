@@ -66,6 +66,12 @@ but the signals don't separate: max-projection buries incipient 0.5σ shifts
 only) and 144-186 (everything else) — bar was <=4/<=6. Surviving lead:
 per-machine (not root) counter columns may restore delay; ROI-gated point
 head (learned projection) is the remaining localization path.
+Killed: multiclass specialist head (8-class GBM) — detection F1 0.795 <
+binary 0.846; family attribution works only for structural families
+(0.74-0.81) and is chance-level for obs families (0.13-0.18 vs 0.125 random),
+confirming the invariant representation erases family identity along with
+machine identity. Per-family thresholds on the binary head remain the family
+mechanism.
 
 ## Disclosure (read as an ML engineer)
 
