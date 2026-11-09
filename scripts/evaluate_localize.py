@@ -29,7 +29,7 @@ NEED_COLS = ["episode_id", "step"]
 
 def _eval_one(ep, g, ow, r, obs_cols):
     """Onset errors for one episode; pure function (parallel-safe)."""
-    from src.localize import counter_edge, cusum_backtrack, ewma_onset
+    from src.localize import counter_onset_fwd, cusum_onset_fwd, ewma_onset_fwd
 
     fam, t0, dur = r["class"], int(r["t0"]), int(r["dur"])
     starts = np.arange(0, len(g) - 128 + 1, 8)[: len(ow)]
@@ -51,11 +51,11 @@ def _eval_one(ep, g, ow, r, obs_cols):
         - np.median(g[obs_cols].to_numpy(dtype=float), axis=0)
     ).max(axis=1)
     if fam in STRUCT_COUNTER and STRUCT_COUNTER[fam] in g:
-        est = counter_edge(g[STRUCT_COUNTER[fam]].to_numpy(), trig)
+        est = counter_onset_fwd(g[STRUCT_COUNTER[fam]].to_numpy(), trig)
     elif fam == "drift":
-        est = ewma_onset(proj, trig)
+        est = ewma_onset_fwd(proj, trig)
     else:
-        est = cusum_backtrack(proj, trig)
+        est = cusum_onset_fwd(proj, trig)
     if est is None:
         return None
     return (fam, float(abs(base - t0)), float(abs(est - t0)))

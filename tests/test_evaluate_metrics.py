@@ -44,9 +44,10 @@ def test_evaluate_metrics_runs_on_synthetic_battery(tmp_path):
     }
     mp = tmp_path / "m.json"
     mp.write_text(json.dumps(man))
-    from src.window_dataset import apply_norm, build_windows, fit_clean_norm
-    from scripts.train_windows import train_binary_gbm
     from sklearn.model_selection import StratifiedGroupKFold
+
+    from scripts.train_windows import train_binary_gbm
+    from src.window_dataset import apply_norm, build_windows, fit_clean_norm
 
     X, y, fam, groups = build_windows(df, w=16, stride=16, invariant=True)
     oof = np.zeros(len(X))

@@ -16,6 +16,33 @@ GATE_COL = {"delay": "cycle_lag", "loss": "stale_hold_run", "breakdown": "down_r
 GATE_MIN = {"delay": 5, "loss": 1, "breakdown": 1}
 
 
+def gate_ok_for(
+    df, groups: np.ndarray, starts: np.ndarray, fam: np.ndarray, *, w: int
+) -> np.ndarray:
+    """Gate support for a whole OOF grid in one groupby pass (no per-episode scans)."""
+    out = np.zeros(len(groups), dtype=bool)
+    frames = {ep: g for ep, g in df.groupby("episode_id", sort=False)}
+    g = np.asarray(groups)
+    st = np.asarray(starts, dtype=int)
+    f = np.asarray(fam, dtype=str)
+    for ep in np.unique(g):
+        if int(ep) not in frames:
+            continue
+        seg = frames[int(ep)]
+        m = g == ep
+        for k in sorted(STRUCTURAL):
+            col = GATE_COL[k]
+            if col not in seg.columns:
+                continue
+            v = seg[col].to_numpy()
+            mm = m & (f == k)
+            for i in np.flatnonzero(mm):
+                s = int(st[i])
+                if bool((v[s : s + w] >= GATE_MIN[k]).any()):
+                    out[i] = True
+    return out
+
+
 def gate_support(
     df: pd.DataFrame, starts: np.ndarray, families: np.ndarray, *, w: int
 ) -> np.ndarray:

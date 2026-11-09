@@ -68,6 +68,12 @@ def main(argv: list[str] | None = None) -> int:
         f1 = compute_raw_pointwise_f1(y, kept)
         print(f"PA%K={k:<4} window-F1={f1:.4f}", flush=True)
 
+    # Hybrid: ML decisions confirmed by structural counters for gate families.
+    from scripts.hybrid_gate import apply_hybrid, gate_ok_for  # type: ignore[import-untyped]
+
+    gate_ok = gate_ok_for(df, groups, starts, _fam, w=args.w)
+    hyb = apply_hybrid(dec, _fam, gate_ok)
+
     # Point aggregation + VUS-PR per episode + NAB under all profiles.
     ps, pg, pt = aggregate_to_points(scores, groups, starts, w=args.w)
     vus_vals, hits, nc, ca, delays = [], [], 0, 0, []
@@ -114,6 +120,12 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "optimism gap: tuned window-F1 0.846 vs global-0.5 window-F1 "
         f"{compute_raw_pointwise_f1(y, dec):.4f}",
+        flush=True,
+    )
+    print(
+        "hybrid window-F1: "
+        f"{compute_raw_pointwise_f1(y, hyb):.4f} "
+        f"(ML-only global-0.5 above for comparison)",
         flush=True,
     )
     return 0
