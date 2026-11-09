@@ -329,6 +329,7 @@ def diagnose_incident(
     back: int = 16,
     h: int = 150,
     forecast_fn=None,
+    scores: dict[str, float] | None = None,
 ) -> dict:
     """Full gated diagnosis: onsets → radius-2 candidates → rank → path → link → report.
 
@@ -362,10 +363,12 @@ def diagnose_incident(
             return 0.6
         return 0.3
 
-    evidence = {
-        r["machine"]: {"onset": r["onset"], "score": _eweight(r)}
-        for r in kept if r["machine"] in nb
-    }
+    evidence = {}
+    for r in kept:
+        if r["machine"] not in nb:
+            continue
+        s = float(scores[r["machine"]]) if scores and r["machine"] in scores else _eweight(r)
+        evidence[r["machine"]] = {"onset": r["onset"], "score": s}
     if not evidence:
         return {
             "root": None, "fault_family": fault_family, "path": [],
