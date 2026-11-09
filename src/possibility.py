@@ -57,6 +57,62 @@ def neighborhood(
     return base | extra
 
 
+def best_cause_path(
+    evidence: dict[str, dict],
+    edges: dict[str, list[str]],
+    anchor: str,
+    per_hop: tuple[int, int] = (1, 6),
+    support_weight: float = 0.5,
+) -> tuple[list[str], float, dict[str, float]]:
+    """Recursive upstream cause search, memoized (rod-cutting form).
+
+    B(m) = own(m) + max(0, max over upstream u of [B(u) + bonus(u->m)])
+    with bonus gated on onset-delay consistency (dist*lo <= dt <= dist*hi).
+    DFS backwards from anchor with memo; backpointers give the path.
+    Returns (path root->anchor, path value, values dict).
+    Inconsistent edges are pruned (-inf), never forced.
+    """
+    lo, hi = per_hop
+    memo: dict[str, float] = {}
+    back: dict[str, str | None] = {}
+    rev = _reverse(edges)
+
+    def dist(u: str, v: str) -> int | None:
+        return _bfs(u, edges).get(v)
+
+    def consistent(u: str, m: str) -> bool:
+        d = dist(u, m)
+        if d is None or d < 1:
+            return False
+        dt = evidence[m]["onset"] - evidence[u]["onset"]
+        return d * lo <= dt <= d * hi
+
+    def B(m: str, seen: frozenset) -> float:
+        if m in memo:
+            return memo[m]
+        own = float(evidence[m].get("score", 0.0))
+        best, arg = own, None
+        for u in rev.get(m, []):
+            if u not in evidence or u in seen or not consistent(u, m):
+                continue
+            cand = B(u, seen | {m}) + support_weight * float(
+                evidence[m].get("score", 0.0)
+            )
+            if cand > best:
+                best, arg = cand, u
+        memo[m] = best
+        back[m] = arg
+        return best
+
+    if anchor not in evidence:
+        return [anchor], 0.0, {}
+    B(anchor, frozenset({anchor}))
+    path = [anchor]
+    while back.get(path[0]) is not None:
+        path.insert(0, back[path[0]])  # type: ignore[arg-type]
+    return path, memo[anchor], dict(memo)
+
+
 def best_path(
     scores: dict[str, float],
     edges: dict[str, list[str]],

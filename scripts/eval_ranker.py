@@ -53,6 +53,25 @@ def main():
     paths = sorted(glob.glob("artifacts/m0b_mass_*.parquet"))
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
     rows, y, groups, coord, fam, machines = build_candidates(df)
+    # Order-safe grouping: sort rows by episode so group counts match row order.
+    order = np.argsort(np.asarray(groups), kind="stable")
+    rows = [rows[i] for i in order]
+    y = np.asarray(y)[order]
+    groups = np.asarray(groups)[order]
+    coord = [coord[i] for i in order]
+    fam = np.asarray(fam)[order]
+    # Harness asserts (axis-4 F1/F6): rows grouped by query, int 0/1, 1 positive/query.
+    gids = np.asarray(groups)
+    seen: dict = {}
+    for i, g in enumerate(gids):
+        if g in seen and seen[g] != i - 1 and gids[i - 1] != g:
+            # non-contiguous episode block -> group/count mismatch downstream
+            raise AssertionError(f"rows not grouped by episode at index {i}")
+        seen[g] = i
+    for e in np.unique(gids):
+        m = gids == e
+        assert set(np.unique(np.asarray(y)[m]).tolist()) <= {0, 1}
+        assert int(np.asarray(y)[m].sum()) == 1, f"episode {e} positives != 1"
     fam_arr = np.array(fam)
     famids = np.array([hash(f) % (2**31) for f in fam_arr])
     Xnum = np.array([[r[0], r[1], r[2]] for r in rows])
