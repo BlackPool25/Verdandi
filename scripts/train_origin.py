@@ -62,8 +62,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--splits", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--build-jobs", type=int, default=1)
-    ap.add_argument("--identity", action="store_true",
-                    help="O2 ablation: per-channel (identity-carrying) features instead of invariant")
+    ap.add_argument(
+        "--identity",
+        action="store_true",
+        help="O2 ablation: per-channel (identity-carrying) features instead of invariant",
+    )
 
     ap.add_argument(
         "--cv",
@@ -92,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     X, y, fam, groups, _starts, roots = out
     hold: list[str] | None = None
+    ep_root: dict | None = None
     if args.cv == "machine":
         machines = sorted({str(m) for m in df["root_id_step"].unique() if str(m)})
         rng = np.random.default_rng(args.seed)
@@ -99,6 +103,11 @@ def main(argv: list[str] | None = None) -> int:
             rng.choice(machines, size=min(5, len(machines)), replace=False).tolist()
         )
         print(f"held-out machines: {hold} (MEASURED)")
+        ep_root = {}
+        for ep in np.unique(groups):
+            rr = [str(x) for x in np.asarray(roots)[groups == ep] if str(x) != "none"]
+            if rr:
+                ep_root[ep] = max(set(rr), key=rr.count)
     pred = _oof_predict(
         X,
         np.asarray(roots),
@@ -106,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         n_splits=args.splits,
         seed=args.seed,
         machine_holdout=hold,
+        ep_root=ep_root,
     )
     hit_w = ((pred == np.asarray(roots)) & (np.asarray(y) == 1)).sum()
     tot_w = int((np.asarray(y) == 1).sum())
