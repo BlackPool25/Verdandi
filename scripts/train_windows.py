@@ -104,9 +104,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--splits", type=int, default=3)
     ap.add_argument("--save-oof", default="")
     ap.add_argument("--invariant", action="store_true")
+    ap.add_argument("--n-jobs", type=int, default=-1)
     args = ap.parse_args(argv)
     import glob as _glob
 
+    from joblib import Parallel, delayed  # type: ignore[import-untyped]
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
 
     from src.train_pipeline import compute_raw_pointwise_f1, pick_threshold_max_f1
@@ -128,12 +130,22 @@ def main(argv: list[str] | None = None) -> int:
     print(f"windows={len(X)} feats={X.shape[1]} pos_rate={y.mean():.3f}")
     cv = StratifiedGroupKFold(n_splits=args.splits)
     oof = np.zeros(len(X))
-    for tr, te in cv.split(X, y, groups):
+
+    def _fit_fold(tr: np.ndarray, te: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         # Fold-only clean baseline: inter-machine scale differences are fit on
         # train-clean windows and applied blind to the held-out episodes.
+        # Runs in a worker process: HistGBM threads internally, so the outer
+        # level parallelizes over folds while inner threading stays per-fit.
         med, iqr = fit_clean_norm(X[tr], y[tr], n_obs)
         clf = train_binary_gbm(apply_norm(X[tr], med, iqr, n_obs), y[tr])
-        oof[te] = clf.predict_proba(apply_norm(X[te], med, iqr, n_obs))[:, 1]  # type: ignore[union-attr]
+        return te, np.asarray(
+            clf.predict_proba(apply_norm(X[te], med, iqr, n_obs))[:, 1]
+        )
+
+    for te, scores in Parallel(n_jobs=args.n_jobs)(
+        delayed(_fit_fold)(tr, te) for tr, te in cv.split(X, y, groups)
+    ):
+        oof[te] = scores
     f1 = compute_raw_pointwise_f1(y, (oof >= 0.5).astype(int))
     ep = episode_hit_rate((oof >= 0.5).astype(int), groups, fam)
     print(

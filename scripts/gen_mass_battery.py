@@ -12,6 +12,8 @@ import json
 import pathlib
 import sys
 
+import numpy as np
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 BATTERY_ID = "m0b-mass-balanced-v1"
@@ -87,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--manifest", default=MANIFEST_OUT)
     ap.add_argument("--out", default=PARQUET_OUT)
     ap.add_argument("--shard-eps", type=int, default=400)
+    ap.add_argument("--rug", default="off", choices=("off", "wide"))
+    ap.add_argument("--battery-id", default=None)
     args = ap.parse_args(argv)
     from src import dataset_export
 
@@ -111,8 +115,33 @@ def main(argv: list[str] | None = None) -> int:
             enable_natural_breakdown=False,
         )
         shards.append(shard_out)
+    battery_id = args.battery_id or (
+        "m0b-mass-wide-v1" if args.rug != "off" else BATTERY_ID
+    )
+    if args.rug != "off":
+        import pandas as pd  # type: ignore[import-untyped]
+
+        from src import config as _config
+        from src.rug import WIDE_PRESET, apply_sensor_rug
+
+        sigmas = np.array(
+            [float(_config.MACHINES[m]["sigma"]) for m in _config.MACHINE_NAMES]
+        )
+        for shard_out in shards:
+            df = pd.read_parquet(shard_out)
+            obs_cols = [c for c in df.columns if c.startswith("obs_")]
+            parts = []
+            for ep, g in df.groupby("episode_id", sort=False):
+                r = np.random.default_rng([args.seed, int(ep)])
+                idx = [obs_cols.index(f"obs_{m}") for m in _config.MACHINE_NAMES]
+                arr = g[obs_cols].to_numpy(dtype=float)
+                arr = apply_sensor_rug(arr[:, idx], sigmas, rng=r, spec=WIDE_PRESET)
+                g = g.copy()
+                g[obs_cols] = arr[:, np.argsort(idx)]
+                parts.append(g)
+            pd.concat(parts, ignore_index=True).to_parquet(shard_out)
     manifest = {
-        "battery_id": BATTERY_ID,
+        "battery_id": battery_id,
         "fault_episodes": fault_eps,
         "clean_episodes": clean_eps,
         "rows": [faults[ep] for ep in fault_eps],
@@ -123,8 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(
-        f"mass {BATTERY_ID}: {len(fault_eps)} fault + {len(clean_eps)} clean"
-        f" -> {len(shards)} shards"
+        f"mass {battery_id}: {len(fault_eps)} fault + {len(clean_eps)} clean"
+        f" -> {len(shards)} shards (rug={args.rug})"
     )
     return 0
 
