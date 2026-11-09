@@ -145,6 +145,8 @@ def export(
     runs_log: str | pathlib.Path | None = None,
     job_name: str = "dataset_v3",
     exclude_warmup: bool = True,
+    episode_len: int | None = None,
+    texture: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Export deterministic Parquet dataset and associated metadata.
 
@@ -221,12 +223,18 @@ def export(
             seed_faults = faults
             if isinstance(faults, dict) and any(isinstance(k, int) for k in faults):
                 seed_faults = faults.get(s)
+            seed_texture = texture
+            if isinstance(texture, dict) and any(isinstance(k, int) for k in texture):
+                seed_texture = texture.get(s)
             rec = twin.run_episode(
                 s,
                 seed_faults,
                 variant=variant,
                 enable_natural_breakdown=enable_natural_breakdown,
+                episode_len=episode_len,
+                texture=seed_texture,
             )
+            T_ep = int(rec["T"])
             episode_records.append(rec)
             strat = rec["strat"]
             fc = strat.get("funnel_census", {})
@@ -247,9 +255,9 @@ def export(
             last_obs = [None] * config.N_MACHINES
             down_counts = [0] * config.N_MACHINES
             steps_since_tput = [0] * config.N_MACHINES
-            recent_stale = [0] * config.T
-            recent_degrades = [0] * config.T
-            recent_rejects = [0] * config.T
+            recent_stale = [0] * T_ep
+            recent_degrades = [0] * T_ep
+            recent_rejects = [0] * T_ep
 
             degrade_count = 0
             reject_count = 0
@@ -265,14 +273,14 @@ def export(
                 if not wstate_map:
                     wstate_vec = twin.compute_wear(rec["states"])
 
-            for t_step in range(config.T):
+            for t_step in range(T_ep):
                 # Update causal event counters up to t_step
                 for ev in events_by_t.get(t_step, []):
                     ev_type = ev.get("event")
                     detail = ev.get("detail", {})
                     if ev_type == "LATE_VERDICT" and detail.get("verdict") == "DEGRADE":
                         degrade_count += 1
-                        for win_step in range(t_step, min(config.T, t_step + 15)):
+                        for win_step in range(t_step, min(T_ep, t_step + 15)):
                             recent_degrades[win_step] += 1
                     elif ev_type == "REJECT_ROUTE":
                         reject_count += 1
@@ -280,7 +288,7 @@ def export(
                             max_rwk_passes, int(detail.get("passes", 1))
                         )
                         # Mark rolling reject activity for recent causal window
-                        for win_step in range(t_step, min(config.T, t_step + 15)):
+                        for win_step in range(t_step, min(T_ep, t_step + 15)):
                             recent_rejects[win_step] += 1
 
                 # Update per-machine state, dwell, stale-hold, and DOWN run trackers
@@ -309,7 +317,7 @@ def export(
                         cur_obs - last_obs[m_idx]
                     ) <= max(1e-9, tol):
                         stale_counts[m_idx] += 1
-                        for win_step in range(t_step, min(config.T, t_step + 10)):
+                        for win_step in range(t_step, min(T_ep, t_step + 10)):
                             recent_stale[win_step] += 1
                     else:
                         stale_counts[m_idx] = 0
@@ -634,7 +642,7 @@ def export(
                     row["degrade_flag_count"] = int(recent_degrades[t_step])
                     row["reject_flag_count"] = int(recent_rejects[t_step])
                     row["rwk_passes"] = int(max_rwk_passes)
-                    row["funnel_rate"] = float(fc.get("kits_completed", 0) / config.T)
+                    row["funnel_rate"] = float(fc.get("kits_completed", 0) / T_ep)
                     row["scrapped_total"] = int(rec["flow_stats"]["scrapped"])
                     row["scrap_flag"] = 1 if rec["flow_stats"]["scrapped"] > 0 else 0
 
@@ -1037,6 +1045,8 @@ def export_v6(
     enable_natural_breakdown: bool = True,
     runs_log: str | pathlib.Path | None = None,
     exclude_warmup: bool = True,
+    episode_len: int | None = None,
+    texture: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Export deterministic v6 Parquet dataset and associated metadata."""
     return export(
@@ -1054,6 +1064,8 @@ def export_v6(
         runs_log=runs_log,
         job_name="dataset_v6",
         exclude_warmup=exclude_warmup,
+        episode_len=episode_len,
+        texture=texture,
     )
 
 

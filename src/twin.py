@@ -1925,7 +1925,7 @@ def run_episode(
         # only when every spec is exempt; multi-fault variant episodes still
         # enforce on the non-exempt subset.
         if non_exempt:
-            check_rate_budget(non_exempt)
+            check_rate_budget(non_exempt, scored=T - CAL_WIN)
         overrides = var_dict.get("buffer_caps", {})
         unlisted = set(overrides.keys()) - ALLOWED_UNFREEZE_BUFFERS
         if unlisted:
