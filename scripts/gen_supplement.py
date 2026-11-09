@@ -70,18 +70,31 @@ def build_supplement_specs(
     def tex():
         if not dr:
             return {"ar_coef": 0.6, "sine_amp": 0.5, "eps_scale": 0.5}
+        # Capped DR (SNR floor): texture_std must stay well under the
+        # incipient fault scale so 1-3σ faults are not Bayes-drowned.
+        # eps_scale (innovation noise) is the binding constraint.
         return {
-            "ar_coef": float(rng.uniform(0.2, 0.8)),
-            "sine_amp": float(rng.uniform(0.0, 1.0)),
-            "eps_scale": float(rng.uniform(0.3, 0.7)),
+            "ar_coef": float(rng.uniform(0.4, 0.7)),
+            "sine_amp": float(rng.uniform(0.0, 0.8)),
+            "eps_scale": float(rng.uniform(0.3, 0.5)),
         }
+
+    def dur_for(fam: str) -> int:
+        # Quality faults emit ~1 reject per ~7 steps at 15-40% roll, so
+        # sub-15-step windows usually contain zero events (measured 0/0 in
+        # 15/16 episodes). Longer exposure accumulates countable events.
+        if fam == "breakdown":
+            return int(rng.integers(4, 8))
+        if fam == "quality":
+            return int(rng.integers(25, 46))
+        return int(rng.integers(8, 15))
 
     ep = BASE_SEED_EP
     k = 0
     for fam in FAMILIES:
         for rung in RUNGS:
             for _ in range(n_per_cell):
-                dur = int(rng.integers(4, 8)) if fam == "breakdown" else int(rng.integers(8, 15))
+                dur = dur_for(fam)
                 t0 = int(rng.integers(config.CAL_WIN, episode_len - dur - 5))
                 m = str(rng.choice(machines))
                 faults[ep] = _fault_dict(fam, rung, m, t0, dur, _mag(rung, rng), k)
@@ -93,10 +106,10 @@ def build_supplement_specs(
         lo, hi = GAP_BINS[i % len(GAP_BINS)]
         m1, m2 = rng.choice(machines, size=2, replace=False)
         f1, f2 = rng.choice(list(FAMILIES), size=2, replace=False)
-        d1 = int(rng.integers(8, 15))
+        d1 = dur_for(str(f1))
         t1 = int(rng.integers(config.CAL_WIN, episode_len - d1 - 30))
         gap = int(rng.integers(lo, min(hi, 60) + 1))
-        d2 = int(rng.integers(8, 15))
+        d2 = dur_for(str(f2))
         t2 = min(t1 + gap, episode_len - d2 - 5)
         f = [
             _fault_dict(f1, "caricature", str(m1), t1, d1, _mag("caricature", rng), k),
@@ -162,6 +175,12 @@ def main(argv: list[str] | None = None) -> int:
         "n_doubles": len(doubles),
         "doubles": doubles,
         "dr": not args.no_dr,
+        "dr_ranges": {
+            "ar_coef": [0.4, 0.7],
+            "sine_amp": [0.0, 0.8],
+            "eps_scale": [0.3, 0.5],
+        },
+        "quality_dur": [25, 45],
         "shards": shards,
     }
     pathlib.Path(args.manifest).write_text(json.dumps(manifest, indent=2))
