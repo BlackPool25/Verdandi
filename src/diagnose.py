@@ -203,3 +203,38 @@ def diagnose_multi_origin(g: pd.DataFrame, obs_cols: list[str]) -> list[dict]:
     for i, r in enumerate(entries):
         r["hop_est"] = 0 if i == 0 else r["hop_est"]
     return entries
+
+
+def first_trigger(
+    scores: np.ndarray, starts: np.ndarray, thr: float = 0.8
+) -> int | None:
+    """First window-start with score >= thr (locked operating point)."""
+    s = np.asarray(scores, dtype=float)
+    st = np.asarray(starts, dtype=int)
+    hot = np.flatnonzero(s >= thr)
+    return int(st[hot[0]]) if len(hot) else None
+
+
+def diagnose_from_trigger(
+    g: pd.DataFrame, obs_cols: list[str], trigger: int, back: int = 16
+) -> list[dict]:
+    """Trigger-gated multi-origin diagnosis (alongside frozen detector).
+
+    Drops onsets before trigger-back (pre-trigger texture is not the
+    fault), then ranks by direction signature and onset distance to the
+    trigger. Silent on clean: caller only invokes on fired windows.
+    """
+    out = diagnose_multi_origin(g, obs_cols)
+    kept = [r for r in out if r["onset"] >= trigger - back]
+
+    def _trank(r: dict) -> tuple[int, int, int]:
+        if r["onset_kind"] == "state" and r["own_state"] == "DOWN":
+            base = 0
+        elif r["onset_kind"] in ("state", "counter"):
+            base = 1
+        else:
+            base = 2
+        return (base, abs(r["onset"] - trigger), r["onset"])
+
+    kept.sort(key=_trank)
+    return kept

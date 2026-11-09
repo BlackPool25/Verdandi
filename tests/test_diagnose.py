@@ -96,3 +96,37 @@ def test_counter_onset_finds_delay_step():
     )
     tick, kind = machine_onset(g, "obs_C2", 0.0, 1.0)
     assert kind == "counter" and abs(tick - 150) <= 4
+
+
+def test_trigger_gate_drops_pre_trigger_texture():
+    from src.diagnose import diagnose_from_trigger
+
+    n = 300
+    rng = np.random.default_rng(3)
+    a0 = np.concatenate([rng.normal(0, 1, 200), rng.normal(0, 1, 100) + 6.0])
+    tex = rng.normal(0, 1, size=n)
+    tex[110:115] += 8.0  # pre-trigger texture burst
+    g = pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            "obs_A0": a0,
+            "obs_B9": tex,
+            "state_A0": ["RUN"] * 200 + ["DOWN"] * 100,
+            "state_B9": ["RUN"] * n,
+        }
+    )
+    out = diagnose_from_trigger(g, ["obs_A0", "obs_B9"], trigger=190, back=16)
+    machines = [r["machine"] for r in out]
+    assert "A0" in machines and "B9" not in machines
+
+
+def test_first_trigger_picks_first_hot_window():
+    import numpy as np
+
+    from src.diagnose import first_trigger
+
+    s = np.array([0.1, 0.5, 0.85, 0.9])
+    st = np.array([0, 8, 16, 24])
+    assert first_trigger(s, st, 0.8) == 16
+    assert first_trigger(s, st, 0.99) is None
