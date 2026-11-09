@@ -576,17 +576,22 @@ def _delay_d(fx, t):
     return 0
 
 
-def _sample_signal(rng, st, t, cfg, ar, dev=0.0):
+_DEFAULT_TEX = (0.6, 0.5, 0.5)
+
+
+def _sample_signal(rng, st, t, cfg, ar, dev=0.0, tex=_DEFAULT_TEX):
     """One step of the SIM_SPEC 4.1 clean-signal eq; returns (obs, temp, ar).
 
     dev is the origin-only fault deviation (§5); 0.0 reproduces the exact
-    T5/T6 clean path (clamp included).
+    T5/T6 clean path (clamp included). tex = (ar_coef, sine_amp, eps_scale)
+    defaults reproduce the frozen path exactly; DR supplements override it.
     """
+    ar_coef, sine_amp, eps_scale = tex
     base, sigma, cycle = cfg["base"], cfg["sigma"], cfg["cycle"]
-    eps = rng.normal(0.0, sigma * 0.5)
-    ar = 0.6 * ar + eps
+    eps = rng.normal(0.0, sigma * eps_scale)
+    ar = ar_coef * ar + eps
     phase = 2.0 * math.pi * ((t % cycle) / cycle)
-    clean = base + 0.5 * sigma * math.sin(phase) + ar
+    clean = base + sine_amp * sigma * math.sin(phase) + ar
     val = clean + STATE_OFFSETS[st] * sigma + dev
     lo, hi = base - _CLAMP_SIGMA * sigma, base + _CLAMP_SIGMA * sigma
     tlo, thi = TEMP_RANGES[cfg["class"]]
@@ -964,7 +969,8 @@ def _line_process(env, spec, shared):
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
+            tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1077,7 +1083,8 @@ def _insp0_process(env, up, down, shared):
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
+            tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1316,7 +1323,8 @@ def _asm0_process(env, asm01, kit, shared):
         shared["held"][idx] = {"batch": True} if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
+            tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1454,7 +1462,8 @@ def _asm_mid_process(env, name, up, down, shared):
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
+            tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1582,7 +1591,8 @@ def _rwk0_process(env, shared):
         shared["held"][idx] = part if held else None
         wear_bias = _update_wear_bias(shared, idx, st, sigma)
         val, _temp, ar = _sample_signal(
-            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias
+            rng, st, t, cfg, ar, _fault_dev(fx, t, sigma) + wear_bias,
+            tex=shared.get("tex", _DEFAULT_TEX),
         )
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
@@ -1803,9 +1813,10 @@ def _episode_len_override(fn):
         variant=None,
         maintenance=None,
         episode_len=None,
+        texture=None,
     ):
         global T
-        if episode_len is None:
+        if episode_len is None and texture is None:
             return fn(
                 seed,
                 fault,
@@ -1813,7 +1824,7 @@ def _episode_len_override(fn):
                 variant=variant,
                 maintenance=maintenance,
             )
-        if (
+        if episode_len is not None and (
             isinstance(episode_len, bool)
             or not isinstance(episode_len, int)
             or episode_len < 1
@@ -1821,7 +1832,8 @@ def _episode_len_override(fn):
             raise ValueError(
                 f"episode_len must be a positive int, got {episode_len!r}"
             )
-        prev, T = T, episode_len
+        tex = _validate_texture(texture)
+        prev, T = T, episode_len if episode_len is not None else T
         try:
             return fn(
                 seed,
@@ -1829,11 +1841,30 @@ def _episode_len_override(fn):
                 enable_natural_breakdown=enable_natural_breakdown,
                 variant=variant,
                 maintenance=maintenance,
+                _tex=tex,
             )
         finally:
             T = prev
 
     return wrapper
+
+
+def _validate_texture(texture: dict | None) -> tuple[float, float, float]:
+    """Validate DR texture knobs; defaults reproduce the frozen path exactly."""
+    if texture is None:
+        return (0.6, 0.5, 0.5)
+    try:
+        ar_c = float(texture.get("ar_coef", 0.6))
+        sn = float(texture.get("sine_amp", 0.5))
+        ep = float(texture.get("eps_scale", 0.5))
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError(f"texture must be a dict of floats, got {texture!r}")
+    if not (0.0 <= ar_c < 1.0) or not (0.0 <= sn <= 1.0) or not (0.0 < ep <= 1.0):
+        raise ValueError(
+            f"texture out of range (ar_coef in [0,1), sine_amp in [0,1], "
+            f"eps_scale in (0,1]): {texture!r}"
+        )
+    return (ar_c, sn, ep)
 
 
 @_episode_len_override
@@ -1844,17 +1875,21 @@ def run_episode(
     enable_natural_breakdown: bool = True,
     variant: str | dict | None = None,
     maintenance: list[dict] | None = None,
+    _tex: tuple[float, float, float] | None = None,
 ) -> dict:
     """Run one episode with seeded fault injection; return the record.
 
     fault is None, one fault dict, a tuple, or a list of fault dicts (multi-fault
     episodes: same-machine windows need a ≥5-step gap). maintenance is None or a
     list of {machine, t} dicts resetting that machine's WSTATE to 0.0 before
-    step t's accumulation and emitting a MAINT_EVENT. Returns the full
+    step t's accumulation and emitting a MAINT_EVENT. _tex is the validated
+    (ar_coef, sine_amp, eps_scale) texture tuple (wrapper-injected; defaults
+    reproduce the frozen path). Returns the full
     episode record (seed, T, cal_win, machines, obs, states, buffers, throughput,
     events, sbuf_stats, flow_stats, agv_waits, parts, faults).
     """
     fault_list = _validate(seed, fault)
+    tex: tuple[float, float, float] = _tex if _tex is not None else (0.6, 0.5, 0.5)
     maint_entries: list[dict] = []
     if maintenance is not None:
         if not isinstance(maintenance, list):
@@ -1927,6 +1962,7 @@ def run_episode(
         "drop": drop,
         "fail": fail,
         "eta": eta,  # stored for the W3 in-step hook (5 sites read shared['eta'])
+        "tex": tex,  # DR texture knobs (ar_coef, sine_amp, eps_scale)
         "enable_bd": enable_natural_breakdown,
         "obs": [[0.0] * T for _ in range(N_MACHINES)],
         "states": [["RUN"] * T for _ in range(N_MACHINES)],
