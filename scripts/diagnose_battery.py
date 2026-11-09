@@ -25,7 +25,11 @@ _WORKER: dict = {}
 
 
 def _init_worker(
-    artifact: str, thr_prop: float, wait: int, oracle: bool = False
+    artifact: str,
+    thr_prop: float,
+    wait: int,
+    oracle: bool = False,
+    abstain_conf: float = 0.8,
 ) -> None:
     """Load the frozen model once per worker process (CPU fork-safe)."""
     from src.diagnose import confirm_trigger, diagnose_from_trigger
@@ -41,6 +45,7 @@ def _init_worker(
     _WORKER["thr_prop"] = float(thr_prop)
     _WORKER["wait"] = int(wait)
     _WORKER["oracle"] = bool(oracle)
+    _WORKER["abstain_conf"] = float(abstain_conf)
     _WORKER["confirm_trigger"] = confirm_trigger
     _WORKER["diagnose_from_trigger"] = diagnose_from_trigger
     _WORKER["apply_norm"] = apply_norm
@@ -57,6 +62,7 @@ def _work_episode(job: tuple) -> tuple:
     model, w, stride = _WORKER["model"], _WORKER["w"], _WORKER["stride"]
     med, iqr, n_obs = _WORKER["med"], _WORKER["iqr"], _WORKER["n_obs"]
     thr_prop, wait = _WORKER["thr_prop"], _WORKER["wait"]
+    abstain_conf = float(_WORKER.get("abstain_conf", 0.8))
     oracle = _WORKER.get("oracle", False)
     confirm_trigger = _WORKER["confirm_trigger"]
     diagnose_from_trigger = _WORKER["diagnose_from_trigger"]
@@ -74,7 +80,7 @@ def _work_episode(job: tuple) -> tuple:
     m_idx = (starts >= anchor - back) & (starts <= anchor + 150)
     if not m_idx.any():
         return (fam, rung, root, None, None, None, True, "no-window", true_sp)
-    if float(s[m_idx].max()) < 0.9:
+    if float(np.abs(s[m_idx] - 0.5).max() * 2) < abstain_conf:
         return (fam, rung, root, None, None, None, True, "low-confidence", true_sp)
     try:
         if oracle:
@@ -144,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
         help="override confirm threshold (default: min family threshold, recall-first)",
     )
     ap.add_argument(
+        "--abstain-conf",
+        type=float,
+        default=0.8,
+        help="abstain unless an anchor window reaches this confidence |s-0.5|*2 (replaces hand-tuned maxscore gate)",
+    )
+    ap.add_argument(
         "--oracle-onset",
         action="store_true",
         help="ablation only: inject GT onset for the true root (see diagnose_multi_origin)",
@@ -191,7 +203,9 @@ def main(argv: list[str] | None = None) -> int:
             break
 
     if args.n_jobs == 1:
-        _init_worker(args.artifact, thr_prop, args.wait, args.oracle_onset)
+        _init_worker(
+            args.artifact, thr_prop, args.wait, args.oracle_onset, args.abstain_conf
+        )
         done = [_work_episode(j) for j in jobs]
     else:
         # Forked processes: private globals per worker, model loads once.
@@ -199,7 +213,13 @@ def main(argv: list[str] | None = None) -> int:
         with ProcessPoolExecutor(
             max_workers=args.n_jobs,
             initializer=_init_worker,
-            initargs=(args.artifact, thr_prop, args.wait, args.oracle_onset),
+            initargs=(
+                args.artifact,
+                thr_prop,
+                args.wait,
+                args.oracle_onset,
+                args.abstain_conf,
+            ),
         ) as ex:
             done = list(ex.map(_work_episode, jobs))
     rows.extend(done)
