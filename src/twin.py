@@ -41,6 +41,7 @@ ASM2 30->24, RWK0 31->25.
 import argparse
 import concurrent.futures
 import copy
+import functools
 import hashlib
 import itertools
 import json
@@ -1785,6 +1786,57 @@ def _resolve_variant(variant: str | dict | None) -> dict | None:
     raise TypeError(f"Variant must be str, dict, or None, got {type(variant)}")
 
 
+def _episode_len_override(fn):
+    """Process-local episode-length override (forked workers only, not threads).
+
+    Goldens pin the default T; long-episode batteries opt in per call.
+    The override is restored in a finally block. Safe under
+    fork-based multiprocessing (each worker has its own globals).
+    """
+
+    @functools.wraps(fn)
+    def wrapper(
+        seed,
+        fault,
+        *,
+        enable_natural_breakdown=True,
+        variant=None,
+        maintenance=None,
+        episode_len=None,
+    ):
+        global T
+        if episode_len is None:
+            return fn(
+                seed,
+                fault,
+                enable_natural_breakdown=enable_natural_breakdown,
+                variant=variant,
+                maintenance=maintenance,
+            )
+        if (
+            isinstance(episode_len, bool)
+            or not isinstance(episode_len, int)
+            or episode_len < 1
+        ):
+            raise ValueError(
+                f"episode_len must be a positive int, got {episode_len!r}"
+            )
+        prev, T = T, episode_len
+        try:
+            return fn(
+                seed,
+                fault,
+                enable_natural_breakdown=enable_natural_breakdown,
+                variant=variant,
+                maintenance=maintenance,
+            )
+        finally:
+            T = prev
+
+    return wrapper
+
+
+@_episode_len_override
 def run_episode(
     seed: int,
     fault: dict | list | tuple | None = None,
@@ -2454,17 +2506,17 @@ def run_calibration(seed: int):
     return np.asarray(rec["obs"], dtype=float)[:, WARMUP_STEPS:CAL_WIN].T
 
 
-def _try_place(rng, taken, durs, tries=50):
-    """Draw t0 ~uniform over [CAL_WIN, T-dur] with ≥5-step gap retry.
+def _try_place(rng, taken, durs, tries=50, horizon=None):
+    """Draw t0 ~uniform over [CAL_WIN, H-dur] with ≥5-step gap retry.
 
-    Per window, draw up to `tries` uniform candidates; keep the first
-    that holds a ≥5-step gap against taken + already-placed blocks.
-    Return None when a window exhausts its retries (caller falls back).
+    H defaults to the global T (frozen batteries); long-episode
+    supplements pass their horizon explicitly so faults spread.
     """
     blocks = sorted(taken)
     out = []
+    H = T if horizon is None else horizon
     for dur in durs:
-        hi = T - dur
+        hi = H - dur
         if hi < CAL_WIN:
             return None
         found = None
@@ -2481,19 +2533,25 @@ def _try_place(rng, taken, durs, tries=50):
     return out
 
 
-def build_faults(seed: int = 12345) -> list[dict]:
+def build_faults(seed: int = 12345, episode_len: int | None = None) -> list[dict]:
     """Build the deterministic fault manifest for a master seed.
 
     Full machine x class cross-product (26 machines x 7 classes = 182
     rows); the oracle representative subset (incl. F-21 drift B2 t0=150
     dur=12 mag=5.2) is pinned with rep=True. t0 ~ uniform on [CAL_WIN,
-    300-dur] from rng_place = children[32]; same-machine windows keep a
-    ≥5-step gap (uniform draw + bounded retry; dur-8 fallback, which
-    always fits: 7 windows need at most 7*8+6*5=86 steps of the
-    ~180-step range).
+    H-dur] from rng_place = children[32] with H = episode_len or global T
+    (300 default; docstring range below is the default); same-machine
+    windows keep a ≥5-step gap (uniform draw + bounded retry; dur-8
+    fallback, which always fits: 7 windows need at most 7*8+6*5=86 steps
+    of the ~180-step range).
     """
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError(f"seed must be a non-negative int, got {seed!r}")
+    if episode_len is not None and (
+        isinstance(episode_len, bool) or not isinstance(episode_len, int) or episode_len < 1
+    ):
+        raise ValueError(f"episode_len must be a positive int, got {episode_len!r}")
+    H = T if episode_len is None else episode_len
     seq = np.random.SeedSequence((seed,))
     children = seq.spawn(36)  # placement stream is children[32]
     assert N_STREAMS == 36 and len(children) == N_STREAMS
@@ -2549,11 +2607,11 @@ def build_faults(seed: int = 12345) -> list[dict]:
                 mag = _params(cls, extra)
                 todo.append([cls, dur, mag, extra, f"F-{m}-{cls}"])
         durs = [d for (_, d, _, _, _) in todo]
-        t0s = _try_place(rng_place, taken, durs)
+        t0s = _try_place(rng_place, taken, durs, horizon=H)
         if t0s is None:  # pathological dur draw: retry with minimal durs
             for entry in todo:
                 entry[1] = 8
-            t0s = _try_place(rng_place, taken, [8] * len(todo))
+            t0s = _try_place(rng_place, taken, [8] * len(todo), horizon=H)
             assert t0s is not None
         for (cls, dur, mag, extra, fid), t0 in zip(todo, t0s):
             rows.append(
