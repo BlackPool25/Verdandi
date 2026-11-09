@@ -38,7 +38,7 @@ def test_eval_one_is_deterministic(tmp_path):
          **{f"obs_A{i}": np.zeros(n) for i in range(3)}}
     )
     ow = pd.DataFrame({"score": np.linspace(0, 1, 9)})
-    r = {"class": "delay", "t0": 100}
+    r = {"class": "delay", "t0": 100, "dur": 10}
     a = _eval_one(1, g, ow, r, ["obs_A0", "obs_A1", "obs_A2"])
     b = _eval_one(1, g, ow, r, ["obs_A0", "obs_A1", "obs_A2"])
     assert a == b

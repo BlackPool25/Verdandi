@@ -31,10 +31,16 @@ def _eval_one(ep, g, ow, r, obs_cols):
     """Onset errors for one episode; pure function (parallel-safe)."""
     from src.localize import counter_edge, cusum_backtrack, ewma_onset
 
-    fam, t0 = r["class"], int(r["t0"])
+    fam, t0, dur = r["class"], int(r["t0"]), int(r["dur"])
     starts = np.arange(0, len(g) - 128 + 1, 8)[: len(ow)]
+    # Trigger = first hot window that actually overlaps the fault span
+    # [t0, t0+dur). A hot clean window ahead of the fault is false smear,
+    # not early detection — localizing inside it is meaningless.
+    scores = ow["score"].to_numpy(dtype=float)
     hot = np.flatnonzero(
-        (ow["score"].to_numpy(dtype=float) >= 0.8) & (starts >= t0 - 128)
+        (scores >= 0.8)
+        & (starts < t0 + dur)
+        & (starts + 128 > t0)
     )
     if not len(hot):
         return None
