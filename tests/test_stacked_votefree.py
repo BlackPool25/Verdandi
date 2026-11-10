@@ -57,3 +57,29 @@ def test_free_eval_runs():
     import scripts.eval_stacked as es
 
     assert callable(es.main_free)
+
+
+def _syn_flowmap(eps=(0, 1), machines=("A0", "A1")):
+    return {(ep, m): [float(ep + 1), float(2 * (ep + 1))] for ep in eps for m in machines}
+
+
+def test_rows_hybrid_shape_and_flow():
+    import scripts.eval_stacked as es
+
+    oof, machines = _syn_oof()
+    fm = _syn_flowmap(range(6), machines)
+    X, y, groups, fam = es.build_rows_hybrid(oof, machines, None, None, fm)
+    n = len(machines)
+    assert X.shape == (n * 6, 8 + 4 + n + 2)
+    assert y.sum() == 6
+
+
+def test_rows_hybrid_flow_moves_rows():
+    import scripts.eval_stacked as es
+
+    oof, machines = _syn_oof()
+    fm = _syn_flowmap(range(6), machines)
+    X1, _, _, _ = es.build_rows_hybrid(oof, machines, None, None, fm)
+    fm2 = {(ep, m): [99.0, 99.0] for ep in range(6) for m in machines}
+    X2, _, _, _ = es.build_rows_hybrid(oof, machines, None, None, fm2)
+    assert not (X1 == X2).all()

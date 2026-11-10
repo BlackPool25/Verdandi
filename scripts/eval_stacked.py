@@ -146,6 +146,66 @@ def load_onsets(path: str = "artifacts/onsets.parquet"):
         return None
 
 
+def flowmap_from_cache(cache: str, shard_glob: str, machines: list[str]):
+    """Per-(episode, machine) incident-buffer flow features from a window cache.
+
+    Returns {(ep, m): [up_max, down_max]} — trailing-max buffer occupancy on
+    the machine's upstream/downstream edge buffers (via twin._line_edges),
+    aggregated (max) over the episode's windows. Zeros when unmapped.
+    """
+    import glob as _glob
+
+    from src.twin import _line_edges
+
+    sample = pd.read_parquet(sorted(_glob.glob(shard_glob))[0])
+    cols = [c for c in sample.columns if c.startswith("buffer_")] + [
+        c for c in ("sunk", "scrapped", "scrapped_total", "throughput") if c in sample.columns
+    ]
+    jmap = {c: j for j, c in enumerate(cols)}
+    F = np.load(f"{cache}/F_flow.npy", mmap_mode="r")
+    meta = pd.read_parquet(f"{cache}/meta.parquet")
+    edges = _line_edges()
+
+    def _codes(v):
+        if v is None:
+            return []
+        if isinstance(v, (list, tuple)):
+            out = []
+            for x in v:
+                out += _codes(x)
+            return out
+        return [v]
+
+    flowmap = {}
+    for ep, widx in meta.groupby("ep").indices.items():
+        widx = np.asarray(widx)
+        for m in machines:
+            up, down = edges.get(m, (None, None))
+            vals = []
+            for v in (_codes(up), _codes(down)):
+                cols_m = [f"buffer_{c}" for c in v if f"buffer_{c}" in jmap]
+                if cols_m and len(widx):
+                    vals.append(float(F[widx][:, [2 * jmap[c] + 1 for c in cols_m]].max()))
+                else:
+                    vals.append(0.0)
+            flowmap[(int(ep), m)] = vals
+    return flowmap
+
+
+def build_rows_hybrid(oof: pd.DataFrame, machines: list[str], fired=None, onsets=None, flowmap=None):
+    """Teacher rows + 2 per-machine flow cols (hybrid: votes stay, flow adds).
+
+    flowmap: {(ep, m): [up_max, down_max]} or None (zeros).
+    """
+    Xb, y, groups, fam = build_rows(oof, machines, fired, onsets)
+    n = len(machines)
+    flow = np.array([
+        list(flowmap.get((int(groups[i]), machines[i % n]), [0.0, 0.0])) if flowmap else [0.0, 0.0]
+        for i in range(len(y))
+    ], dtype=float)
+    return np.hstack([np.asarray(Xb, dtype=float), flow]), y, groups, fam
+
+
 def _run_lambdarank(X, y, groups, fam):
     """Shared 3-fold episode-grouped LambdaRank CV → OOF scores."""
     import lightgbm as lgb
