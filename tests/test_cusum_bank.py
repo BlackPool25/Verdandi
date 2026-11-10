@@ -1,0 +1,55 @@
+"""CUSUM bank tests: fixed + adaptive-k, Bernoulli, EWMA, slope, spike path."""
+
+import numpy as np
+
+
+def test_tabular_cusum_fires_on_1sigma_shift():
+    from src.cusum_bank import TabularCUSUM
+
+    rng = np.random.default_rng(0)
+    c = TabularCUSUM(k=0.5, h=5.0, mu0=0.0, sigma0=1.0)
+    fired = [c.step(v) for v in rng.normal(0, 1, 20)] + [
+        c.step(v) for v in rng.normal(1.0, 1, 60)
+    ]
+    assert any(fired[20:]) and not any(fired[:20])
+
+
+def test_adaptive_cusum_tracks_variance_shift():
+    from src.cusum_bank import TabularCUSUM
+
+    rng = np.random.default_rng(2)
+    c = TabularCUSUM(k=0.5, h=5.0, mu0=0.0, sigma0=1.0, adaptive=True)
+    quiet = [c.step(v) for v in rng.normal(0, 0.5, 40)]
+    assert not any(quiet)
+    loud_shift = [c.step(v) for v in rng.normal(1.5, 1.5, 80)]
+    assert any(loud_shift)
+
+
+def test_baseline_frozen_across_second_fit():
+    from src.cusum_bank import TabularCUSUM
+
+    c = TabularCUSUM(k=0.5, h=5.0, mu0=0.0, sigma0=1.0)
+    c.fit([10.0] * 50)
+    assert (c.mu0, c.sigma0) == (0.0, 1.0)
+
+
+def test_bernoulli_cusum_reference_from_clean_only():
+    from src.cusum_bank import BernoulliCUSUM
+
+    rng = np.random.default_rng(1)
+    clean = (rng.random(2000) < 0.005).astype(int)
+    c = BernoulliCUSUM.fit_rate(clean, h=3.0)
+    assert 0.003 < c.r < 0.010
+    hot = (rng.random(500) < 0.03).astype(int)
+    assert any(c.step(int(v)) for v in hot)
+
+
+def test_spike_absorbed_by_cusum_but_caught_by_fast_path():
+    from src.cusum_bank import SpikePath, TabularCUSUM
+
+    c = TabularCUSUM(k=0.5, h=5.0, mu0=0.0, sigma0=1.0)
+    s = SpikePath(w=4, thr=3.0)
+    xs = np.zeros(50)
+    xs[25] = 3.5
+    assert not any(c.step(v) for v in xs)
+    assert any(s.step(v) for v in xs)
