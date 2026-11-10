@@ -29,6 +29,26 @@ Confirms audit: silence concentrated in loss + quality-off-sink + incipient sens
 
 ## v2 firing comparison (MEASURED 2026-11-10, focused quality+loss battery)
 
+## Task 4 hybrid ranker (MEASURED 2026-11-10, focused ON arm — STRUCK)
+
+Teacher OOF retrained on the focused ON cache (`artifacts/focused_on_oof.parquet`,
+6000 windows); onsets + flowmap built from the same arm; `fired=None` both
+sides (isolates flow value).
+
+| rows | pooled | votable | n |
+|---|---|---|---|
+| teacher-rows | 0.070 | 0.087 | 200 / 103 |
+| hybrid (+2 flow cols, 57.8% nonzero) | 0.070 | 0.087 | 200 / 103 |
+
+Flow features add exactly zero (identical to 3 decimals on live nonzero
+inputs) — LambdaRank assigns them no gain given votes+onset. Kill bar
+tripped → **hybrid struck**. Caveats: 300-episode OOF is data-starved
+(27 classes); quality+loss are the hardest families; `fired=None` removes
+sentinel agreement from both sides. Standing conclusion: v2 physics converts
+silence→flow evidence for the *firing* head (+0.185 retrieval), but the
+*attribution* head cannot use it in row form — per-family specialists or the
+path layer are the remaining routes, both unbuilt.
+
 Arms: `artifacts/v2_focus/{off,on}` (200 fault + 100 clean each, seed-identical
 grid; ON = sink_all_quality + couple_loss). Caches: `artifacts/cache_v2_{off,on}`
 (n=6000 windows each). Head: `eval_fire_flow` GroupKFold HistGBM(max_iter=100).
