@@ -172,3 +172,16 @@ def test_upstream_order_independent_dict_insertion():
     e1 = {"A0": ["A1"], "A1": ["A2"], "A2": []}
     e2 = {"A2": [], "A1": ["A2"], "A0": ["A1"]}
     assert upstream_paths(ev, e1, anchor="A2") == upstream_paths(ev, e2, anchor="A2")
+
+
+def test_ranker_evidence_dict_shape():
+    import scripts.eval_paths as ep
+
+    assert hasattr(ep, "ranker_evidence")
+    ev = ep.ranker_evidence(
+        {"A0": {"onset": 100}, "A1": {"onset": 102}},
+        {"A0": 0.7, "A1": 0.3},
+    )
+    assert set(ev) == {"A0", "A1"}
+    assert all(0.0 <= v["score"] <= 1.0 for v in ev.values())
+    assert all(v["onset"] == 100 or v["onset"] == 102 for v in ev.values())
