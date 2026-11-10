@@ -53,3 +53,38 @@ def test_spike_absorbed_by_cusum_but_caught_by_fast_path():
     xs[25] = 3.5
     assert not any(c.step(v) for v in xs)
     assert any(s.step(v) for v in xs)
+
+
+def _planted(kind: str, n: int = 300, t0: int = 150, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    base = rng.normal(0, 1, n)
+    if kind == "ramp":
+        base[t0:] += np.linspace(0, 3, n - t0)
+    elif kind == "level":
+        base[t0:] += 2.0
+    elif kind == "spike":
+        base[t0 + 5] += 4.0
+    return base
+
+
+def test_family_heads_fire_on_own_signature():
+    from src.cusum_bank import EWMA, SlopePersist, SpikePath, TabularCUSUM
+
+    ramp, level, spike = (
+        _planted("ramp"),
+        _planted("level"),
+        _planted("spike"),
+    )
+    # drift head: EWMA + slope persistence on ramp
+    e, sp = EWMA(lam=0.2, mu0=0.0, limit=1.0), SlopePersist(w=64, need=10)
+    drift_fires = [e.step(v)[1] or sp.step(v) for v in ramp]
+    assert any(drift_fires[150:])
+    # bias head: tabular CUSUM on level
+    c = TabularCUSUM(k=0.5, h=5.0, mu0=0.0, sigma0=1.0)
+    assert any(c.step(v) for v in level[150:])
+    # spike head: fast path on transient, drift ramps stay quiet-ish
+    s = SpikePath(w=4, thr=3.0)
+    assert any(s.step(v) for v in spike)
+    s2 = SpikePath(w=4, thr=3.0)
+    ramp_fires = sum(s2.step(v) for v in ramp[:200])
+    assert ramp_fires / 200 < 0.05  # white-noise first-diffs trip ~3%/tick: quantified, not zero
