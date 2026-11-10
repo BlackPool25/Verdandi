@@ -27,7 +27,29 @@ Confirms audit: silence concentrated in loss + quality-off-sink + incipient sens
 - Retrieval 0.800 @ 0.032; rerank 0.685 votable; paths root@1 0.132 / subseq@3 0.413 (k 1.5);
   family 0.502; sensor 0.26–0.33; onset proc 2.0 / sensor ~90; e2e pooled 0.432–0.436.
 
-## v2 column (MEASURED 2026-11-10, current tree)
+## v2 firing comparison (MEASURED 2026-11-10, focused quality+loss battery)
+
+Arms: `artifacts/v2_focus/{off,on}` (200 fault + 100 clean each, seed-identical
+grid; ON = sink_all_quality + couple_loss). Caches: `artifacts/cache_v2_{off,on}`
+(n=6000 windows each). Head: `eval_fire_flow` GroupKFold HistGBM(max_iter=100).
+
+| arm | tag | thr | retrieval | clean-fire | med-err | n |
+|---|---|---|---|---|---|---|
+| OFF | obs-only | 0.5 | 0.710 | 0.290 | 8.0 | 200/100 |
+| OFF | obs-only | 0.7 | 0.630 | 0.150 | 0.0 | 200/100 |
+| OFF | obs+flow | 0.5 | 0.710 | 0.290 | 8.0 | 200/100 |
+| OFF | obs+flow | 0.7 | 0.630 | 0.130 | 0.0 | 200/100 |
+| ON | obs-only | 0.5 | 0.825 | 0.100 | 0.0 | 200/100 |
+| ON | obs-only | 0.7 | 0.815 | 0.030 | 0.0 | 200/100 |
+| ON | obs+flow | 0.5 | 0.840 | 0.100 | 0.0 | 200/100 |
+| ON | obs+flow | 0.7 | 0.815 | 0.040 | 0.0 | 200/100 |
+
+Gate (Task 3): obs+flow ON vs obs-only OFF — **PASS** (+0.185 retrieval at
+thr 0.7 with clean-fire 0.040 vs 0.150). Note the lift is NOT flow-feature
+magic alone: ON obs-only also jumps (0.630→0.815) because condemn/reject
+routing changes downstream starvation → state → obs texture (mediated,
+physical). Caveats: focused battery (quality+loss only — the targeted
+families, not a general retrieval claim); clean n=100 (±~4pp noise).
 
 | check | old (frozen) | v2 | Δ |
 |---|---|---|---|
