@@ -38,10 +38,13 @@ Confirms audit: silence concentrated in loss + quality-off-sink + incipient sens
 | clean-episode sink rejects (n=8 seeds) | 0 | 0 | no clean-fire regression |
 
 \* old-physics arm not re-run for loss (mechanism absent pre-fix by construction);
-quality old arm re-ran (1/50). Scoping: new evidence is FLOW/EVENT-level
-(REJECT_ROUTE, flow counters, parts flags) — NOT sentinel obs firing. The
-sentinel still can't see these episodes; the Task-3 hybrid ranker consumes
-the new evidence via flow features. Silence conversion at the *detector*
-is claimed at 0; silence conversion at the *evidence* level is +42pp
-(quality) / +52pp (loss caricature) / +2pp (loss incipient).
+quality old arm re-ran (1/50). Scoping (reviewer C1 — read before citing):
+new evidence is FLOW/EVENT-level (REJECT_ROUTE, flow counters, parts flags)
+— NOT sentinel obs firing, and NO measured diagnosis consumer reads it
+(detector allowlists exclude reject/scrap counts; ranker rows are
+vote/sentinel/onset only). Detector silence conversion = 0. The sole live
+retrieval path is the `eval_fire_flow` obs+flow arm (`F_flow` aggregates
+sunk/scrapped/throughput; `scrapped_total` is not quarantined) — unrun on
+v2 physics. Claiming silence reduction requires that run (Task 3 wiring),
+not these event counts.
 - silent Δ, route Δ, gates, family loss/quality Δ.

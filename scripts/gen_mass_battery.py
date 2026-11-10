@@ -26,7 +26,7 @@ RUNGS = ("incipient", "caricature")
 
 def build_specs(
     *, n_per_cell: int = 100, n_clean: int = 600, seed: int = 0,
-    sink_all_quality: bool = False,
+    sink_all_quality: bool = False, couple_loss: bool = False,
 ) -> tuple[list[int], list[int], dict[int, dict]]:
     """Deterministic spec grid: families x rungs fault episodes + clean episodes."""
     import numpy as np
@@ -67,6 +67,9 @@ def build_specs(
                 if fam == "quality" and sink_all_quality:
                     # v2 only: sink-side rejects for any origin (gains frozen).
                     extra = {**extra, "sink_all": True}
+                if fam == "loss" and couple_loss:
+                    # v2 only: condemn unmeasured samples at sink (gains frozen).
+                    extra = {**extra, "couple_loss": True}
                 faults[ep] = {
                     "class": fam,
                     "dur": dur,
@@ -97,12 +100,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--battery-id", default=None)
     ap.add_argument("--sink-all-quality", action="store_true",
                     help="v2: quality sink-routing for all origins (frozen default off)")
+    ap.add_argument("--couple-loss", action="store_true",
+                    help="v2: condemn unmeasured loss samples at sink (frozen default off)")
     args = ap.parse_args(argv)
     from src import dataset_export
 
     fault_eps, clean_eps, faults = build_specs(
         n_per_cell=args.n_per_cell, n_clean=args.n_clean, seed=args.seed,
-        sink_all_quality=args.sink_all_quality,
+        sink_all_quality=args.sink_all_quality, couple_loss=args.couple_loss,
     )
     # Shard the export: each shard stays under the 100MB export size cap.
     all_eps = clean_eps + fault_eps

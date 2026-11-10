@@ -573,14 +573,19 @@ def _loss_at(fx, t):
     return None
 
 
-def _loss_condemn(shared) -> bool:
+def _loss_condemn(shared, lspec) -> bool:
     """Condemn roll for a dropped (unmeasured) sample.
 
-    Call only after the drop draw already fired. Window-gated stochastic
+    Call only after the drop draw already fired. Gated by the spec-level
+    `couple_loss` flag (v2 batteries only — frozen specs never carry it,
+    so frozen behavior is bit-identical). Window-gated stochastic
     consequence like quality's reject_rate: plant RNG, mediated through
     part flags and REJECT routing, observable, never GT-shaped.
     """
-    return shared["place"].random() < LOSS_REJECT_RATE
+    extra = lspec.get("extra", {}) if isinstance(lspec, dict) else {}
+    return bool(extra.get("couple_loss", False)) and (
+        shared["place"].random() < LOSS_REJECT_RATE
+    )
 
 
 def _delay_d(fx, t):
@@ -990,7 +995,7 @@ def _line_process(env, spec, shared):
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
-            if part is not None and _loss_condemn(shared):
+            if part is not None and _loss_condemn(shared, lspec):
                 part["flag"] = "REJECT"  # unmeasured part condemned at sink
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         _record_current(shared, name, idx, st, held, tput, t)
@@ -1106,7 +1111,7 @@ def _insp0_process(env, up, down, shared):
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val  # drop: stale-hold
-            if part is not None and _loss_condemn(shared):
+            if part is not None and _loss_condemn(shared, lspec):
                 part["flag"] = "REJECT"  # unmeasured part condemned at sink
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         _record_current(shared, name, idx, st, held, tput, t)
@@ -1348,7 +1353,7 @@ def _asm0_process(env, asm01, kit, shared):
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
-            if batch is not None and _loss_condemn(shared):
+            if batch is not None and _loss_condemn(shared, lspec):
                 for p in batch:
                     p["flag"] = "REJECT"  # unmeasured parts condemned at sink
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
@@ -1490,7 +1495,7 @@ def _asm_mid_process(env, name, up, down, shared):
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
-            if part is not None and _loss_condemn(shared):
+            if part is not None and _loss_condemn(shared, lspec):
                 part["flag"] = "REJECT"  # unmeasured part condemned at sink
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         _record_current(shared, name, idx, st, held, tput, t)
@@ -1621,7 +1626,7 @@ def _rwk0_process(env, shared):
         lspec = _loss_at(fx, t)
         if lspec is not None and shared["drop"].random() < lspec["drop_rate"]:
             val = obs_row[t - 1] if t > 0 else val
-            if part is not None and _loss_condemn(shared):
+            if part is not None and _loss_condemn(shared, lspec):
                 part["flag"] = "REJECT"  # unmeasured part condemned at sink
         obs_row[t], state_row[t], tput_row[t] = val, st, tput
         _record_current(shared, name, idx, st, held, tput, t)
