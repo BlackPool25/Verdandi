@@ -27,5 +27,21 @@ Confirms audit: silence concentrated in loss + quality-off-sink + incipient sens
 - Retrieval 0.800 @ 0.032; rerank 0.685 votable; paths root@1 0.132 / subseq@3 0.413 (k 1.5);
   family 0.502; sensor 0.26–0.33; onset proc 2.0 / sensor ~90; e2e pooled 0.432–0.436.
 
-## v2 column (to fill in Task 4)
+## v2 column (MEASURED 2026-11-10, current tree)
+
+| check | old (frozen) | v2 | Δ |
+|---|---|---|---|
+| quality eps with sink rejects (n=50 mixed rungs, flag ablation) | 1/50 | 22/50 | +42pp evidence |
+| loss caricature sink-reject eps (n=40, drop 0.3) | 0/40* | 21/40 | +52pp evidence |
+| loss incipient sink-reject eps (n=40, drop 0.05) | 0/40* | 1/40 | +2pp evidence |
+| twin gates (quality/gates/battery/flow/duty/plumbing/conservation + new) | 21 passed | 84 passed | green |
+| clean-episode sink rejects (n=8 seeds) | 0 | 0 | no clean-fire regression |
+
+\* old-physics arm not re-run for loss (mechanism absent pre-fix by construction);
+quality old arm re-ran (1/50). Scoping: new evidence is FLOW/EVENT-level
+(REJECT_ROUTE, flow counters, parts flags) — NOT sentinel obs firing. The
+sentinel still can't see these episodes; the Task-3 hybrid ranker consumes
+the new evidence via flow features. Silence conversion at the *detector*
+is claimed at 0; silence conversion at the *evidence* level is +42pp
+(quality) / +52pp (loss caricature) / +2pp (loss incipient).
 - silent Δ, route Δ, gates, family loss/quality Δ.
