@@ -254,7 +254,11 @@ def main_free():
     """Vote-free LambdaRank pilot: triple metric + no-onehot ablation.
 
     Same CV, same episodes, same sentinel/onset inputs as main() —
-    only teacher proba_/vote features are removed.
+    only teacher proba_/vote features are removed. NOTE: fshare/agree
+    are redefined (not ablated like-for-like): with no teacher there is
+    no per-machine vote mask, so the episode-level fired mass counts
+    for m only if m itself has an onset; onset-less episodes score
+    all-zero sentinel features by construction.
     """
     from src.twin import _MACHINE_ORDER
 
