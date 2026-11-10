@@ -96,6 +96,44 @@ def build_rows(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None =
     return np.array(rows), np.array(y), np.array(groups), np.array(fam)
 
 
+def build_rows_free(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None = None, onsets=None):
+    """Vote-free rows: sentinel agreement + onset/state + machine identity.
+
+    Uses NO teacher outputs (no proba_*, no pred). Sentinel `fired`
+    comes from the frozen detector, not the HistGBM teacher.
+    Cols per row: [fshare, agree] + onset4 + onehot26.
+    """
+    has_fired = fired is not None
+    rows, y, groups, fam = [], [], [], []
+    for ep, g in oof.groupby("ep"):
+        truth = g[g["y"] == 1]
+        if truth.empty:
+            continue
+        troot = str(truth["root"].mode().iloc[0])
+        if troot == "none":
+            continue
+        family = str(truth["fam"].mode().iloc[0])
+        dfeat = _direction_feats(onsets, ep, machines) if onsets is not None else None
+        onset_ms = set(onsets[onsets["ep"] == ep]["machine"]) if onsets is not None else set()
+        f = fired.loc[g.index].to_numpy(bool) if has_fired else None
+        fired_frac = float(f.mean()) if f is not None else 0.0
+        fired_any = bool(f.any()) if f is not None else False
+        for m in machines:
+            extra = list(dfeat[m]) if dfeat is not None else [0.0, 0.0, 0.0, 0.0]
+            has_on = m in onset_ms
+            # Per-machine sentinel link WITHOUT teacher: fired mass counts
+            # for m only if m itself has an onset (else the episode fired
+            # elsewhere). Same across candidates only when all/none fire.
+            fshare = fired_frac if has_on else 0.0
+            agree = 1.0 if (fired_any and has_on) else 0.0
+            onehot = [1.0 if m == x else 0.0 for x in machines]
+            rows.append([fshare, agree] + extra + onehot)
+            y.append(1 if m == troot else 0)
+            groups.append(ep)
+            fam.append(family)
+    return np.array(rows), np.array(y), np.array(groups), np.array(fam)
+
+
 def load_onsets(path: str = "artifacts/onsets.parquet"):
     """Load cached per-episode onsets; None if missing (features off)."""
     try:
