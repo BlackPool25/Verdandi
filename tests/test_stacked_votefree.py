@@ -43,3 +43,17 @@ def test_rows_free_ignores_teacher_proba():
     oof2["pred"] = np.random.default_rng(1).permutation(oof2["pred"].to_numpy())
     X2, _, _, _ = es.build_rows_free(oof2, machines)
     assert np.array_equal(X1, X2)  # teacher outputs cannot move vote-free rows
+
+
+def test_rows_free_no_onehot_ablation():
+    import scripts.eval_stacked as es
+
+    oof, machines = _syn_oof()
+    X, _, _, _ = es.build_rows_free(oof, machines, include_onehot=False)
+    assert X.shape == (len(machines) * 6, 2 + 4)
+
+
+def test_free_eval_runs():
+    import scripts.eval_stacked as es
+
+    assert callable(es.main_free)
