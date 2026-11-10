@@ -18,8 +18,11 @@ def select_mask(X_clean: np.ndarray, k: int = 5, seed: int = 0) -> list[int]:
     return sorted(int(i) for i in order[:k])
 
 
-def ewma_head(x: np.ndarray, lam: float = 0.3, k: float = 3.0) -> np.ndarray:
-    """EWMA exceedance flags: |z_t| > k on the EWMA statistic (zero-mean unit input)."""
+def ewma_head(x: np.ndarray, lam: float = 0.3, k: float = 3.0, burnin: int = 50) -> np.ndarray:
+    """EWMA exceedance flags: |z_t| > k on the EWMA statistic (zero-mean unit input).
+
+    burnin startup samples are never flagged (transient variance).
+    """
     z = np.asarray(x, dtype=float)
     s = 0.0
     out = np.zeros(len(z), dtype=bool)
@@ -27,7 +30,7 @@ def ewma_head(x: np.ndarray, lam: float = 0.3, k: float = 3.0) -> np.ndarray:
         s = lam * v + (1 - lam) * s
         # steady-state EWMA sd for unit-variance input
         sd = (lam / (2 - lam)) ** 0.5
-        out[i] = abs(s) > k * sd
+        out[i] = (i >= burnin) and abs(s) > k * sd
     return out
 
 
