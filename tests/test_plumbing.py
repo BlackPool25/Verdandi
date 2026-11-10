@@ -28,3 +28,16 @@ def test_monitor_set_nonempty_per_family():
 
     for fam in ("loss", "quality", "drift", "bias", "spike"):
         assert len(CARRIERS[fam]) > 0, fam
+
+
+def test_matrix_covers_five_by_two():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "audit_plumbing", "scripts/audit_plumbing.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    fams = {f for f, _ in mod.MATRIX}
+    assert fams == {"loss", "quality", "drift", "bias", "spike"}
+    assert {r for _, r in mod.MATRIX} == {"caricature", "incipient"}

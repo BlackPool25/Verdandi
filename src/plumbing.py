@@ -92,18 +92,40 @@ def paired_z(
         vf = _series(rec_off, kind, key)
         if vo is None or vf is None or len(vo) == 0:
             continue
+        if kind in ("buffer", "flow") and not (
+            kind == "flow" and key in ("sunk", "scrapped")
+        ):
+            # Count levels: Poisson-style totals test, not Gaussian z.
+            # Single-blip "z=1e9 on sd=1e-9" artifacts must not fire.
+            so = float(np.asarray(vo[t0:t1], dtype=float).sum()) if t1 > t0 else 0.0
+            sf = float(np.asarray(vf[t0:t1], dtype=float).sum()) if t1 > t0 else 0.0
+            need = max(3.0, 3.0 * max(sf, 1.0) ** 0.5)
+            z = abs(so - sf) / max(need, 1e-9) * 3.0
+            tick = t0 if abs(so - sf) >= need else None
+            per[f"{kind}:{key}"] = (z if tick is not None else 0.0, tick)
+            continue
         if kind == "state":
             vo = (np.asarray(vo) != "RUN").astype(float)
             vf = (np.asarray(vf) != "RUN").astype(float)
+            tol = 0.5  # any occurrence (z explodes on all-RUN baselines)
+        elif kind in ("buffer", "flow"):
+            vo, vf = np.asarray(vo, dtype=float), np.asarray(vf, dtype=float)
+            tol = 1.0  # one count/part (z explodes on constant counters)
         else:
             vo, vf = np.asarray(vo, dtype=float), np.asarray(vf, dtype=float)
+            tol = 0.5  # native obs/current units (~0.5σ at base sigma ~1)
         lo = max(1, min(t0, len(vf)))
         mu, sd = float(vf[:lo].mean()), max(float(vf[:lo].std()), 1e-9)
         seg = (vo[t0:t1] - mu) / sd if t1 > t0 and t0 < len(vo) else np.array([0.0])
+        raw = (vo[t0:t1] - mu) if t1 > t0 and t0 < len(vo) else np.array([0.0])
         if kind == "flow" and key in ("sunk", "scrapped"):
             seg = np.array([float(abs(seg[0]))]) if len(seg) else seg
+            raw = np.array([float(abs(raw[0]))]) if len(raw) else raw
         zi = int(np.argmax(np.abs(seg))) if len(seg) else 0
         z = float(np.abs(seg).max()) if len(seg) else 0.0
+        r = float(np.abs(raw).max()) if len(raw) else 0.0
+        if r < tol:
+            z = 0.0  # z-only fires on degenerate baselines don't count
         per[f"{kind}:{key}"] = (z, t0 + zi if len(seg) else None)
     best = max(per.values(), key=lambda v: v[0], default=(0.0, None))
     return {"fired": bool(best[0] >= k), "tick": best[1], "per_carrier": per}
