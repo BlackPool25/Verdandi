@@ -9,25 +9,35 @@ import pandas as pd
 def main():
     import joblib
 
-    from src.window_dataset import apply_norm, build_windows, fit_clean_norm
+    from src.window_dataset import apply_norm
 
-    paths = sorted(glob.glob("artifacts/m0b_mass_*.parquet"))
-    df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-    X, y, _, groups, starts, _ = build_windows(
-        df, w=128, stride=8, invariant=True, build_jobs=4,
-        return_starts=True, return_roots=True,
-    )
     import os as _os
 
-    _cache = "/tmp/v7_oof.parquet"
+    _cc = "artifacts/window_cache"
+    _cache = "artifacts/frozen_oof.parquet"
+    art = joblib.load("artifacts/window-gbm-w128-frozen/model.joblib")
+    model, med, iqr = art["model"], np.array(art["norm_median"]), np.array(art["norm_iqr"])
+    n_obs = int(art["n_obs_features"])
     if _os.path.exists(_cache):
         _cf = pd.read_parquet(_cache)
-        assert len(_cf) == len(X), "v7 cache grid mismatch"
-        p = _cf["p"].to_numpy()
+        p, groups, starts, y = (_cf["p"].to_numpy(), _cf["ep"].to_numpy(),
+                                _cf["start"].to_numpy(), _cf["y"].to_numpy())
+    elif _os.path.exists(f"{_cc}/X_invariant.npy"):
+        X = np.load(f"{_cc}/X_invariant.npy", mmap_mode="r")
+        meta = pd.read_parquet(f"{_cc}/meta.parquet")
+        groups, starts, y = (meta["ep"].to_numpy(), meta["start"].to_numpy(),
+                             meta["y"].to_numpy())
+        p = model.predict_proba(apply_norm(np.asarray(X), med, iqr, n_obs))[:, 1]
+        pd.DataFrame({"ep": groups, "start": starts, "p": p, "y": y}).to_parquet(_cache, index=False)
     else:
-        art = joblib.load("artifacts/window-gbm-w128-v7/model.joblib")
-        model, med, iqr = art["model"], np.array(art["norm_median"]), np.array(art["norm_iqr"])
-        n_obs = int(art["n_obs_features"])
+        from src.window_dataset import build_windows
+
+        paths = sorted(glob.glob("artifacts/m0b_mass_*.parquet"))
+        df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
+        X, y, _, groups, starts, _ = build_windows(
+            df, w=128, stride=8, invariant=True, build_jobs=4,
+            return_starts=True, return_roots=True,
+        )
         p = model.predict_proba(apply_norm(X, med, iqr, n_obs))[:, 1]
         pd.DataFrame({"ep": groups, "start": starts, "p": p, "y": y}).to_parquet(_cache, index=False)
     frame = pd.DataFrame({"ep": groups, "start": starts, "p": p, "y": y})
@@ -41,12 +51,12 @@ def main():
         return False
 
     frame = pd.DataFrame({"ep": groups, "start": starts, "p": p, "y": y})
-    for thr in (0.315, 0.5, 0.544, 0.8):
+    for thr in (0.5, 0.6, 0.65, 0.7, 0.75, 0.8):
         conf = {ep: confirmed(g, thr) for ep, g in frame.groupby("ep")}
     truth = frame.groupby("ep")["y"].max()
     fault_eps = truth[truth == 1].index.tolist()
     clean_eps = truth[truth == 0].index.tolist()
-    for thr in (0.315, 0.5, 0.544, 0.8):
+    for thr in (0.5, 0.6, 0.65, 0.7, 0.75, 0.8):
         conf = {ep: confirmed(g, thr) for ep, g in frame.groupby("ep")}
         fired = [e for e in fault_eps if conf.get(e)]
         clean_fired = [e for e in clean_eps if conf.get(e)]
@@ -54,7 +64,7 @@ def main():
               f"clean-fire={len(clean_fired)/max(1,len(clean_eps)):.3f} "
               f"(MEASURED, n={len(fault_eps)}/{len(clean_eps)})")
     # stage-2 top-1 on 0.544-confirmed episodes (production operating point)
-    oof = pd.read_parquet("/tmp/oof_clean.parquet")
+    oof = pd.read_parquet("artifacts/oof_identity.parquet")
     assert (oof.groupby("ep").size() == frame.groupby("ep").size()).all(), "grid misalign"
     import scripts.eval_stacked as st
 

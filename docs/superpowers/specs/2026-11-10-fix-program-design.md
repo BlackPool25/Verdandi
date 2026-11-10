@@ -58,6 +58,16 @@ Exit: 5×2 table (pass/fail + named defendant or clean bill).
 Eval battery: frozen primary for Phases 1–3; supplement report-only;
 Phase 4 owns cross-battery.
 
+VERDICT 2026-11-10 (MEASURED, `scripts/audit_plumbing.py`): all 10
+PASS with honest stats (Poisson totals for counters, max-z + raw gate
+for channels; single-blip z=1e9 artifacts rejected). Loss/quality fire
+via buffer:1 totals (z 6–7, tick t0); drift/bias/spike via origin obs
+(4–6σ caricature, late for incipient ramps: drift tick 227–231).
+Sim gets a CLEAN BILL — no routing/duration edits authorized. The gap
+is detection-side: (a) windows lack buffer/flow/sink features (the
+audited carriers!); (b) 27-way argmax on weak signals; (c) threshold
+vs noise. Everything moves to Phase 2.
+
 ### Phase 2 — per-family features (diagnosis, no sim changes)
 - loss: Bernoulli/Poisson CUSUM on completion stream
   `B=max(0,B+x−r)`; start (H,r)=(3.0,0.0105) scaled to plant p₀

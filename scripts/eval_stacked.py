@@ -4,9 +4,16 @@ import numpy as np
 import pandas as pd
 
 
-def build_rows(oof: pd.DataFrame, machines: list[str]):
+def build_rows(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None = None):
+    """Multi-signal rows: vote aggregates + sentinel-agreement (additive).
+
+    fired: optional boolean Series aligned to oof rows (sentinel fired).
+    Never filters rows — agreement is a feature, not a mask (masking
+    killed top-1 0.455 -> 0.377 MEASURED).
+    """
     pcols = {m: f"proba_{m}" for m in machines if f"proba_{m}" in oof.columns}
     use_proba = len(pcols) == len(machines)
+    has_fired = fired is not None
     rows, y, groups, fam = [], [], [], []
     for ep, g in oof.groupby("ep"):
         truth = g[g["y"] == 1]
@@ -17,7 +24,8 @@ def build_rows(oof: pd.DataFrame, machines: list[str]):
             continue
         family = str(truth["fam"].mode().iloc[0])
         pm = g[g["pred"] != "none"]
-        shares, mx = {}, {}
+        f = fired.loc[g.index].to_numpy(bool) if has_fired else None
+        shares, mx, fshare, agree = {}, {}, {}, {}
         for m in machines:
             if use_proba:
                 s = g[pcols[m]].to_numpy(float)
@@ -27,6 +35,13 @@ def build_rows(oof: pd.DataFrame, machines: list[str]):
                 s = (pm["pred"] == m)
                 shares[m] = float(s.mean()) if len(pm) else 0.0
                 mx[m] = float(s.max()) if len(s) else 0.0
+            if f is not None:
+                pm_m = (g["pred"].to_numpy(dtype=str) == m)
+                fshare[m] = float((f & pm_m).sum() / max(1, int(f.sum())))
+                agree[m] = float((f & pm_m).sum() / max(1, int(pm_m.sum())))
+            else:
+                fshare[m] = 0.0
+                agree[m] = 0.0
         order = sorted(machines, key=lambda m: -shares[m])
         rank = {m: i + 1 for i, m in enumerate(order)}
         vals = np.array([shares[m] for m in machines])
@@ -38,7 +53,8 @@ def build_rows(oof: pd.DataFrame, machines: list[str]):
             onehot = [1.0 if m == x else 0.0 for x in machines]
             rows.append(
                 [shares[m], mx[m], float(rank[m]), (shares[m] - mu) / sd,
-                 top1 - shares[m], top2 - shares[m] if shares[m] < top1 else top1 - top2]
+                 top1 - shares[m], top2 - shares[m] if shares[m] < top1 else top1 - top2,
+                 fshare[m], agree[m]]
                 + onehot
             )
             y.append(1 if m == troot else 0)
@@ -53,9 +69,22 @@ def main():
 
     from src.twin import _MACHINE_ORDER
 
-    oof = pd.read_parquet("/tmp/oof_clean.parquet")
+    oof = pd.read_parquet("artifacts/oof_identity.parquet")
     machines = list(_MACHINE_ORDER)
-    X, y, groups, fam = build_rows(oof, machines)
+    try:
+        frz = pd.read_parquet("artifacts/frozen_oof.parquet")
+        foof = oof.sort_values(["ep"])
+        ffrz = frz.sort_values(["ep", "start"])
+        fired = None
+        if (foof.groupby("ep").size() == ffrz.groupby("ep").size()).all():
+            fired = pd.Series((ffrz["p"].to_numpy() >= 0.6), index=foof.index)
+            print("sentinel-agreement features ON", flush=True)
+        else:
+            print("grid mismatch: sentinel features off", flush=True)
+    except FileNotFoundError:
+        fired = None
+        print("no sentinel OOF: sentinel features off", flush=True)
+    X, y, groups, fam = build_rows(oof, machines, fired)
     famids = np.array([hash(f) % (2**31) for f in fam])
     oof_pred = np.zeros(len(y))
     cv = StratifiedGroupKFold(n_splits=3)
@@ -79,7 +108,7 @@ def main():
         oof_pred[te_idx] = bst.predict(X[te][order_te])
     import pandas as _pd
 
-    _oof = _pd.read_parquet("/tmp/oof_clean.parquet")
+    _oof = _pd.read_parquet("artifacts/oof_identity.parquet")
     _votable = set()
     for ep, g in _oof.groupby("ep"):
         if (g["pred"] != "none").any():
