@@ -49,7 +49,7 @@ Sensor top-1 0.26–0.33, onset err ~90 ticks. Process top-1 0.76, onset err 2.0
 T=2.58 (strongly overconfident — consistent with hard-vote findings).
 NLL 2.465→1.366, ECE 0.246→0.034 (86% cut, bar was 20%).
 Risk-coverage: 0.300@1.0 → 0.249@0.9 → 0.217@0.8 → 0.186@0.7 (monotone).
-Module: `src/calibrate.py` (temperature + Platt + coverage gate), 5 tests green.
+Module: `src/confidence.py (post-hoc); `src/calibrate.py` (acquisition, pre-existing) (temperature + Platt + coverage gate), 5 tests green.
 Ranker-level calibration input: `artifacts/stage2-oof.npz` (saved by `eval_stacked.main`).
 
 ## Missing (gates, not numbers)

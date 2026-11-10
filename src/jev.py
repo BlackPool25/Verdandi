@@ -86,6 +86,8 @@ def render_state(packet: dict) -> str:
         lines.append(
             f"Machine {t.get('machine')} {t.get('own_state', '?')} at tick {t.get('onset', '?')} "
             f"({t.get('onset_kind', '?')}).")
+        if t.get("evidence"):
+            lines.append(f"Evidence for {t.get('machine')}: {t['evidence']}.")
     for p in packet.get("paths", [])[:3]:
         lines.append(f"Path {'->'.join(p.get('nodes', []))} prob {p.get('prob', 0):.2f}.")
     return " ".join(lines)

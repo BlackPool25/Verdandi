@@ -58,6 +58,7 @@ def emit_packet(
                 "onset_kind": r.get("onset_kind"),
                 "own_state": r.get("own_state"),
                 "hop_est": int(r.get("hop_est", -1)),
+                "evidence": r.get("evidence", ""),
             }
             for r in diag
         ],
