@@ -145,3 +145,16 @@ def test_upstream_probs_sum_to_one():
 
     paths = upstream_paths(_chain_ev(), _chain_edges(), anchor="A2")
     assert abs(sum(v for _, v in paths) - 1.0) < 1e-9
+
+
+def test_upstream_order_independent_dict_insertion():
+    from src.possibility import upstream_paths
+
+    ev = {
+        "A0": {"onset": 100, "score": 0.8},
+        "A1": {"onset": 102, "score": 0.5},
+        "A2": {"onset": 104, "score": 0.4},
+    }
+    e1 = {"A0": ["A1"], "A1": ["A2"], "A2": []}
+    e2 = {"A2": [], "A1": ["A2"], "A0": ["A1"]}
+    assert upstream_paths(ev, e1, anchor="A2") == upstream_paths(ev, e2, anchor="A2")
