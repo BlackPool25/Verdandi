@@ -103,3 +103,11 @@ Three variants dead (static max, static CUSUM, dynamic CUSUM).
 Program struck: window-cache obs trajectories carry no per-family signal
 separable from clean at 5% FAR. Remaining routes: D-PCA sensor stack
 (Task 4), family abstain fallback (process-only ship).
+
+## Task 4 sensor stack (MEASURED 2026-11-11 — STRUCK)
+D-PCA(10) + RBC-T2 + EBF(paper params) on twin bias/drift/spike episodes:
+bias 0.050 / drift 0.067 / spike 0.033 (n=60 each), clean-FA 0.000–0.050.
+Bars (≥0.4, FA-cut ≥30%) missed by an order of magnitude. EBF works
+(zero false alarms) but there is nothing to accumulate — base contributions
+never concentrate (small amplitudes + no redundancy, exactly the papers'
+caveats). Program struck; sensor attribution stays an open problem.
