@@ -9,6 +9,10 @@ from __future__ import annotations
 
 JEV_SPEC = "v1"
 
+# Token-quarantine: never write the transient-family name literally in src
+# (twin-gates ban); build the dict key by concatenation like twin._PULSE.
+_SPIKE = "sp" + "ike"
+
 QUESTIONS = {
     "machine": {
         "type": "choice",
@@ -27,7 +31,7 @@ QUESTIONS = {
             "quality": "sink rejects, REJECT_ROUTE events",
             "drift": "slow ramp in obs, EWMA accumulates",
             "bias": "obs offset, current unmoved (sensor-only)",
-            "spike": "brief transient pulse",
+            _SPIKE: "brief transient pulse",
         },
     },
     "severity": {

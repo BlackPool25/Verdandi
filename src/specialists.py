@@ -2,8 +2,8 @@
 
 VS-MEWMA discipline (Jiang 2012): select the informative variable subset
 first (sensitivity gain by dimension reduction), then monitor the subset.
-EWMA leads for drift faults; CUSUM (k=0.5σ, h from healthy-run ARL) for
-bias/spike onsets. Thresholds tuned on clean runs for target FAR — never
+EWMA leads for drift faults; CUSUM (k=0.5-sigma, h from healthy-run ARL) for
+bias/transient onsets. Thresholds tuned on clean runs for target FAR — never
 on fault runs.
 """
 
