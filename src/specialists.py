@@ -34,6 +34,22 @@ def ewma_head(x: np.ndarray, lam: float = 0.3, k: float = 3.0, burnin: int = 50)
     return out
 
 
+def lagged_stats(seq: np.ndarray, d: int = 10) -> np.ndarray:
+    """D-PCA-style dynamic augmentation: trailing lag-mean + lag-max per channel.
+
+    seq: (T, C) window-stat sequence -> (T, 2C). Deterministic, causal
+    (window [t-d+1, t] only).
+    """
+    S = np.asarray(seq, dtype=float)
+    T, C = S.shape
+    out = np.zeros((T, 2 * C))
+    for t in range(T):
+        w = S[max(0, t - d + 1):t + 1]
+        out[t, :C] = w.mean(axis=0)
+        out[t, C:] = w.max(axis=0)
+    return out
+
+
 def cusum_head(x: np.ndarray, k: float = 0.5, h: float = 5.0) -> int | None:
     """Two-sided tabular CUSUM: first alarm index or None (unit-scale input)."""
     z = np.asarray(x, dtype=float)

@@ -25,9 +25,21 @@ def main(families=("bias", "drift", "quality", "spike"), k=5, far=0.05, variant=
         for tr, te in gkf.split(obs_mean, yf, ep):
             mu0 = obs_mean[tr][is_clean_ep[tr]].mean(axis=0)
             sd0 = obs_mean[tr][is_clean_ep[tr]].std(axis=0)
-            mask = fit_family_mask(obs_mean[tr][is_clean_ep[tr]],
-                                   obs_mean[tr][(fam[tr] == f)], k=k)
-            s_tr = expert_score(obs_mean[tr], mask, mu0, sd0)
+            if variant == 3:
+                from src.specialists import lagged_stats
+
+                d = 10
+                Ltr = lagged_stats(obs_mean[tr], d=d)
+                Lte = lagged_stats(obs_mean[te], d=d)
+                mu0, sd0 = Ltr[is_clean_ep[tr]].mean(axis=0), Ltr[is_clean_ep[tr]].std(axis=0)
+                mask = fit_family_mask(Ltr[is_clean_ep[tr]], Ltr[(fam[tr] == f)], k=k)
+                s_tr, s_te, ptr, pte = Ltr, Lte, obs_mean[tr], obs_mean[te]
+            else:
+                mask = fit_family_mask(obs_mean[tr][is_clean_ep[tr]],
+                                       obs_mean[tr][(fam[tr] == f)], k=k)
+                s_tr, s_te, ptr, pte = obs_mean[tr], obs_mean[te], None, None
+                d = 0
+            s_tr = expert_score(s_tr, mask, mu0, sd0)
             starts_tr = meta["start"].to_numpy()[tr]
             if variant == 1:
                 epmax_tr = pd.Series(s_tr).groupby(ep[tr]).max()
@@ -44,7 +56,7 @@ def main(families=("bias", "drift", "quality", "spike"), k=5, far=0.05, variant=
                                if (fam[tr][ep[tr] == e] != f).all()]
                 thr = tune_h(clean_trajs, far=far)
                 m0s, s0s = m0, s0
-            s_te = expert_score(obs_mean[te], mask, mu0, sd0)
+            s_te = expert_score(Lte if variant == 3 else obs_mean[te], mask, mu0, sd0)
             starts_te = meta["start"].to_numpy()[te]
             if variant == 1:
                 epmax_te = pd.Series(s_te).groupby(ep[te]).max()

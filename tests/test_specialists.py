@@ -57,3 +57,32 @@ def test_trajectory_cusum_catches_ramp_misses_flat():
     assert trajectory_score(ramp, h=h) == 1
     fa = np.mean([trajectory_score(t, h=h) for t in clean])
     assert fa <= 0.05
+
+
+def test_lagged_stats_shape_and_determinism():
+    from src.specialists import lagged_stats
+
+    rng = np.random.default_rng(5)
+    seq = rng.normal(0, 1, (40, 6))  # 40 windows, 6 channels
+    L1 = lagged_stats(seq, d=10)
+    L2 = lagged_stats(seq, d=10)
+    assert L1.shape == (40, 6 * 2)  # lag-mean + lag-max per channel
+    assert np.array_equal(L1, L2)
+
+
+def test_cusum_on_lagged_ramp_recall():
+    from src.specialists import cusum_head, lagged_stats, tune_h
+
+    rng = np.random.default_rng(6)
+    clean = []
+    for _ in range(60):
+        L = lagged_stats(rng.normal(0, 1, (22, 4)), d=5)
+        clean.append((L[:, 0] - L[:, 0].mean()) / (L[:, 0].std() + 1e-9))
+    h = tune_h(clean, far=0.05)
+    ramp_seq = np.concatenate([rng.normal(0, 1, (8, 4)),
+                               rng.normal(0, 1, (16, 4)) + np.linspace(0, 2.5, 16)[:, None]])
+    Lr = lagged_stats(ramp_seq, d=5)
+    traj = (Lr[:, 0] - Lr[:, 0].mean()) / (Lr[:, 0].std() + 1e-9)
+    assert cusum_head(traj, k=0.5, h=h) is not None  # ramp detected
+    fa = np.mean([cusum_head(t, k=0.5, h=h) is not None for t in clean])
+    assert fa <= 0.05
