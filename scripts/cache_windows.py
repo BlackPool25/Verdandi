@@ -46,16 +46,16 @@ def _flow_block(df, groups, starts, w: int):
     return out
 
 
-def main():
+def main(glob: str | None = None, out: str | None = None):
     import pathlib
 
     from src.window_dataset import build_windows
 
     import glob as _glob
 
-    out = pathlib.Path(CACHE_DIR)
-    out.mkdir(parents=True, exist_ok=True)
-    paths = sorted(_glob.glob("artifacts/m0b_mass_*.parquet"))
+    outdir = pathlib.Path(out or CACHE_DIR)
+    outdir.mkdir(parents=True, exist_ok=True)
+    paths = sorted(_glob.glob(glob or "artifacts/m0b_mass_*.parquet"))
     acc = {"invariant": [], "identity": []}
     metas, flows = [], []
     for p in paths:
@@ -78,12 +78,17 @@ def main():
         del df
         print(f"cached shard {p.split('_')[-1]}", flush=True)
     for tag, parts in acc.items():
-        np.save(out / f"X_{tag}.npy", np.vstack(parts))
+        np.save(outdir / f"X_{tag}.npy", np.vstack(parts))
     meta = pd.concat(metas, ignore_index=True)
-    meta.to_parquet(out / "meta.parquet", index=False)
-    np.save(out / "F_flow.npy", np.vstack(flows))
+    meta.to_parquet(outdir / "meta.parquet", index=False)
+    np.save(outdir / "F_flow.npy", np.vstack(flows))
     print(f"done: invariant+identity, n={len(meta)}", flush=True)
 
 
 if __name__ == "__main__":
-    main()
+    import argparse as _ap
+    _p = _ap.ArgumentParser()
+    _p.add_argument("--glob", default=None)
+    _p.add_argument("--out", default=None)
+    _a = _p.parse_args()
+    main(glob=_a.glob, out=_a.out)

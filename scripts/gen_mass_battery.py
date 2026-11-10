@@ -27,6 +27,7 @@ RUNGS = ("incipient", "caricature")
 def build_specs(
     *, n_per_cell: int = 100, n_clean: int = 600, seed: int = 0,
     sink_all_quality: bool = False, couple_loss: bool = False,
+    families: tuple[str, ...] | None = None,
 ) -> tuple[list[int], list[int], dict[int, dict]]:
     """Deterministic spec grid: families x rungs fault episodes + clean episodes."""
     import numpy as np
@@ -39,7 +40,8 @@ def build_specs(
     # overlap, ever (at n_per_cell=100 the ranges happened to miss; at 300
     # the clean block landed inside the fault block and 200 clean episodes
     # silently became faults).
-    n_fault = len(FAMILIES) * len(RUNGS) * n_per_cell
+    famsel = tuple(families) if families is not None else FAMILIES
+    n_fault = len(famsel) * len(RUNGS) * n_per_cell
     base_fault, base_clean = BASE_SEED_EP, BASE_SEED_EP + n_fault + 1000
     # Faults strike any machine at any valid onset (uniform over machines and
     # the feasible onset window). A single origin/onset teaches the model one
@@ -49,7 +51,7 @@ def build_specs(
     from src import config
 
     machines = list(config.MACHINE_NAMES)
-    for fam in FAMILIES:
+    for fam in famsel:
         for rung in RUNGS:
             for j in range(n_per_cell):
                 ep = base_fault + k
@@ -102,12 +104,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="v2: quality sink-routing for all origins (frozen default off)")
     ap.add_argument("--couple-loss", action="store_true",
                     help="v2: condemn unmeasured loss samples at sink (frozen default off)")
+    ap.add_argument("--families", default=None,
+                    help="comma-separated family subset (default: all 7)")
     args = ap.parse_args(argv)
     from src import dataset_export
 
     fault_eps, clean_eps, faults = build_specs(
         n_per_cell=args.n_per_cell, n_clean=args.n_clean, seed=args.seed,
         sink_all_quality=args.sink_all_quality, couple_loss=args.couple_loss,
+        families=tuple(args.families.split(",")) if args.families else None,
     )
     # Shard the export: each shard stays under the 100MB export size cap.
     all_eps = clean_eps + fault_eps

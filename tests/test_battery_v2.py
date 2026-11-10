@@ -35,3 +35,31 @@ def test_couple_loss_default_off():
 
     _, _, faults = build_specs(n_per_cell=2, n_clean=4, seed=0)
     assert all(not f.get("extra", {}).get("couple_loss", False) for f in faults.values())
+
+
+def test_family_filter_keeps_grid_shape():
+    from scripts.gen_mass_battery import build_specs
+
+    fe, ce, faults = build_specs(n_per_cell=3, n_clean=4, seed=0,
+                                 families=("quality", "loss"))
+    fams = {f["class"] for f in faults.values()}
+    assert fams == {"quality", "loss"}
+    assert len(faults) == 2 * 2 * 3
+
+
+def test_off_on_arms_differ_only_in_flags():
+    from scripts.gen_mass_battery import build_specs
+
+    _, _, off = build_specs(n_per_cell=2, n_clean=0, seed=1)
+    _, _, on = build_specs(n_per_cell=2, n_clean=0, seed=1, sink_all_quality=True,
+                           couple_loss=True)
+    assert set(off) == set(on)
+    for ep in off:
+        a, b = dict(off[ep]), dict(on[ep])
+        ea, eb = a.pop("extra"), b.pop("extra")
+        assert a == b  # same grid cell
+    for f in on.values():
+        if f["class"] == "quality":
+            assert f["extra"].get("sink_all") is True
+        if f["class"] == "loss":
+            assert f["extra"].get("couple_loss") is True

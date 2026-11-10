@@ -6,16 +6,17 @@ import pandas as pd
 CACHE = "artifacts/window_cache"
 
 
-def main():
+def main(cache: str | None = None):
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.model_selection import GroupKFold
 
     from src.window_dataset import apply_norm, fit_clean_norm
 
+    CDIR = cache or CACHE
     try:
-        X = np.load(f"{CACHE}/X_invariant.npy", mmap_mode="r")
-        meta = pd.read_parquet(f"{CACHE}/meta.parquet")
-        F = np.load(f"{CACHE}/F_flow.npy", mmap_mode="r")
+        X = np.load(f"{CDIR}/X_invariant.npy", mmap_mode="r")
+        meta = pd.read_parquet(f"{CDIR}/meta.parquet")
+        F = np.load(f"{CDIR}/F_flow.npy", mmap_mode="r")
     except FileNotFoundError:
         raise SystemExit("run scripts/cache_windows.py first (streams per shard)")
     y = meta["y"].to_numpy()
@@ -58,4 +59,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse as _ap
+    _p = _ap.ArgumentParser()
+    _p.add_argument("--cache", default=None)
+    _a = _p.parse_args()
+    main(cache=_a.cache)
