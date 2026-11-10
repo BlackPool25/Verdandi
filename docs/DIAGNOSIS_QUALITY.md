@@ -32,15 +32,10 @@ Remaining rerank levers: onset/state row features, per-family rankers.
 
 Old pooled bar ≥0.5: NOT MET (superseded by decomposed bars).
 
-## Routes (k-best upstream paths, heuristic direction-signature evidence)
-| metric | value | n |
-|---|---|---|
-| root-hit@1 | 0.126 | 167 |
-| route-subseq@3 | 0.413 | 167 |
-| mean-k (hypotheses) | 1.1 | — |
-
-Note: heuristic evidence, not stage-2 scores. Rerun with ranker evidence
-pending. Subsequence >> root-hit: flow shape recovered more often than origin.
+## Routes (MEASURED 2026-11-11, n=167, same seed)
+Heuristic evidence: root-hit@1 0.132 / subseq@3 0.413 / mean-k 1.5.
+Ranker evidence (fresh 38-col artifact): root-hit@1 **0.162** / subseq@3 0.413 / mean-k 1.5.
+Keep bar: root-hit beats (+0.030, ~noise edge at n=167), subseq ties → **path layer KEPT** (ranker evidence strictly better, no regression) but absolute quality stays diagnostic-only, non-ship.
 
 ## Family typing (invariant windows, GroupKFold)
 Overall 0.502. breakdown 0.752 / delay 0.753 / loss 0.810 vs bias 0.226 /
