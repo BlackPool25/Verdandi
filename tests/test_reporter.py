@@ -19,7 +19,7 @@ def _packet():
 
 def _decision():
     return {"spec": "v1", "packet_id": "det-1-160", "machine": "B2",
-            "machine_prob": 0.8, "family": "drift", "family_prob": 0.75,
+            "machine_prob": 0.8, "fault_family": "drift", "family_prob": 0.75,
             "severity": "SEV3", "severity_prob": 0.9, "verdict": "decided"}
 
 

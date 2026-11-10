@@ -11,7 +11,7 @@ def _client_fixed(choice="B2", prob=0.8):
     class C:
         def ask(self, packet, questions, spec=None):
             assert spec == "v1"
-            assert set(questions) >= {"machine", "family", "severity"}
+            assert set(questions) >= {"machine", "fault_family", "severity"}
             return {q: {"choice": choice, "probability": prob} for q in questions}
 
     return C()

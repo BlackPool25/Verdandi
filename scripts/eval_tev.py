@@ -48,7 +48,7 @@ def main(n_eps=20, seed=0):
         if truth.empty:
             continue
         root = str(truth["root_id"].mode().iloc[0])
-        famcol = "fault_family" if "fault_family" in g.columns else "family"
+        famcol = "fault_family" if "fault_family" in g.columns else "fault_family"
         fam = str(truth[famcol].mode().iloc[0])
         if fam == "none":
             fam = str(g[famcol][g[famcol] != "none"].mode().iloc[0]) if (g[famcol] != "none").any() else "none"
@@ -78,8 +78,8 @@ def main(n_eps=20, seed=0):
             continue
         n += 1
         mh += d["machine"]["choice"] == root
-        fh += d["family"]["choice"] == fam
-        print(f"ep {ep}: root={root} got={d['machine']['choice']} cands={cands} fam={fam} got={d['family']['choice']}", flush=True)
+        fh += d["fault_family"]["choice"] == fam
+        print(f"ep {ep}: root={root} got={d['machine']['choice']} cands={cands} fam={fam} got={d['fault_family']['choice']}", flush=True)
     print(f"tev machine top-1={mh/max(1,n):.3f} family top-1={fh/max(1,n):.3f} (MEASURED, n={n})", flush=True)
 
 

@@ -21,7 +21,7 @@ QUESTIONS = {
             "origin": "earliest onset with DOWN or counter state; never STARVED-only (symptom)",
         },
     },
-    "family": {
+    "fault_family": {
         "type": "choice",
         "instructions": "Which fault family best explains the channel evidence?",
         "criteria": {
@@ -58,11 +58,11 @@ def decide(packet: dict, client=None, threshold: float = 0.5) -> dict:
         raise JevUnavailable("JEV_API_KEY not set; use template reporter")
     raw = client.ask(packet, QUESTIONS, spec=JEV_SPEC)
     out = {"spec": JEV_SPEC, "packet_id": packet.get("id")}
-    for q in ("machine", "family", "severity"):
+    for q in ("machine", "fault_family", "severity"):
         r = raw.get(q, {}) if isinstance(raw, dict) else {}
         out[q] = r.get("choice")
         out[q + "_prob"] = float(r.get("probability", 0.0))
-    if any(out[q] in (None, "null") or out[q + "_prob"] < threshold for q in ("machine", "family")):
+    if any(out[q] in (None, "null") or out[q + "_prob"] < threshold for q in ("machine", "fault_family")):
         out["verdict"] = "abstain"
     else:
         out["verdict"] = "decided"

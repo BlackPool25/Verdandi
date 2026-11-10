@@ -37,7 +37,7 @@ def build_card(packet: dict, decision: dict) -> dict:
     return {
         "verdict": "decided",
         "root": decision.get("machine"),
-        "family": decision.get("family"),
+        "fault_family": decision.get("fault_family"),
         "severity": decision.get("severity"),
         "confidence": packet.get("confidence", {}).get("top1"),
         "machine_prob": decision.get("machine_prob"),
