@@ -26,6 +26,7 @@ def _oof_predict(
     n_splits: int = 3,
     seed: int = 0,
     invariant: bool = False,
+    sample_weight: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     from sklearn.ensemble import HistGradientBoostingClassifier  # type: ignore[import-untyped]
     from sklearn.model_selection import StratifiedGroupKFold  # type: ignore[import-untyped]
@@ -43,7 +44,8 @@ def _oof_predict(
     for tr, te in splits:
         med, iqr = fit_clean_norm(X[tr], (yr[tr] != "none").astype(int), n_obs)
         clf = HistGradientBoostingClassifier(max_iter=300, random_state=seed)
-        clf.fit(apply_norm(X[tr], med, iqr, n_obs), y[tr])
+        wtr = None if sample_weight is None else np.asarray(sample_weight)[tr]
+        clf.fit(apply_norm(X[tr], med, iqr, n_obs), y[tr], sample_weight=wtr)
         proba[te] = clf.predict_proba(apply_norm(X[te], med, iqr, n_obs))
         oof[te] = clf.predict(apply_norm(X[te], med, iqr, n_obs))
     return classes[oof], proba, classes
