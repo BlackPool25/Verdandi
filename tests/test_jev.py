@@ -46,3 +46,22 @@ def test_no_client_raises_for_fallback():
 
     with pytest.raises(jev.JevUnavailable):
         jev.decide(_packet(), client=None)
+
+
+def test_parse_tev_choice_after_think():
+    from src.jev import parse_tev_choice
+
+    text = "<think>long reasoning... Selection: B.</think>\n\nB"
+    assert parse_tev_choice(text, ["A", "B", "C"]) == "B"
+    assert parse_tev_choice("no letters here 123", ["A", "B"]) is None
+    assert parse_tev_choice("<think>x</think>\nC", ["A", "B", "C"]) == "C"
+
+
+def test_render_packet_state_deterministic():
+    from src.jev import render_state
+
+    p1 = {"id": "d", "trace": [
+        {"id": "ev-B", "machine": "B", "onset": 5, "own_state": "DOWN"},
+        {"id": "ev-A", "machine": "A", "onset": 7, "own_state": "RUN"}]}
+    assert render_state(p1) == render_state(p1)
+    assert "B" in render_state(p1) and "DOWN" in render_state(p1)
