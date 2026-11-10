@@ -119,6 +119,13 @@ FAULT_RANGES = {
     "reject_rate": (0.15, 0.40),
 }
 
+# Loss count-coupling rate (frozen): a dropped (unmeasured) sample condemns
+# the held part(s) at this rate via the plant RNG. Window-gated stochastic
+# consequence like quality's reject_rate — mediated, observable, no GT shaping.
+# Set at the top of the frozen drop range: drops are rare per-step events,
+# and condemnation additionally requires a part to be held at that step.
+LOSS_REJECT_RATE = 0.30
+
 # M0.2d ladder rung constants (additive; frozen FAULT_RANGES untouched).
 MAG_LADDER = {"incipient": (1.0, 3.0), "caricature": (4.0, 7.0)}
 INCIPIENT_SHARE = 0.20
