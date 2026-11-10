@@ -30,6 +30,20 @@ def test_flow_features_shape_and_causality():
     assert np.array_equal(X[:n], X2[:n])
 
 
+def test_flow_features_parallel_matches_serial():
+    import pandas as pd
+
+    from src.flow_features import build_flow_features
+
+    df = _df()
+    df["episode_id"] = [1] * 150 + [2] * 150
+    groups = np.array([1] * 10 + [2] * 10)
+    starts = np.array([16 * i for i in range(10)] * 2)
+    a = build_flow_features(df, groups, starts, w=128, jobs=1)
+    b = build_flow_features(df, groups, starts, w=128, jobs=2)
+    assert np.array_equal(a, b)
+
+
 def test_flow_features_fire_on_buffer_shift():
     from src.flow_features import build_flow_features
 
