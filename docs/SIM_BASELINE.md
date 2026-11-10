@@ -95,3 +95,11 @@ not these event counts.
 - Variant 1 (max-|z| over mask): recall 0.047–0.062 @ FAR 0.05 = chance.
 - Variant 2 (CUSUM over trajectories, h tuned clean): recall 0.000–0.013 @ FAR 0.001–0.006 — worse; window-scale trajectories carry no sustained shift.
 - Kill bar (+0.10 over 0.226–0.412) missed by ~0.2+ everywhere → family specialists STRUCK (both variants spent).
+
+## Task 3 specialists v3 (MEASURED 2026-11-11 — STRUCK)
+Dynamic-lag trajectories (d=10) + CUSUM, same 5% FAR protocol:
+bias 0.045 / drift 0.045 / quality 0.012 / spike 0.052 — all chance.
+Three variants dead (static max, static CUSUM, dynamic CUSUM).
+Program struck: window-cache obs trajectories carry no per-family signal
+separable from clean at 5% FAR. Remaining routes: D-PCA sensor stack
+(Task 4), family abstain fallback (process-only ship).
