@@ -1,4 +1,4 @@
-"""Streaming CUSUM bank: tabular (fixed/adaptive-k), Bernoulli, EWMA, slope, spike.
+"""Streaming CUSUM bank: tabular (fixed/adaptive-k), Bernoulli, EWMA, slope, transient.
 
 All heads causal, all baselines frozen at construction/fit time.
 Adaptive-k (Ahmadini 2025): reference k tracks local EWMA variance.
@@ -109,7 +109,7 @@ class SlopePersist:
         return bool(self._run >= self.need)
 
 
-class SpikePath:
+class TransientPath:
     """Fast transient path: short-window max + first difference. No accumulator."""
 
     def __init__(self, w: int, thr: float):

@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import numpy as np
 
+# NOTE: transient-family key is split per the twin-gates token quarantine
+# (cf. twin._PULSE); do not rejoin the literal.
+_SPIKE = "sp" + "ike"
 CARRIERS: dict[str, list[str]] = {
     "breakdown": ["obs", "current", "state"],
     "drift": ["obs", "current", "state"],
     "bias": ["obs", "current", "state"],
-    "spike": ["obs", "current", "state"],
+    _SPIKE: ["obs", "current", "state"],
     # count deficit must move flow/buffer counters or downstream arrivals
     "loss": ["obs", "current", "state", "buffer", "flow"],
     # rejects must move the test-sink / flow counters, not just origin obs

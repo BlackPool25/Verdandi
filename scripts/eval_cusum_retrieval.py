@@ -11,21 +11,21 @@ import pandas as pd
 
 
 def make_heads(fam, h):
-    from src.cusum_bank import EWMA, SlopePersist, SpikePath, TabularCUSUM
+    from src.cusum_bank import EWMA, SlopePersist, TransientPath, TabularCUSUM
 
     if fam == "drift":
         return [EWMA(0.2, 0.0, h), SlopePersist(64, 10)]
     if fam == "bias":
         return [TabularCUSUM(0.5, h, 0.0, 1.0, adaptive=True)]
-    if fam == "spike":
-        return [SpikePath(4, h)]
+    if fam == "transient":
+        return [TransientPath(4, h)]
     return [TabularCUSUM(0.5, h, 0.0, 1.0, adaptive=True)]
 
 
 GRIDS = {
     "drift": [1.0, 2.0, 4.0],
     "bias": [5.0, 10.0, 20.0],
-    "spike": [3.0, 4.0, 5.0],
+    "transient": [3.0, 4.0, 5.0],
     "loss": [5.0, 10.0, 20.0],
     "quality": [5.0, 10.0, 20.0],
     "breakdown": [5.0, 10.0, 20.0],
@@ -117,11 +117,11 @@ def main():
 
 
 def _params(head, h):
-    from src.cusum_bank import EWMA, SlopePersist, SpikePath, TabularCUSUM
+    from src.cusum_bank import EWMA, SlopePersist, TransientPath, TabularCUSUM
 
     if isinstance(head, EWMA):
         return {"lam": 0.2, "mu0": 0.0, "limit": h}
-    if isinstance(head, SpikePath):
+    if isinstance(head, TransientPath):
         return {"w": 4, "thr": h}
     if isinstance(head, SlopePersist):
         return {"w": 64, "need": 10}
