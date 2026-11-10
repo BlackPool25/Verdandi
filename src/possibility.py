@@ -181,23 +181,32 @@ def upstream_paths(
     edges: dict[str, list[str]],
     anchor: str,
     tau: float = 0.1,
-    support: float = 0.1,
     max_len: int = 4,
     # ASSUMED pending battery calibration (onset-diff-per-hop histogram):
     # STARVED/blockage waves can lag tens of ticks per hop; dt<0 (effect
     # before cause) and unreachable pairs are the only hard vetoes.
     per_hop: tuple[int, int] = (0, 60),
+    tight: float = 6.0,
+    scale: float = 45.0,
 ) -> list[tuple[list[str], float]]:
-    """Explicit upstream enumeration (rod-cutting form).
+    """Explicit upstream enumeration with dilution (rod-cutting form).
 
     Start at the anchor (triggered node). Each upstream step proposes a
     longer path; the extension survives iff the new head node was
     affected (score >= tau, edge onset-consistent). Extension stops when
     upstream nodes stop affecting — score only grows through evidence.
 
-    score(path) = sum of node scores + support per consistent edge.
+    score(path) = sum(node scores) x coherence(path), where coherence
+    is the geometric mean of edge strengths. Edge strength is 1.0 when
+    the delay fits the tight per-hop window and decays exponentially
+    beyond it: a weak transmission link DILUTES the whole path, so a
+    coherent short path can beat a diluted long one even when the long
+    root scores higher alone.
+
     Returns paths ranked best-first with normalized probabilities.
     """
+    import math
+
     lo, hi = per_hop
     rev = _reverse(edges)
 
@@ -206,18 +215,34 @@ def upstream_paths(
         if d is None or d < 1:
             return False
         dt = evidence[m]["onset"] - evidence[u]["onset"]
-        return dt >= 0 and d * lo <= dt <= d * hi
+        return 0 <= dt and d * lo <= dt <= d * hi
+
+    def strength(u: str, m: str) -> float:
+        d = _bfs(u, edges)[m]
+        dt = evidence[m]["onset"] - evidence[u]["onset"]
+        slack = dt - tight * d
+        if slack <= 0:
+            return 1.0
+        return math.exp(-slack / scale)
 
     def own(m: str) -> float:
         return float(evidence[m].get("score", 0.0))
 
+    def coherence(path: list[str]) -> float:
+        if len(path) < 2:
+            return 1.0
+        prod = 1.0
+        for u, m in zip(path, path[1:]):
+            prod *= strength(u, m)
+        return prod ** (1.0 / (len(path) - 1))
+
     if anchor not in evidence:
         return [([anchor], 1.0)]
     scored: list[tuple[list[str], float]] = [([anchor], own(anchor))]
-    frontier: list[tuple[list[str], float]] = [([anchor], own(anchor))]
+    frontier: list[list[str]] = [[anchor]]
     while frontier:
-        nxt: list[tuple[list[str], float]] = []
-        for path, val in frontier:
+        nxt: list[list[str]] = []
+        for path in frontier:
             if len(path) >= max_len:
                 continue
             for u in sorted(rev.get(path[0], [])):
@@ -228,8 +253,9 @@ def upstream_paths(
                 gain = own(u)
                 if gain < tau:
                     continue  # unaffected: path ends here
-                new = ([u] + path, val + gain + support)
-                scored.append(new)
+                new = [u] + path
+                s = sum(own(m) for m in new) * coherence(new)
+                scored.append((new, s))
                 nxt.append(new)
         frontier = nxt
     scored.sort(key=lambda kv: -kv[1])
