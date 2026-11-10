@@ -9,7 +9,7 @@ sys.path.insert(0, ".")
 
 
 def main():
-    from scripts.eval_stacked import build_rows
+    from scripts.eval_stacked import build_rows, load_onsets
     from src.stage2 import save, train_final
     from src.twin import _MACHINE_ORDER
 
@@ -25,7 +25,7 @@ def main():
             fired = None
     except FileNotFoundError:
         fired = None
-    X, y, groups, _ = build_rows(oof, machines, fired)
+    X, y, groups, _ = build_rows(oof, machines, fired, load_onsets())
     model = train_final(X, y, groups)
     save(model, "artifacts/stage2-rank.txt")
     print(f"saved artifacts/stage2-rank.txt rows={len(y)}", flush=True)

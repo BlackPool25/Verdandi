@@ -19,3 +19,19 @@ def test_stage2_roundtrip_scores():
     a = score_candidates(m, X[:3])
     b = np.asarray(m2.predict(X[:3]))
     assert np.allclose(a, b) and np.argmax(a) == 0
+
+
+def test_serving_artifact_matches_builder_width():
+    import numpy as np
+    import pandas as pd
+    from src.stage2 import load
+    from src.twin import _MACHINE_ORDER
+
+    import scripts.eval_stacked as es
+
+    oof = pd.read_parquet("artifacts/oof_identity.parquet")
+    _eps = oof.loc[oof["y"] == 1, "ep"].unique()[:20]
+    oof = oof[oof["ep"].isin(_eps)]
+    X, _, _, _ = es.build_rows(oof, list(_MACHINE_ORDER), None, None)
+    bst = load("artifacts/stage2-rank.txt")
+    assert bst.num_feature() == X.shape[1]
