@@ -308,6 +308,8 @@ def main():
             base_hits += 1
         base_n += 1
     print(f"stage-1 majority-vote top1={base_hits/max(1,base_n):.3f} (MEASURED, n={base_n})")
+    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups)
+    print("saved artifacts/stage2-oof.npz (ranker-level calibration input)", flush=True)
 
 
 def main_free():

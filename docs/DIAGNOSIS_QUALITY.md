@@ -50,11 +50,17 @@ keeps frozen struct cols (leak bounded small per v7 ablation).
 ## Sensor / onset (prior handoff numbers, not re-measured here)
 Sensor top-1 0.26–0.33, onset err ~90 ticks. Process top-1 0.76, onset err 2.0.
 
+## Calibration (MEASURED 2026-11-11, teacher OOF windows, n=96000)
+T=2.58 (strongly overconfident — consistent with hard-vote findings).
+NLL 2.465→1.366, ECE 0.246→0.034 (86% cut, bar was 20%).
+Risk-coverage: 0.300@1.0 → 0.249@0.9 → 0.217@0.8 → 0.186@0.7 (monotone).
+Module: `src/calibrate.py` (temperature + Platt + coverage gate), 5 tests green.
+Ranker-level calibration input: `artifacts/stage2-oof.npz` (saved by `eval_stacked.main`).
+
 ## Missing (gates, not numbers)
-- Calibration fit (T + Platt): protocol journaled, not run.
 - Held-5 transfer table for stage-2: unmeasured (prior: 0.40 classifier).
 - Per-hop delay calibration: bounds ASSUMED (0,60) pending histogram.
-- Cost-weighted metric: matrix never elicited.
+- Cost-weighted metric: deferred per user (accuracy-only bars stand).
 
 ## Voided (leak-contaminated, struck from the record)
 Identity classifier 0.606, stacked 0.608/0.610, dense retrieval 1.000
