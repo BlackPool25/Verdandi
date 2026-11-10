@@ -90,3 +90,8 @@ sunk/scrapped/throughput; `scrapped_total` is not quarantined) — unrun on
 v2 physics. Claiming silence reduction requires that run (Task 3 wiring),
 not these event counts.
 - silent Δ, route Δ, gates, family loss/quality Δ.
+
+## Task 3 specialists (MEASURED 2026-11-11 — STRUCK all 4)
+- Variant 1 (max-|z| over mask): recall 0.047–0.062 @ FAR 0.05 = chance.
+- Variant 2 (CUSUM over trajectories, h tuned clean): recall 0.000–0.013 @ FAR 0.001–0.006 — worse; window-scale trajectories carry no sustained shift.
+- Kill bar (+0.10 over 0.226–0.412) missed by ~0.2+ everywhere → family specialists STRUCK (both variants spent).
