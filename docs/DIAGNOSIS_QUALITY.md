@@ -53,7 +53,16 @@ Module: `src/calibrate.py` (temperature + Platt + coverage gate), 5 tests green.
 Ranker-level calibration input: `artifacts/stage2-oof.npz` (saved by `eval_stacked.main`).
 
 ## Missing (gates, not numbers)
-- Held-5 transfer table for stage-2: unmeasured (prior: 0.40 classifier).
+## Transfer (MEASURED 2026-11-11, teacher windows, T=2.58 calibrated)
+| split | forced top-1 | tau (risk≤0.3) | coverage | risk | n |
+|---|---|---|---|---|---|
+| all windows | 0.700 | 0.080 | 1.000 | 0.300 | 96000 |
+| held-5 (ASM1/ASM2/B7P/B9/C6) fault windows | 0.327 | 0.739 | 0.337 | 0.300 | 8945 |
+
+Generalization gap is real (0.70→0.33 forced). The coverage gate converts it
+to abstention: on unseen machines it predicts on 34% at the same 0.30 risk.
+Open-set retrain (exclude-held training) not run — the reject-by-abstain
+behavior above is the shippable half; forced-accuracy transfer is not claimed.
 - Per-hop delay calibration: bounds ASSUMED (0,60) pending histogram.
 - Cost-weighted metric: deferred per user (accuracy-only bars stand).
 
