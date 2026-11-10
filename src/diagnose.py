@@ -338,7 +338,7 @@ def diagnose_incident(
     Silent-on-clean shape: empty kept entries -> abstain report, never a guess.
     """
     from src.incidents_store import IncidentStore  # noqa: F401 (re-export hint)
-    from src.possibility import best_path, neighborhood, rank_nodes
+    from src.possibility import neighborhood, rank_nodes, upstream_paths
     from src.report import build_report
 
     kept = diagnose_from_trigger(g, obs_cols, trigger, back=back)
@@ -380,7 +380,10 @@ def diagnose_incident(
     )
     if isinstance(probs, tuple):
         probs = probs[0]
-    path, path_prob = best_path(probs, edges, anchor)
+    # Upstream path enumeration: anchor first, extend while the new head
+    # was affected (score >= tau), rank all, choose the best.
+    ranked = upstream_paths(evidence, edges, anchor)
+    path, path_prob = ranked[0]
     root = path[0]
     t0 = next((r["onset"] for r in kept if r["machine"] == root), trigger)
     forecast = list(forecast_fn(root, t0)) if forecast_fn else []
@@ -405,4 +408,5 @@ def diagnose_incident(
     return build_report(
         root=root, fault_family=fault_family, scores=probs, edges=edges,
         anchor=anchor, forecast=forecast, meta=meta, linked=linked,
+        paths=ranked,
     )

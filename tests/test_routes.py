@@ -25,6 +25,19 @@ def test_kbest_returns_multiple_ranked_paths():
     assert paths[0][1] >= paths[1][1]  # ranked
 
 
+def test_kbest_paths_stops_at_unaffected_node():
+    from src.possibility import upstream_paths
+
+    edges = {"A0": ["A1"], "A1": ["A2"], "A2": []}
+    ev = {
+        "A0": {"onset": 100, "score": 0.02},  # below tau: unaffected
+        "A1": {"onset": 102, "score": 0.5},
+        "A2": {"onset": 104, "score": 0.3},
+    }
+    paths = upstream_paths(ev, edges, anchor="A2", tau=0.1)
+    assert all("A0" not in p for p, _ in paths)  # weak node never extends a path
+
+
 def test_route_extraction_follows_onset_order_on_dag():
     from src.route import extract_route
 

@@ -12,11 +12,21 @@ def build_report(
     forecast: list[tuple[str, int, int]],
     meta: dict[str, dict],
     linked: list[tuple[str, int]],
+    paths: list[tuple[list[str], float]] | None = None,
 ) -> dict:
-    """Assemble the operator-facing incident breakdown (pure function)."""
+    """Assemble the operator-facing incident breakdown (pure function).
+
+    paths: ranked upstream routes from upstream_paths (best first).
+    Falls back to single best_path when not supplied.
+    """
     from src.possibility import best_path
 
-    path, path_prob = best_path(scores, edges, anchor)
+    if paths:
+        path, path_prob = paths[0]
+        ranked = [[list(p), float(v)] for p, v in paths]
+    else:
+        path, path_prob = best_path(scores, edges, anchor)
+        ranked = [[list(path), float(path_prob)]]
     pred_tick = {m: t for m, t, _ in forecast}
     nodes = []
     for m in path:
@@ -36,6 +46,7 @@ def build_report(
         "fault_family": fault_family,
         "path": path,
         "path_prob": path_prob,
+        "paths": ranked,
         "onset": meta.get(root, {}).get("onset"),
         "nodes": nodes,
         "upstream": f"{root} origin ({fault_family})",

@@ -136,7 +136,7 @@ def kbest_paths(
     edges: dict[str, list[str]],
     anchor: str,
     k: int = 3,
-    per_hop: tuple[int, int] = (1, 6),
+    per_hop: tuple[int, int] = (0, 60),
     support_weight: float = 0.5,
     max_len: int = 4,
 ) -> list[tuple[list[str], float]]:
@@ -174,6 +174,67 @@ def kbest_paths(
     top = cands[: max(1, k)]
     tot = sum(v for _, v in top) or 1.0
     return [(p, v / tot) for p, v in top]
+
+
+def upstream_paths(
+    evidence: dict[str, dict],
+    edges: dict[str, list[str]],
+    anchor: str,
+    tau: float = 0.1,
+    support: float = 0.1,
+    max_len: int = 4,
+    # ASSUMED pending battery calibration (onset-diff-per-hop histogram):
+    # STARVED/blockage waves can lag tens of ticks per hop; dt<0 (effect
+    # before cause) and unreachable pairs are the only hard vetoes.
+    per_hop: tuple[int, int] = (0, 60),
+) -> list[tuple[list[str], float]]:
+    """Explicit upstream enumeration (rod-cutting form).
+
+    Start at the anchor (triggered node). Each upstream step proposes a
+    longer path; the extension survives iff the new head node was
+    affected (score >= tau, edge onset-consistent). Extension stops when
+    upstream nodes stop affecting — score only grows through evidence.
+
+    score(path) = sum of node scores + support per consistent edge.
+    Returns paths ranked best-first with normalized probabilities.
+    """
+    lo, hi = per_hop
+    rev = _reverse(edges)
+
+    def consistent(u: str, m: str) -> bool:
+        d = _bfs(u, edges).get(m)
+        if d is None or d < 1:
+            return False
+        dt = evidence[m]["onset"] - evidence[u]["onset"]
+        return dt >= 0 and d * lo <= dt <= d * hi
+
+    def own(m: str) -> float:
+        return float(evidence[m].get("score", 0.0))
+
+    if anchor not in evidence:
+        return [([anchor], 1.0)]
+    scored: list[tuple[list[str], float]] = [([anchor], own(anchor))]
+    frontier: list[tuple[list[str], float]] = [([anchor], own(anchor))]
+    while frontier:
+        nxt: list[tuple[list[str], float]] = []
+        for path, val in frontier:
+            if len(path) >= max_len:
+                continue
+            for u in sorted(rev.get(path[0], [])):
+                if u in path or u not in evidence:
+                    continue
+                if not consistent(u, path[0]):
+                    continue
+                gain = own(u)
+                if gain < tau:
+                    continue  # unaffected: path ends here
+                new = ([u] + path, val + gain + support)
+                scored.append(new)
+                nxt.append(new)
+        frontier = nxt
+    scored.sort(key=lambda kv: -kv[1])
+    tot = sum(v for _, v in scored) or 1.0
+    return [(p, v / tot) for p, v in scored]
 
 
 def best_path(    scores: dict[str, float],

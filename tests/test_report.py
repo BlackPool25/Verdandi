@@ -15,8 +15,10 @@ def test_report_breakdown_shape():
     rep = build_report(
         root="A0", fault_family="breakdown", scores=scores, edges=edges,
         anchor="A2", forecast=forecast, meta=meta, linked=[("A1", 104), ("A2", 108)],
+        paths=[(["A0", "A1", "A2"], 0.7), (["A1", "A2"], 0.3)],
     )
     assert rep["path"] == ["A0", "A1", "A2"]
+    assert rep["paths"][0][0] == ["A0", "A1", "A2"]
     assert rep["nodes"][0]["machine"] == "A0"
     assert "upstream" in rep and "downstream" in rep and "linked" in rep
     assert rep["linked"] == [("A1", 104), ("A2", 108)]
