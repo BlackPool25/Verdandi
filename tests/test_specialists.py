@@ -30,3 +30,18 @@ def test_cusum_detects_ramp_fast():
     x = np.concatenate([rng.normal(0, 1, 100), np.linspace(0, 3, 60)])
     det = cusum_head(x, k=0.5, h=5.0)
     assert det is not None and det < 160  # caught within the ramp
+
+
+def test_expert_recall_on_synthetic_shift():
+    from src.specialists import expert_score, fit_family_mask
+
+    rng = np.random.default_rng(3)
+    # 10 channels, families shift channel 2 by +3.5 in fault windows
+    Xc = rng.normal(0, 1, (400, 10))
+    Xf = rng.normal(0, 1, (100, 10)); Xf[:, 2] += 3.5
+    mask = fit_family_mask(Xc, Xf, k=2)
+    assert 2 in mask
+    sc = expert_score(Xc, mask, Xc.mean(0), Xc.std(0))
+    sf = expert_score(Xf, mask, Xc.mean(0), Xc.std(0))
+    thr = float(np.quantile(sc, 0.95))
+    assert float((sf > thr).mean()) > 0.8  # recall @5% FAR for this SNR

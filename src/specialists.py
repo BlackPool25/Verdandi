@@ -44,3 +44,17 @@ def cusum_head(x: np.ndarray, k: float = 0.5, h: float = 5.0) -> int | None:
         if gp > h or gn > h:
             return int(i)
     return None
+
+
+def fit_family_mask(X_clean: np.ndarray, X_fault: np.ndarray, k: int = 5) -> list[int]:
+    """Top-k channels by standardized mean shift (fault vs clean)."""
+    mu0, sd0 = X_clean.mean(axis=0), X_clean.std(axis=0) + 1e-9
+    shift = np.abs((X_fault.mean(axis=0) - mu0) / sd0)
+    order = np.argsort(-shift, kind="stable")
+    return sorted(int(i) for i in order[:k])
+
+
+def expert_score(X: np.ndarray, mask: list[int], mu0: np.ndarray, sd0: np.ndarray) -> np.ndarray:
+    """Per-window masked mean |z| — the variant-1 episode/window score."""
+    Z = (np.asarray(X, dtype=float) - mu0) / (np.asarray(sd0) + 1e-9)
+    return np.abs(Z[:, list(mask)]).mean(axis=1)
