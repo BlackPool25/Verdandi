@@ -113,8 +113,70 @@ def best_cause_path(
     return path, memo[anchor], dict(memo)
 
 
-def best_path(
-    scores: dict[str, float],
+def _all_paths(
+    edges: dict[str, list[str]], anchor: str, max_len: int
+) -> list[list[str]]:
+    """All simple downstream paths ending at anchor (DFS backwards)."""
+    rev = _reverse(edges)
+    out: list[list[str]] = []
+    stack: list[list[str]] = [[anchor]]
+    while stack:
+        cur = stack.pop()
+        out.append(list(cur))
+        if len(cur) >= max_len:
+            continue
+        for u in sorted(rev.get(cur[0], [])):
+            if u not in cur:
+                stack.append([u] + cur)
+    return out
+
+
+def kbest_paths(
+    evidence: dict[str, dict],
+    edges: dict[str, list[str]],
+    anchor: str,
+    k: int = 3,
+    per_hop: tuple[int, int] = (1, 6),
+    support_weight: float = 0.5,
+    max_len: int = 4,
+) -> list[tuple[list[str], float]]:
+    """Top-k root→anchor routes with edge-consistency scoring.
+
+    score(path) = geomean(node scores) + support_weight * (consistent
+    edges / total edges); edges violating onset-delay bounds invalidate
+    the path. Returns [(path, prob)] normalized over the k.
+    """
+    lo, hi = per_hop
+    cands = []
+    for p in _all_paths(edges, anchor, max_len):
+        if any(n not in evidence for n in p):
+            continue
+        ok, bad = 0, 0
+        for u, v in zip(p, p[1:]):
+            d = _bfs(u, edges).get(v)
+            if d is None:
+                bad += 1
+                continue
+            dt = evidence[v]["onset"] - evidence[u]["onset"]
+            if dt >= 0 and d * lo <= dt <= d * hi:
+                ok += 1
+            else:
+                bad += 1
+        if bad:
+            continue
+        s = 1.0
+        for n in p:
+            s *= max(float(evidence[n].get("score", 0.0)), 1e-12)
+        geo = s ** (1.0 / len(p))
+        edge = support_weight * (ok / max(1, len(p) - 1)) if len(p) > 1 else 0.0
+        cands.append((p, geo + edge))
+    cands.sort(key=lambda kv: -kv[1])
+    top = cands[: max(1, k)]
+    tot = sum(v for _, v in top) or 1.0
+    return [(p, v / tot) for p, v in top]
+
+
+def best_path(    scores: dict[str, float],
     edges: dict[str, list[str]],
     anchor: str,
     max_len: int = 3,
