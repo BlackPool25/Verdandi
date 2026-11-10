@@ -136,40 +136,45 @@ def kbest_paths(
     edges: dict[str, list[str]],
     anchor: str,
     k: int = 3,
-    per_hop: tuple[int, int] = (0, 60),
+    tight: float = 6.0,
+    scale: float = 45.0,
     support_weight: float = 0.5,
     max_len: int = 4,
 ) -> list[tuple[list[str], float]]:
-    """Top-k root→anchor routes with edge-consistency scoring.
+    """Top-k root→anchor routes with dilution scoring.
 
-    score(path) = geomean(node scores) + support_weight * (consistent
-    edges / total edges); edges violating onset-delay bounds invalidate
-    the path. Returns [(path, prob)] normalized over the k.
+    score(path) = geomean(node scores) x coherence(path) + support
+    share. Unreachable pairs veto; delay only discounts (estimated
+    onsets are detection times, not causal orderings).
+    Returns [(path, prob)] normalized over the k.
     """
-    lo, hi = per_hop
+    import math
+
     cands = []
     for p in _all_paths(edges, anchor, max_len):
         if any(n not in evidence for n in p):
             continue
-        ok, bad = 0, 0
+        ok = True
+        t = 1.0
         for u, v in zip(p, p[1:]):
             d = _bfs(u, edges).get(v)
-            if d is None:
-                bad += 1
-                continue
+            if d is None or d < 1:
+                ok = False
+                break
             dt = evidence[v]["onset"] - evidence[u]["onset"]
-            if dt >= 0 and d * lo <= dt <= d * hi:
-                ok += 1
-            else:
-                bad += 1
-        if bad:
+            if dt < 0:
+                t *= math.exp(dt / scale)
+            elif dt > tight * d:
+                t *= math.exp(-(dt - tight * d) / scale)
+        if not ok:
             continue
         s = 1.0
         for n in p:
             s *= max(float(evidence[n].get("score", 0.0)), 1e-12)
         geo = s ** (1.0 / len(p))
-        edge = support_weight * (ok / max(1, len(p) - 1)) if len(p) > 1 else 0.0
-        cands.append((p, geo + edge))
+        coh = t ** (1.0 / max(1, len(p) - 1)) if len(p) > 1 else 1.0
+        edge = support_weight * coh if len(p) > 1 else 0.0
+        cands.append((p, geo * coh + edge))
     cands.sort(key=lambda kv: -kv[1])
     top = cands[: max(1, k)]
     tot = sum(v for _, v in top) or 1.0
@@ -182,44 +187,42 @@ def upstream_paths(
     anchor: str,
     tau: float = 0.1,
     max_len: int = 4,
-    # ASSUMED pending battery calibration (onset-diff-per-hop histogram):
-    # STARVED/blockage waves can lag tens of ticks per hop; dt<0 (effect
-    # before cause) and unreachable pairs are the only hard vetoes.
-    per_hop: tuple[int, int] = (0, 60),
     tight: float = 6.0,
     scale: float = 45.0,
 ) -> list[tuple[list[str], float]]:
     """Explicit upstream enumeration with dilution (rod-cutting form).
 
     Start at the anchor (triggered node). Each upstream step proposes a
-    longer path; the extension survives iff the new head node was
-    affected (score >= tau, edge onset-consistent). Extension stops when
-    upstream nodes stop affecting — score only grows through evidence.
+    longer path; the extension survives iff the new head was affected
+    (score >= tau) and reachable. Extension stops when upstream nodes
+    stop affecting — score only grows through evidence.
 
     score(path) = sum(node scores) x coherence(path), where coherence
-    is the geometric mean of edge strengths. Edge strength is 1.0 when
-    the delay fits the tight per-hop window and decays exponentially
-    beyond it: a weak transmission link DILUTES the whole path, so a
-    coherent short path can beat a diluted long one even when the long
-    root scores higher alone.
+    is the geometric mean of edge strengths (1.0 within the tight
+    per-hop window, exponential decay beyond; early firing discounted,
+    never vetoed — estimated onsets are detection times, not causal
+    order). Only unreachable pairs are vetoed. A weak link DILUTES the
+    whole path: coherent short paths beat diluted long ones.
 
     Returns paths ranked best-first with normalized probabilities.
     """
     import math
 
-    lo, hi = per_hop
     rev = _reverse(edges)
 
     def consistent(u: str, m: str) -> bool:
+        # Reachability is the only hard veto. Estimated onsets are
+        # detection times, not causal orderings (left-overlap fires
+        # downstream texture before the root's own onset) — delay only
+        # discounts via strength(), never vetoes.
         d = _bfs(u, edges).get(m)
-        if d is None or d < 1:
-            return False
-        dt = evidence[m]["onset"] - evidence[u]["onset"]
-        return 0 <= dt and d * lo <= dt <= d * hi
+        return d is not None and d >= 1
 
     def strength(u: str, m: str) -> float:
         d = _bfs(u, edges)[m]
         dt = evidence[m]["onset"] - evidence[u]["onset"]
+        if dt < 0:
+            return math.exp(dt / scale)
         slack = dt - tight * d
         if slack <= 0:
             return 1.0

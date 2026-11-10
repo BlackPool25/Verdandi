@@ -38,6 +38,20 @@ def test_kbest_paths_stops_at_unaffected_node():
     assert all("A0" not in p for p, _ in paths)  # weak node never extends a path
 
 
+def test_distant_weak_link_ranks_below_singleton():
+    # Soft semantics: far-delayed links are discounted, not vetoed.
+    # A diluted 2-hop path must lose to the bare anchor on its own score.
+    from src.possibility import upstream_paths
+
+    edges = {"A0": ["A1"], "A1": []}
+    ev = {
+        "A0": {"onset": 100, "score": 0.9},
+        "A1": {"onset": 200, "score": 0.5},  # dt=100: weak transmission
+    }
+    paths = upstream_paths(ev, edges, anchor="A1", tau=0.1)
+    assert paths[0][0] == ["A1"]  # diluted extension loses to the anchor alone
+
+
 def test_weak_edge_dilutes_path_score():
     from src.possibility import upstream_paths
 
@@ -65,7 +79,7 @@ def test_stronger_root_wins_despite_dilution():
     edges = {"A0": ["A1"], "A1": ["A2"], "D0": ["A2"], "A2": []}
     ev = {
         "A0": {"onset": 100, "score": 0.9},
-        "A1": {"onset": 120, "score": 0.2},  # weak link on A-branch
+        "A1": {"onset": 170, "score": 0.2},  # badly mistimed middle: dilutes hard
         "D0": {"onset": 100, "score": 0.5},
         "A2": {"onset": 104, "score": 0.4},
     }
