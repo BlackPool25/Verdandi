@@ -4,7 +4,38 @@ import numpy as np
 import pandas as pd
 
 
-def build_rows(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None = None):
+def _direction_feats(onsets, ep, machines):
+    """Onset/state features per machine: mirrors diagnose._eweight + flags."""
+    g = onsets[onsets["ep"] == ep] if onsets is not None else None
+    out = {}
+    for m in machines:
+        if g is None or m not in set(g["machine"]):
+            out[m] = (0.0, 0.0, 0.0, 1.0)
+            continue
+        r = g[g["machine"] == m].iloc[0]
+        kind, st = str(r["onset_kind"]), str(r["own_state"])
+        if kind == "state" and st == "DOWN":
+            w = 1.0
+        elif st == "STARVED" and kind != "counter":
+            w = 0.1
+        elif kind in ("state", "counter", "oracle"):
+            w = 0.6
+        else:
+            w = 0.3
+        out[m] = (w, 1.0 if st == "DOWN" else 0.0,
+                  1.0 if st == "STARVED" else 0.0, 0.0)
+    # onset-order rank normalized (earliest = 1)
+    if g is not None and len(g):
+        om = {m: float(g[g["machine"] == m]["onset"].min()) for m in machines if m in set(g["machine"])}
+        if om:
+            t0, t1 = min(om.values()), max(om.values())
+            for m, t in om.items():
+                w, d, s, _ = out[m]
+                out[m] = (w, d, s, 1.0 - (t - t0) / max(1.0, t1 - t0))
+    return out
+
+
+def build_rows(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None = None, onsets=None):
     """Multi-signal rows: vote aggregates + sentinel-agreement (additive).
 
     fired: optional boolean Series aligned to oof rows (sentinel fired).
@@ -23,6 +54,7 @@ def build_rows(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None =
         if troot == "none":
             continue
         family = str(truth["fam"].mode().iloc[0])
+        dfeat = _direction_feats(onsets, ep, machines) if onsets is not None else None
         pm = g[g["pred"] != "none"]
         f = fired.loc[g.index].to_numpy(bool) if has_fired else None
         shares, mx, fshare, agree = {}, {}, {}, {}
@@ -51,16 +83,25 @@ def build_rows(oof: pd.DataFrame, machines: list[str], fired: pd.Series | None =
         top2 = srt[-2] if len(srt) > 1 else 0.0
         for m in machines:
             onehot = [1.0 if m == x else 0.0 for x in machines]
+            extra = list(dfeat[m]) if dfeat is not None else [0.0, 0.0, 0.0, 0.0]
             rows.append(
                 [shares[m], mx[m], float(rank[m]), (shares[m] - mu) / sd,
                  top1 - shares[m], top2 - shares[m] if shares[m] < top1 else top1 - top2,
                  fshare[m], agree[m]]
-                + onehot
+                + extra + onehot
             )
             y.append(1 if m == troot else 0)
             groups.append(ep)
             fam.append(family)
     return np.array(rows), np.array(y), np.array(groups), np.array(fam)
+
+
+def load_onsets(path: str = "artifacts/onsets.parquet"):
+    """Load cached per-episode onsets; None if missing (features off)."""
+    try:
+        return pd.read_parquet(path)
+    except FileNotFoundError:
+        return None
 
 
 def main():
@@ -84,7 +125,9 @@ def main():
     except FileNotFoundError:
         fired = None
         print("no sentinel OOF: sentinel features off", flush=True)
-    X, y, groups, fam = build_rows(oof, machines, fired)
+    onsets = load_onsets()
+    print(f"onset features {'ON' if onsets is not None else 'OFF'}", flush=True)
+    X, y, groups, fam = build_rows(oof, machines, fired, onsets)
     famids = np.array([hash(f) % (2**31) for f in fam])
     oof_pred = np.zeros(len(y))
     cv = StratifiedGroupKFold(n_splits=3)
