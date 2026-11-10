@@ -58,3 +58,17 @@ def expert_score(X: np.ndarray, mask: list[int], mu0: np.ndarray, sd0: np.ndarra
     """Per-window masked mean |z| — the variant-1 episode/window score."""
     Z = (np.asarray(X, dtype=float) - mu0) / (np.asarray(sd0) + 1e-9)
     return np.abs(Z[:, list(mask)]).mean(axis=1)
+
+
+def trajectory_score(T: np.ndarray, h: float = 5.0, k: float = 0.5) -> int:
+    """Variant-2: CUSUM alarm (1) / no alarm (0) on a per-episode trajectory."""
+    return 1 if cusum_head(np.asarray(T, dtype=float), k=k, h=h) is not None else 0
+
+
+def tune_h(clean_trajs: list[np.ndarray], far: float = 0.05, k: float = 0.5) -> float:
+    """Largest h with clean-episode alarm rate <= far (grid search)."""
+    for h in (3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0):
+        r = np.mean([trajectory_score(t, h=h, k=k) for t in clean_trajs])
+        if r <= far:
+            return h
+    return 15.0

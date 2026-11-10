@@ -45,3 +45,15 @@ def test_expert_recall_on_synthetic_shift():
     sf = expert_score(Xf, mask, Xc.mean(0), Xc.std(0))
     thr = float(np.quantile(sc, 0.95))
     assert float((sf > thr).mean()) > 0.8  # recall @5% FAR for this SNR
+
+
+def test_trajectory_cusum_catches_ramp_misses_flat():
+    from src.specialists import trajectory_score, tune_h
+
+    rng = np.random.default_rng(4)
+    clean = [rng.normal(0, 1, 22) for _ in range(200)]
+    h = tune_h(clean, far=0.05)
+    ramp = np.concatenate([rng.normal(0, 1, 10), np.linspace(0, 2.5, 12)])
+    assert trajectory_score(ramp, h=h) == 1
+    fa = np.mean([trajectory_score(t, h=h) for t in clean])
+    assert fa <= 0.05
