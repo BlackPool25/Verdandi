@@ -29,6 +29,43 @@ Confirms audit: silence concentrated in loss + quality-off-sink + incipient sens
 
 ## v2 firing comparison (MEASURED 2026-11-10, focused quality+loss battery)
 
+## v2 full-mix verdict (MEASURED 2026-11-25, PRISSUE-74 — KEEP general claim)
+
+Arms: 7 families × 2 rungs, `--n-per-cell 50 --n-clean 300 --seed 1` →
+700 fault + 300 clean = 1000 eps/arm, 2000 eps total, seed-identical grids
+(verified: `fault_episodes` + `clean_episodes` equal across manifests; arms
+differ ONLY in `--sink-all-quality --couple-loss`). Manifests:
+`docs/m0b_mass_v2_full_{off,on}.json` (fault eps 40000..40699, clean from
+41700 — blocks never overlap). Caches: `artifacts/cache_v2_full_{off,on}`
+(n=20000 windows each = 20/ep effective). Head: `eval_fire_flow`
+GroupKFold(3) HistGBM(max_iter=100), firing = ≥thr on 2 of trailing 3
+windows; `scrapped_total` kept in F_flow aggregates (present in shard
+columns, flows into the vectorized flow block). Lineage: seed 1 both arms;
+clean n=300 (±~3pp noise vs ±~4pp in the focused run).
+
+| arm | tag | thr | retrieval | clean-fire | med-err | n |
+|---|---|---|---|---|---|---|
+| OFF | obs-only | 0.5 | 0.751 | 0.223 | 0.0 | 700/300 |
+| OFF | obs-only | 0.7 | 0.680 | 0.080 | 0.0 | 700/300 |
+| OFF | obs+flow | 0.5 | 0.766 | 0.253 | 0.0 | 700/300 |
+| OFF | obs+flow | 0.7 | 0.687 | 0.070 | 0.0 | 700/300 |
+| ON | obs-only | 0.5 | 0.781 | 0.153 | 0.0 | 700/300 |
+| ON | obs-only | 0.7 | 0.724 | 0.050 | 0.0 | 700/300 |
+| ON | obs+flow | 0.5 | 0.794 | 0.197 | 0.0 | 700/300 |
+| ON | obs+flow | 0.7 | 0.719 | 0.063 | 0.0 | 700/300 |
+
+Pre-registered rule (primary: thr-0.7 `obs+flow ON` vs `obs-only OFF`):
+ON 0.719 > OFF 0.680 at ON clean-fire 0.063 ≤ OFF 0.080 → **KEEP**;
+same direction at thr 0.5 (0.794 > 0.751 at 0.197 ≤ 0.223) → confirmed.
+Effect size is modest (Δret +0.039 ≈ 2.2σ, se≈1.7pp @ n=700; Δcf −0.017),
+but the sign is consistent across both thrs and both ON tags (ON obs-only
+also beats OFF obs-only: 0.724 vs 0.680 @ 0.050 vs 0.080 — same mediated
+routing effect seen in the focused run). General (7-family) v2 firing claim
+is therefore CONFIRMED for the `eval_fire_flow` head — not scoped to
+quality/loss. Scope note: this confirms the experimental firing head only;
+shipped detector (frozen sentinel), ranker, and §8 ship/abstain dispositions
+are unchanged (no PROJECT_REPORT §8 amendment — no Task 1 scope change).
+
 ## Task 4 hybrid ranker (MEASURED 2026-11-10, focused ON arm — STRUCK)
 
 Teacher OOF retrained on the focused ON cache (`artifacts/focused_on_oof.parquet`,

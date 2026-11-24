@@ -49,7 +49,7 @@ The operator's problem: the screen flashes at ASM0/A7/INSP0; the cause is at A2.
 
 - **Stage-1 teacher** (majority vote over window posteriors): top-1 0.671. **Stage-2 LambdaRank** (LightGBM `lambdarank`, 26 candidates/episode, 3-fold episode-grouped CV): votable top-1 **0.673, n=2665** vs bar ≥0.70 — gap 0.027 (the 0.685 figure in older docs is pre-C-fix battery; 0.673 is branch-current). Pooled (silent-as-misses) 0.455–0.456; silence concentrates in loss (65/93) + quality (49/87).
 - **Rerank plan (max 2 variants, then strike):** (1) calibration-aware rerank on stage2-oof (post-hoc, minutes); (2) only if needed, per-family heads or pairwise/truncation config. Identical episodes/CV/groups; votable + pooled dual reporting. Struck: soft vote 0.672, weighted 0.663, vote-free 0.355, hybrid +flow +0.000 (57.8% nonzero flow cols, identical to 3 decimals — row-form is the wrong carrier).
-- **v2 physics firing:** focused quality+loss win only (+0.185 @ thr 0.7 on the obs-only arm, clean-fire 0.150→0.030; obs+flow arm 0.130→0.040 same delta). Full 7-family mix unrun — general claim unconfirmed; scope to quality/loss unless full-mix OFF/ON at matched clean-fire confirms.
+- **v2 physics firing:** CONFIRMED on full 7-family mix (Task 3, 2026-11-25): obs+flow ON 0.719 vs obs-only OFF 0.680 @ clean-fire 0.063 vs 0.080, thr 0.7 (same direction @ 0.5; n=700+300/arm, seed-identical grids, `docs/SIM_BASELINE.md` full-mix verdict). Focused quality+loss win (+0.185) was the precedent; general firing-head claim now kept. Ship/abstain dispositions unchanged.
 - **Tev decider (local `tev1:4b`, temp 0, think off):** 0.059 machine / 0.235 family (n=17, per research-tev lane; UNMEASURED in DIAGNOSIS_QUALITY) vs 0.671 baseline; rich criteria moved family 0.118→0.235 (follows rich content, ignores thin prompts). Expect strike as decider at n=60 scale (zero-shot 4B won't beat supervised ranker); kept for phrasing only, never piped into ranker.
 
 ## 8. Causal paths (diagnostic-only)
@@ -71,11 +71,11 @@ Single `EventSource` per mount (`streamController` + `?from_step` resume), one s
 
 ## 12. Measured state (branch-current, honest)
 
-Retrieval 0.800@0.032 · rerank 0.673 votable · paths 0.162 · T=2.58/ECE −86% · transfer forced 0.327 (abstain 66%) · tev 0.059/0.235 · v2 focused +0.185 · AC@1/flip/wall green on genuine probes · full suite blocked on Windows by pre-existing `fcntl` import (fails on main too — environmental, not a regression).
+Retrieval 0.800@0.032 · rerank 0.673 votable · paths 0.162 · T=2.58/ECE −86% · transfer forced 0.327 (abstain 66%) · tev 0.059/0.235 · v2 full-mix +0.039 @ matched-or-better clean-fire (KEEP, Task 3) · AC@1/flip/wall green on genuine probes · full suite blocked on Windows by pre-existing `fcntl` import (fails on main too — environmental, not a regression).
 
 ## 13. Struck / killed (do not revive without L1 reclassification)
 
-MP-discord, learned-GDN, free-LLM narration, ROCm GPU, fixed thresholds, learned-graph detection, blind discovery, pretrained weights, live stream, Rust/Go core, Merlion-as-dependency, Jaeger backend, point-adjusted scoring, sensor dual-obs, dynamic/trajectory specialists, soft/weighted/vote-free rerank variants, hybrid +flow rows, full v2 general claim (pending full-mix).
+MP-discord, learned-GDN, free-LLM narration, ROCm GPU, fixed thresholds, learned-graph detection, blind discovery, pretrained weights, live stream, Rust/Go core, Merlion-as-dependency, Jaeger backend, point-adjusted scoring, sensor dual-obs, dynamic/trajectory specialists, soft/weighted/vote-free rerank variants, hybrid +flow rows.
 
 ## 14. Linear mapping (15 assigned: 4 closed by Task 1 docs, 11 open → plan tasks)
 
@@ -87,7 +87,7 @@ Done (Task 1): PRISSUE-65, 66-scope, 69, 70. In progress: PRISSUE-22 (CH8/CH9), 
 - **Measure (Phase 1):** 75 rerun → 74 full-mix → 62 n=60 → 63/64 gated tries → 72 recall+NLI. Every kill bar enforced; wins and strikes both recorded.
 - **Wire (Phase 2):** 61 gate → 73 script → 67/68 React panels → 71 phrasing (template default, LLM flagged + p95-gated).
 - **Ship (Phase 3):** T12 + battery gates, 5× 0-diverge proof, held-out seed/rung confirmation of any tuned point, Linear updates with evidence, merge/PR decision.
-- **Later (explicitly not now):** SGR bound promotion, ranker-level gate, cloud LLM (rejected: egress + cost), GPU (rejected: 1-wk driver box), live-stream semantics (waived), dual-obs (rejected pending plant justification), full v2 general claim (needs full-mix win first).
+- **Later (explicitly not now):** SGR bound promotion, ranker-level gate, cloud LLM (rejected: egress + cost), GPU (rejected: 1-wk driver box), live-stream semantics (waived), dual-obs (rejected pending plant justification).
 
 ## 16. Open risks
 
