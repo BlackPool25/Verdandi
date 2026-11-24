@@ -6,7 +6,7 @@ API available, Jev decides full 26x7+null, null->abstain, layered card+dossier).
 ## 1. Pipeline
 
 ```
-detect (frozen v7, 0.800@0.032)
+detect (retrained frozen sentinel, 0.800@0.032)
   -> candidates (radius-2) + onsets + flow counters + calibrated confidence
   -> EVIDENCE PACKET (schema v1, every field has an id)
   -> Jev decider (API): {machine: choice[26+null], family: choice[7+null],
