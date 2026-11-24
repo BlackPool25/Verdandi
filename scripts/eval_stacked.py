@@ -206,8 +206,13 @@ def build_rows_hybrid(oof: pd.DataFrame, machines: list[str], fired=None, onsets
     return np.hstack([np.asarray(Xb, dtype=float), flow]), y, groups, fam
 
 
-def _run_lambdarank(X, y, groups, fam):
-    """Shared 3-fold episode-grouped LambdaRank CV → OOF scores."""
+def _run_lambdarank(X, y, groups, fam, seed: int = 0):
+    """Shared 3-fold episode-grouped LambdaRank CV → OOF scores.
+
+    Seed-pinned: StratifiedGroupKFold has no shuffle (deterministic splits);
+    LightGBM gets an explicit seed + deterministic flag (task 2 lineage).
+    Identical episodes/CV to the unseeded run by construction.
+    """
     import lightgbm as lgb
     from sklearn.model_selection import StratifiedGroupKFold
 
@@ -226,7 +231,8 @@ def _run_lambdarank(X, y, groups, fam):
         bst = lgb.train(
             {"objective": "lambdarank", "lambdarank_truncation_level": 5,
              "lambdarank_norm": True, "num_leaves": 7, "min_data_in_leaf": 20,
-             "learning_rate": 0.05, "verbose": -1},
+             "learning_rate": 0.05, "verbose": -1,
+             "seed": seed, "deterministic": True},
             dtr, num_boost_round=200, valid_sets=[dte],
             callbacks=[lgb.early_stopping(20, verbose=False)],
         )
@@ -261,7 +267,7 @@ def _report(oof_pred, y, groups, tag, votable, fired_eps):
     return hits, n
 
 
-def main():
+def main(seed: int = 0):
     from src.twin import _MACHINE_ORDER
 
     oof = pd.read_parquet("artifacts/oof_identity.parquet")
@@ -282,7 +288,8 @@ def main():
     onsets = load_onsets()
     print(f"onset features {'ON' if onsets is not None else 'OFF'}", flush=True)
     X, y, groups, fam = build_rows(oof, machines, fired, onsets)
-    oof_pred = _run_lambdarank(X, y, groups, fam)
+    oof_pred = _run_lambdarank(X, y, groups, fam, seed=seed)
+    print(f"eval_stacked seed={seed} (MEASURED lineage)", flush=True)
     import pandas as _pd
 
     _oof = _pd.read_parquet("artifacts/oof_identity.parquet")
@@ -308,7 +315,8 @@ def main():
             base_hits += 1
         base_n += 1
     print(f"stage-1 majority-vote top1={base_hits/max(1,base_n):.3f} (MEASURED, n={base_n})")
-    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups)
+    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups,
+             fam=np.asarray(fam, dtype=str), seed=np.asarray([seed], dtype=int))
     print("saved artifacts/stage2-oof.npz (ranker-level calibration input)", flush=True)
 
 
