@@ -67,7 +67,7 @@
 **Files:** Modify `scripts/eval_stacked.py` (variant 1: calibrated rerank on stage2-oof; variant 2 if needed: per-family heads or pairwise/truncation config); Modify path scorer + `scripts/eval_paths.py` (teleport = ranker-softmax × flow mass, α=0.85); record in DIAGNOSIS_QUALITY.
 **Interfaces:** Consumes stage2-oof.npz (Task 2). Produces keep/strike verdicts.
 
-- [ ] Step 1 (RED): Failing test asserting calibrated-rerank path exists and votable computed on identical CV/episodes.
+- [ ] Step 1 (RED): Failing test asserting calibrated-rerank path exists and votable computed on identical CV/episodes. Baseline is the Task 2 rerun (teacher 0.654, stage2-oof.npz committed): gap to bar is +0.033.
 - [ ] Step 2 (GREEN): Variant 1 (post-hoc, minutes); variant 2 only if <0.70. Max 2 total. Strike if <0.70 (bar stays missed, abstain-gate ships without it). Identical episodes/CV/groups; report votable + pooled.
 - [ ] Step 3: PPR teleport, re-run ranked arm same n=167 seed; keep iff root-hit@1 ≥0.192 with subseq@3 ≥0.413, else stays diagnostic-only.
 - [ ] Step 4: All green; commit `feat: rerank + path verdicts (63/64)`.
@@ -87,6 +87,7 @@
 **Interfaces:** Consumes Task 1 scope codes + Task 2 ranker numbers (log only). Produces calibrated packet conf consumed by Tasks 8–10.
 
 - [ ] Step 1 (RED): Failing test — calibrated conf present on every non-abstain report; conf<τ → abstain card with reason `low-confidence-calibrated`; forced top-1 shift ≤0.01 vs uncalibrated.
+- [ ] Step 1b (VERIFY gate, required): re-measure τ=0.739 on exclude-held data before serving. If risk>0.3: re-pick τ at budget and record, or re-scope with SHIP_STATUS + PROJECT_REPORT §8 amendment. Never serve ranker τ=0.187 on the report path (different margin definition).
 - [ ] Step 2 (GREEN): Minimal wiring (gate-only, no re-rank; heuristic scores never into temperature). Held-5 check: abstain ≈0.66 @ risk ≈0.3.
 - [ ] Step 3: Full suite green; commit `feat: calibration gate in diagnose_incident (61)`.
 
