@@ -1,0 +1,16 @@
+{
+  "confidence": {},
+  "fault_family": null,
+  "flow": {
+    "n_trace": 0,
+    "trigger": 190
+  },
+  "id": "det-8-190",
+  "onset": null,
+  "paths": [],
+  "root": null,
+  "sensor_verdict": "abstain",
+  "trace": [],
+  "trigger": 190,
+  "verdict": "abstain"
+}

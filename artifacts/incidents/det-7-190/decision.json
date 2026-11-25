@@ -1,0 +1,11 @@
+{
+  "family_prob": 0.9712434355966543,
+  "fault_family": "breakdown",
+  "machine": "A0",
+  "machine_prob": 0.9712434355966543,
+  "packet_id": "det-7-190",
+  "severity": "SEV3",
+  "severity_prob": 0.9712434355966543,
+  "spec": "template-v1",
+  "verdict": "decided"
+}
