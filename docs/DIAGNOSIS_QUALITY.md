@@ -121,6 +121,7 @@ RNG stream). Same transport/model/lineage as above.
 | shuffled (order-seed=1) | 0.113 (6/53) | 0.170 (9/53) | 0.000 | 53 |
 
 Fixed-arm gated SC (machine-only, 5 votes): 0.113 — unchanged, still < 0.3.
+Shuffled-arm gated SC: 0.094 — also < 0.3.
 Machine score identical under shuffled option order: shuffling neither
 rescues nor collapses the decider, so the failure is not an option-order
 artifact (no position-bias rescue; default-choice pathology stands on its
