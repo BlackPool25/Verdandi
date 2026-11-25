@@ -56,6 +56,9 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
   const speed = ext !== null ? ext.source.speed : speedLocal;
   const cursor = ext !== null ? Math.max(0, ext.source.cursor) : cursorLocal;
   const rowCount = ext !== null ? ext.source.rowCount : rowCountLocal;
+  // FE-9: drop counter rides the existing render (same badge, no new
+  // subscription) so per-tick chrome renders are unchanged.
+  const droppedFrames = ext !== null ? ext.source.droppedFrames : 0;
   cursorRef.current = cursor;
 
   // Control availability + identity follow the shared episode on /sim
@@ -262,6 +265,8 @@ export function ControlsBar(props: { readonly external?: ControlsExternal }): Re
             <div className="ctrl-stat-badge">
               <span className="ctrl-stat-label">ROWS</span>
               <span className="ctrl-stat-value" data-testid="row-count">{rowCount}</span>
+              <span className="ctrl-stat-label">DROPPED</span>
+              <span className="ctrl-stat-value" data-testid="drop-count">{droppedFrames}</span>
             </div>
           </div>
         </details>
