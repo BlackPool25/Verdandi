@@ -36,4 +36,4 @@ Note: the card/dossier shots use a dev-only `/demo/diagnosis` route (DEV-guarded
 - Docs audit: 21 minors closed (detection bar ≤0.05, stale line pointers refreshed, pre-regen rows labeled, F19 sha pins restored on the v2 row, SOLVE_GAPS retired).
 - Machine-readable summaries committed: `artifacts/tev_shuffle62.json`, `artifacts/onset_grid.json`.
 - Docker: dev profile (`api-dev` :8000 + `web-dev` :19104, hot-reload) proven end-to-end through the containers; `docs/LOCAL_DOCKER.md` knob map.
-- Still open: F5 delay-STARVED-mass assertion (lane active; excluded from merge until GREEN), PR-time Linear comments (66/74 drafts in `FINAL-lineardrafts.md`), merge itself (awaiting your order).
+- F5 delay-STARVED-mass assertion: GREEN 2026-11-25 (assert_delay_starved_mass, 9/9 in tests/test_possibility.py, DQ record filed; call-site wiring is follow-up). PR-time Linear comments (66/74 drafts in FINAL-lineardrafts.md) still await your order.

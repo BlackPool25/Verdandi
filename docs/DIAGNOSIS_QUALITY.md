@@ -311,3 +311,11 @@ Production-ambient rerun (both arms `--natural-breakdowns`, seed 1, 700/300): ON
 
 ### Void / superseded source audit (69, PRISSUE-69)
 SHIP_STATUS + PROJECT_REPORT: no citable occurrences of void numbers (v1 single-origin 0.963, PR#31 collision battery). Void set lives only labeled: `docs/WINDOW_GBM_V1_MODEL_CARD.md:55` (0.963 as superseded reference), `docs/NEXT_AGENT_BRIEF.md:63` (A0-only 0.963 origin memorization). PR identities: #29 = v1 0.963 source (merged, 48 files); PR#30-only-vs-main set EMPTY. F13: v6 digest references explicitly unpinned.
+
+### Delay STARVED-mass gate (F5, PRISSUE-64 path-trust)
+`assert_delay_starved_mass(injected, starved, n_downstream, buffer_shield_steps=0.0)` in `src/possibility.py` (pure arithmetic, no new imports):
+- CONSERVATION: `starved <= injected * n_downstream`, else raise `AssertionError("CONSERVATION ...")` (no starvation from nothing).
+- VISIBILITY: `starved >= injected - buffer_shield_steps`, else raise `AssertionError("VISIBILITY ...")` (delay went to caps/backpressure/failover — path tuning must not trust the episode).
+- VACUOUS: `n_downstream == 0` → `{"ok": True, "side": "vacuous"}` (sink origins: tails, PKG, ASM2).
+- Pass sides: `"visible"`; `"shielded"` iff shield > 0 and starved < injected.
+Pinned cases (`tests/test_possibility.py:71-117`, 9/9 green 2026-11-25): (4,6,2)→visible ok; (2,9,2)→CONSERVATION; (6,1,2,shield=0)→VISIBILITY; (6,1,2,shield=6)→shielded ok; (6,0,0)→vacuous ok. Probe lineage (`probe_delay.py`, first 6 C2-delay rows of `docs/m0b_mass_full_manifest.json` over `artifacts/m0b_mass_c*.parquet`): every C2 delay surfaces as 3–9 C6/C7 STARVED steps at bufq≈0; decoupled specimen ep 41242 (withheld mass, 3 STARVED, bufq 0) motivates the VISIBILITY fence; no stocked-buffer episode observed (shielded side is logic-only). Disposition: trust gate for path tuning; call-site wiring is follow-up (0 production callers at commit).
