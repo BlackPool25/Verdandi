@@ -103,6 +103,10 @@ export class TickStreamController {
   private liveHeader: EpisodeLiveHeader | null = null;
   private lastStep = -1;
   private bytes = 0;
+  // FE-9: dropped SSE tick frames (malformed JSON or schema-invalid rows).
+  // Surfaced beside the row-count readout; reset per episode, preserved
+  // across resume within an episode.
+  private dropCount = 0;
   private speedVal = 1;
   private reconnectFlag = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -149,6 +153,7 @@ export class TickStreamController {
       this.liveHeader = null;
       this.lastStep = -1;
       this.bytes = 0;
+      this.dropCount = 0;
       this.reconnectFlag = false;
     }
     this.baseVal = base;
@@ -209,10 +214,19 @@ export class TickStreamController {
       try {
         data = JSON.parse(ev.data) as unknown;
       } catch {
+        // FE-9: malformed frames were silent — count them and notify via the
+        // existing emit path (no new subscription; the badge re-render that
+        // already serves row-count picks the counter up).
+        this.dropCount += 1;
+        this.emit();
         return;
       }
       const row = parseLiveTick(data);
-      if (row === null) return;
+      if (row === null) {
+        this.dropCount += 1;
+        this.emit();
+        return;
+      }
       this.bytes += ev.data.length;
       this.rows.set(row.step, ev.data);
       if (row.step > this.lastStep) this.lastStep = row.step;
@@ -263,6 +277,10 @@ export class TickStreamController {
 
   rowCount(): number {
     return this.rows.size;
+  }
+
+  droppedFrames(): number {
+    return this.dropCount;
   }
 
   rowJson(step: number): string | undefined {

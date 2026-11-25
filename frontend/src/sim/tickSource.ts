@@ -98,6 +98,7 @@ export interface TickSource {
   readonly connected: boolean;
   readonly cursor: number;
   readonly rowCount: number;
+  readonly droppedFrames: number;
   readonly playing: boolean;
   readonly totalBytes: number;
   readonly complete: boolean;
@@ -288,6 +289,7 @@ export function useTickSource(opts: TickSourceOptions = {}): TickSource {
     connected,
     cursor: played,
     rowCount: ctrl.rowCount(),
+    droppedFrames: ctrl.droppedFrames(),
     playing,
     totalBytes: ctrl.totalBytes(),
     complete: ctrl.complete(),
