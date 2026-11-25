@@ -3,6 +3,13 @@ import type { TwinStore } from "../../store/twinStore";
 import { decimateMinMax } from "../../store/ring";
 import { paintMinMax } from "./paintStrip";
 import { useBadges } from "./useBadges";
+import {
+  findMissingRuns,
+  findStepGaps,
+  missingRunLabel,
+  summarizeStepGaps,
+} from "./gaps";
+import "./gaps.css";
 
 export interface StripChartProps {
   readonly store: TwinStore;
@@ -15,6 +22,24 @@ export interface StripChartProps {
   readonly unit?: string;
   readonly source?: "obs" | "current" | "buffer";
   readonly testidSuffix?: string;
+  /**
+   * FE-11 played-step sequence backing the gap state. Wherever these
+   * steps are non-contiguous the chart renders an explicit gap (break
+   * markers + badge) instead of a continuous line over missing data.
+   * Omit only when no step signal is available; NaN runs in the series
+   * are still surfaced as gaps.
+   */
+  readonly steps?: readonly number[] | undefined;
+}
+
+function selectSeries(
+  store: TwinStore,
+  source: "obs" | "current" | "buffer",
+  machineId: string,
+): Float32Array {
+  if (source === "current") return store.currentSeries(machineId);
+  if (source === "buffer") return store.bufferSeries(machineId);
+  return store.series(machineId);
 }
 
 export function StripChart({
@@ -28,14 +53,27 @@ export function StripChart({
   unit,
   source = "obs",
   testidSuffix = "",
+  steps,
 }: StripChartProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dirtyRef = useRef(true);
   const badges = useBadges(store);
 
+  // FE-11 gap state: explicit steps win; otherwise NaN runs in the series
+  // are the missing-data signal. Rendered (badge) and painted (markers)
+  // from the same ranges so DOM and canvas never disagree.
+  const data = selectSeries(store, source, machineId);
+  const stepGaps = steps === undefined ? [] : findStepGaps(steps);
+  const nanRuns = steps === undefined ? findMissingRuns(data) : [];
+  const gapSummary =
+    steps === undefined
+      ? nanRuns.map(missingRunLabel).join("; ")
+      : summarizeStepGaps(stepGaps);
+  const hasGap = badges.cursor >= 0 && gapSummary.length > 0;
+
   useEffect(() => {
     dirtyRef.current = true;
-  }, [machineId, source, min, max, badges.cursor]);
+  }, [machineId, source, min, max, badges.cursor, steps]);
 
   useEffect(() => {
     return store.subscribeTransient(() => {
@@ -101,6 +139,36 @@ export function StripChart({
       ctx.lineWidth = 1.5;
       paintMinMax(ctx, { pairs, min, max, w: width, h: height, totalSteps: 300 });
 
+      // FE-11 gap markers: dashed boundary verticals + shaded span over
+      // each missing range so the break reads with shape as well as hue.
+      // The DOM badge below carries the same ranges as text + ⚠ glyph.
+      const liveGaps =
+        steps === undefined
+          ? findMissingRuns(data).map((r) => ({ a: r.start, b: r.end }))
+          : findStepGaps(steps).map((g) => ({ a: g.from, b: g.to }));
+      if (liveGaps.length > 0) {
+        const g2d = ctx as unknown as CanvasRenderingContext2D;
+        const xOf = (s: number): number =>
+          Math.max(0, Math.min(width, (s / 299) * width));
+        g2d.save();
+        g2d.strokeStyle = "#8a6d00";
+        g2d.fillStyle = "rgba(138, 109, 0, 0.08)";
+        g2d.lineWidth = 1;
+        g2d.setLineDash([4, 3]);
+        for (const span of liveGaps) {
+          const xa = Math.round(xOf(span.a)) + 0.5;
+          const xb = Math.round(xOf(span.b)) + 0.5;
+          g2d.fillRect(Math.min(xa, xb), 0, Math.abs(xb - xa), height);
+          g2d.beginPath();
+          g2d.moveTo(xa, 0);
+          g2d.lineTo(xa, height);
+          g2d.moveTo(xb, 0);
+          g2d.lineTo(xb, height);
+          g2d.stroke();
+        }
+        g2d.restore();
+      }
+
       // Playhead cursor at active step
       if (badges.cursor >= 0 && badges.cursor < 300) {
         const curX = Math.round((badges.cursor / 299) * width) + 0.5;
@@ -118,7 +186,7 @@ export function StripChart({
     return () => {
       cancelAnimationFrame(raf);
     };
-  }, [store, machineId, width, height, min, max, source, badges.cursor]);
+  }, [store, machineId, width, height, min, max, source, badges.cursor, steps]);
 
   const defaultTitle =
     source === "current"
@@ -174,6 +242,16 @@ export function StripChart({
         ) : (
           <span>
             {machineId} · step {badges.cursor} · sbuf {badges.sbufLevel}
+            {hasGap && (
+              <span
+                data-testid={`strip-gap-${machineId}${testidSuffix}`}
+                className="strip-gap-badge"
+                role="note"
+                aria-label={`gap in chart data: ${gapSummary} missing`}
+              >
+                ⚠ gap: {gapSummary} missing
+              </span>
+            )}
           </span>
         )}
       </figcaption>

@@ -1,0 +1,39 @@
+/* FE-11 gap row: explicit discontinuity state for EventFeed. Shape +
+   text carry the signal (dashed borders + ⚠ glyph + "gap" wording) so
+   color is never the only channel. Static by construction: no animation. */
+
+.feed-gap-row {
+  display: grid;
+  grid-template-columns: 55px 75px 120px 1fr;
+  align-items: center;
+  padding: 3px 8px;
+  color: #1c2127;
+  background: #faf7f0;
+  border-top: 1px dashed #8a6d00;
+  border-bottom: 1px dashed #8a6d00;
+  border-left: 4px dashed #8a6d00;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.feed-gap-glyph {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  font-weight: bold;
+  color: #1a1a1a;
+  background: #f5edd8;
+  border: 1px solid #1a1a1a;
+  margin-right: 6px;
+  padding: 0 2px;
+}
+
+/* Reduced motion: gap rows stay static, zero blink. */
+@media (prefers-reduced-motion: reduce) {
+  .feed-gap-row,
+  .feed-gap-glyph {
+    animation: none;
+    transition: none;
+  }
+}
