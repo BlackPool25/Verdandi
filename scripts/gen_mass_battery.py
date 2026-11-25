@@ -106,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="v2: condemn unmeasured loss samples at sink (frozen default off)")
     ap.add_argument("--families", default=None,
                     help="comma-separated family subset (default: all 7)")
+    ap.add_argument("--natural-breakdowns", action="store_true",
+                    help="ambient MTTF/MTTR breakdowns on (production condition; "
+                    "default off preserves the breakdown-free Task-3 ambient)")
     args = ap.parse_args(argv)
     from src import dataset_export
 
@@ -129,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
             out=shard_out,
             # Empty dict trips export's int-key lookup ({} is not None) — pass None.
             faults=shard_faults or None,
-            enable_natural_breakdown=False,
+            enable_natural_breakdown=args.natural_breakdowns,
         )
         shards.append(shard_out)
     battery_id = args.battery_id or (
