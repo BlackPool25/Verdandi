@@ -87,6 +87,29 @@ Verdict: **KILL as decider** (0.094 << 0.671 teacher; SC confirms < 0.3).
 Disposition: tev kept for phrasing only; ranker stays decider. Never piped
 into ranker.
 
+## Template faithfulness (MEASURED 2026-11-25, n=60 seed=0)
+`scripts/eval_jev.py` (defaults n=60/seed=0) over the frozen T=300 battery
+(`artifacts/m0b_mass_*.parquet`, 48 shards). Deterministic P/R from
+`src/faithfulness.py` (slot recall + trace-coverage recall); NLI arm gated
+on `VERDANDI_MNLI_PATH`, skipped honestly without it.
+| metric | value | n |
+|---|---|---|
+| template citation precision | undefined (0 non-abstain cards) | 0/60 |
+| template slot recall | undefined (0 non-abstain cards) | 0/60 |
+| template trace-coverage recall | undefined (0 non-abstain cards) | 0/60 |
+| abstain rate | 1.000 (60/60) | 60 |
+| NLI faithfulness | SKIPPED (no local MNLI model) | — |
+
+Lineage: `src/faithfulness.py` (`NliUnavailable`-gated 3-run x 2-order
+aggregator, flip-kill 0.20) + `requirements-eval-nli.txt` (eval-only deps;
+`requirements.txt` stays CPU-only/no-torch). Fixture recall is 1.0 by
+construction (`tests/test_eval_faithfulness.py`, stub clients only).
+Verdict: without a Jev decision client every card abstains by design, so
+corpus P/R is vacuous — the slot-recall gate is in place as a regression
+gate and bites once a decider client exists. NLI numbers explicitly
+deferred: no MNLI weights cached (B1), no torch/transformers installed
+(B2); download + n=60 NLI run need a quiet machine / lane decision.
+
 ## Ranker calibration (MEASURED 2026-11-25, ranker-level T+Platt)
 Fit on OOF-val episodes only (fam-stratified 50/50 split, split_seed=0;
 n_fit=2100 eps), all numbers below on disjoint EVAL episodes (n=2100) —
