@@ -206,6 +206,21 @@ def build_rows_hybrid(oof: pd.DataFrame, machines: list[str], fired=None, onsets
     return np.hstack([np.asarray(Xb, dtype=float), flow]), y, groups, fam
 
 
+def _episode_folds(groups, fam, n_splits: int = 3):
+    """Family-stratified episode-grouped fold indices (F12: never every-kth).
+
+    StratifiedGroupKFold over episode groups with family as the stratum:
+    every fold's eval side contains every fault family and no episode
+    appears on both sides of any fold boundary.
+    """
+    from sklearn.model_selection import StratifiedGroupKFold
+
+    groups = np.asarray(groups)
+    famids = np.array([hash(f) % (2**31) for f in np.asarray(fam, dtype=str)])
+    cv = StratifiedGroupKFold(n_splits=n_splits)
+    return list(cv.split(np.zeros(len(groups)), famids, groups))
+
+
 def _run_lambdarank(X, y, groups, fam, seed: int = 0, return_folds: bool = False):
     """Shared 3-fold episode-grouped LambdaRank CV → OOF scores.
 
@@ -225,13 +240,15 @@ def _run_lambdarank(X, y, groups, fam, seed: int = 0, return_folds: bool = False
 def _lambdarank_cv(X, y, groups, fam, seed, params, return_folds=False):
     """LambdaRank CV core: splits fixed here, ranker params vary by variant."""
     import lightgbm as lgb
-    from sklearn.model_selection import StratifiedGroupKFold
 
-    famids = np.array([hash(f) % (2**31) for f in fam])
     oof_pred = np.zeros(len(y))
     fold_eps = []
-    cv = StratifiedGroupKFold(n_splits=3)
-    for tr, te in cv.split(X, famids, groups):
+    # F9 embargo status: NONE REQUIRED. Rows here are per-(episode, machine)
+    # aggregates and groups are whole episodes; windows themselves are built
+    # strictly within episodes (build_windows groupbys episode_id, sliding
+    # g.iloc[s:s+w] inside one episode), so stride-8 overlap is intra-episode
+    # only. Episode-disjoint folds therefore share zero windows/samples.
+    for tr, te in _episode_folds(groups, fam):
         fold_eps.append(tuple(sorted(set(np.asarray(groups)[te].tolist()))))
         order_tr = np.argsort(groups[tr], kind="stable")
         order_te = np.argsort(groups[te], kind="stable")
