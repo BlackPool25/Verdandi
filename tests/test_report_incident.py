@@ -6,8 +6,15 @@ deterministic too). No network: JEV_API_KEY must be unset in this env.
 
 import json
 import os
+import pathlib
+import subprocess
+import sys
 
 import pytest
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+BUNDLE_FILES = ("packet.json", "decision.json", "card.json",
+                "dossier.json", "card.md", "incident.json")
 
 
 def _read_json(path):
@@ -71,3 +78,48 @@ def test_card_numbers_verbatim_not_computed():
     valid |= {p["id"] for p in packet["paths"]}
     for claim in card["claims"]:
         assert claim["evidence_id"] in valid
+
+
+def test_cli_two_processes_byte_identical(tmp_path):
+    """Review (1): the one-command e2e claim needs a two-process regression.
+
+    Runs scripts/report_incident.py in two separate CLI subprocesses (clean
+    env, JEV_API_KEY stripped) and byte-compares all 6 bundle files. Catches
+    hash-randomization, cwd/env dependence, and CLI plumbing drift that the
+    in-process test cannot see.
+    """
+    assert "JEV_API_KEY" not in os.environ, "CLI test requires template path"
+    script = REPO_ROOT / "scripts" / "report_incident.py"
+    outs = [tmp_path / "a", tmp_path / "b"]
+    for out in outs:
+        env = {k: v for k, v in os.environ.items() if k != "JEV_API_KEY"}
+        p = subprocess.run(
+            [sys.executable, str(script), "--seed", "7", "--out", str(out)],
+            cwd=str(REPO_ROOT), env=env, capture_output=True, text=True,
+            timeout=300)
+        assert p.returncode == 0, p.stderr
+    for name in BUNDLE_FILES:
+        assert (outs[0] / name).read_bytes() == (outs[1] / name).read_bytes(), name
+
+
+def test_no_scores_abstains_low_conf():
+    """Review (2): --no-scores (heuristic _eweight) must abstain live-gated."""
+    from scripts.report_incident import run_report
+
+    r = run_report(seed=7, use_scores=False)
+    assert r["via"] == "template"
+    assert r["card"]["verdict"] == "abstain"
+    assert r["card"]["root"] is None
+    assert r["incident"]["reason"] == "low-confidence-calibrated"
+    assert r["incident"]["scope"] == "abstain_low_conf"
+    assert r["incident"]["coverage"]["covered"] is False
+
+
+def test_incident_records_scores_source():
+    """Review (2a): incident.json must say which score source fed the gate."""
+    from scripts.report_incident import run_report
+
+    scored = run_report(seed=7)
+    assert scored["incident"]["scores_source"] == "measured-z"
+    heuristic = run_report(seed=7, use_scores=False)
+    assert heuristic["incident"]["scores_source"] == "heuristic-eweight"
