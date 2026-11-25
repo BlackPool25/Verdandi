@@ -32,6 +32,29 @@ episode-grouped CV seed=0 deterministic. Input: `artifacts/stage2-oof.npz`
 Verdict: ranker == teacher (three feature sets, aligned measurement).
 Remaining rerank levers: onset/state row features, per-family rankers.
 
+Norm-matched family comparison (MEASURED 2026-11-25, W-normfam, seed=0):
+the published multiclass-vs-binary gap (multiclass window-F1 0.795 <
+binary 0.846, `WINDOW_GBM_V1_MODEL_CARD.md:71-76`) is NOT a normalization
+artifact. 2x2 OOF rerun (`scripts/eval_family_norm.py`, 5 tests green in
+`tests/test_eval_family_norm.py`) — {binary, multiclass}
+x {clean-only norm, all-row norm} on the same seed-pinned 240 episodes
+(24/family + 72 clean) of the dense-cut battery (`artifacts/m0b_mass_c*.parquet`,
+w=128/stride=8 invariant-23, n=4800 windows, 3-fold episode-grouped CV):
+| head | clean-norm F1 | all-norm F1 | norm effect |
+|---|---|---|---|
+| binary (fault vs window) | 0.7773 | 0.7773 | 0.0000 |
+| multiclass (8-class, fault = pred != none) | 0.7645 | 0.7645 | 0.0000 |
+Matched gaps: multi−binary = −0.0128 under clean norm and −0.0128 under all
+norm (published confounded gap −0.051 same sign). Mechanism: HistGBM trees
+are invariant to per-column affine rescaling (order-preserving transform →
+identical splits), so the norm protocol cannot move either head — verified
+exactly, not approximately. Multiclass attribution still collapses on obs
+families under matched norms (bias 0.303 / drift 0.048 / quality 0.066 /
+spike 0.075 vs breakdown 0.796 / loss 0.929), replicating the model-card
+kill basis. Verdict: the family-capped conclusion SURVIVES — multiclass stays
+killed, per-family thresholds on the binary head remain the family mechanism.
+Lineage: `artifacts/eval_family_norm.json` (episode_ids listed, seed=0).
+
 ## Rerank variants + path teleport (MEASURED 2026-11-25, Task 5, seed=0)
 Variant 1 = post-hoc calibrated rerank on `stage2-oof.npz` (identical
 episodes/groups; `rerank_top1`, same argsort tie-breaking as `_report`):
@@ -195,6 +218,16 @@ Open-set retrain (exclude-held, 2026-11-25): forced top-1 on truly unseen
 machines is 0.000 (closed-set expectation); the measured unknown-reject is
 abstention — raw-margin gate abstains 0.510 at risk 0.413 on held-5
 (n=8582), over the 0.3 budget. Forced-accuracy transfer is not claimed.
+- Split integrity (2026-11-25, PRISSUE-75 F12/F9): ranker CV
+  (`scripts/eval_stacked.py::_episode_folds`) is family-stratified episode-grouped
+  (StratifiedGroupKFold, every family in every fold — verified by
+  `tests/test_stacked_splits.py`); ranker T/Platt fit/eval split is likewise
+  fam-stratified (`fit_ranker_calibration.split_episodes`). NOTE for owner of
+  `scripts/finalize_window_model.py:69`: its `cal_eps = set(eps[2::3])` is
+  order-dependent every-3rd-episode, NOT family-stratified — out of scope here,
+  flagged not fixed. Embargo: NONE REQUIRED — windows are built strictly within
+  episodes (`build_windows` groupbys `episode_id`), so stride-8 overlap is
+  intra-episode only and episode-disjoint folds share zero samples.
 - Per-hop delay calibration: bounds ASSUMED (0,60) pending histogram.
 - Cost-weighted metric: deferred per user (accuracy-only bars stand).
 
