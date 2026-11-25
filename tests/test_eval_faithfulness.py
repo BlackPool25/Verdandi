@@ -217,3 +217,82 @@ def test_fmt_rate_undefined_on_empty_denominator():
     assert fmt_rate(0, 0) == "undefined (0 non-abstain)"
     assert fmt_rate(3, 4) == "0.750"
     assert fmt_rate(0, 5) == "0.000"
+
+
+# --- W-judge72 recall top-up (PRISSUE-72 remainder): per-claim recall slice
+# spec task-6-spec.md sec 2 requires required-claims-cited / required-claims
+# as a fractional slice beside the binary slot gate. ---
+
+
+def test_claim_recall_full_card_is_one():
+    """Template card: 3/3 required claims cited -> 1.0 (agrees with slot gate)."""
+    from src.faithfulness import claim_recall, slot_recall
+    from src.reporter import build_card
+
+    card = build_card(_packet(), _decision())
+    assert claim_recall(card, _packet()) == 1.0
+    assert slot_recall(card, _packet()) == 1.0
+
+
+def test_claim_recall_partial_credit():
+    """One uncited required claim: slot gate 0.0, per-claim slice 2/3."""
+    from src.faithfulness import claim_recall, slot_recall
+    from src.reporter import build_card
+
+    card = build_card(_packet(), _decision())
+    card["claims"][2]["evidence_id"] = "ev-NOHIT"
+    assert slot_recall(card, _packet()) == 0.0
+    assert claim_recall(card, _packet()) == pytest.approx(2 / 3)
+
+
+def test_claim_recall_abstain_excluded():
+    from src.faithfulness import aggregate, claim_recall
+    from src.reporter import build_card
+
+    pkt, dec = _packet(), _decision()
+    good = build_card(pkt, dec)
+    abst = build_card(pkt, dict(dec, verdict="abstain", machine=None))
+    assert claim_recall(abst, pkt) is None
+    m = aggregate([(good, pkt), (abst, pkt)])
+    assert m["recall_claim"] == 1.0
+    assert m["n"] == 1 and m["n_abstain"] == 1
+
+
+def test_claim_recall_llm_path_extra_claims():
+    """LLM path with an extra uncited claim: required = card's list (3/4)."""
+    from src.faithfulness import claim_recall
+    from src.reporter import build_card
+
+    card = build_card(_packet(), _decision())
+    card["claims"].append(
+        {"text": "severity", "value": "SEV3", "evidence_id": "ev-NOHIT"}
+    )
+    assert claim_recall(card, _packet()) == pytest.approx(3 / 4)
+
+
+def _load_eval_jev():
+    import importlib.util
+    from pathlib import Path
+
+    loc = Path(__file__).resolve().parent.parent / "scripts" / "eval_jev.py"
+    spec = importlib.util.spec_from_file_location("eval_jev", loc)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_precision_never_reported_without_abstain_rate():
+    """Pairing rule: every output line carrying precision/recall also
+    carries abstain_rate (single formatter emits both; cannot split)."""
+    mod = _load_eval_jev()
+    lines = mod.format_report(
+        n_cit_ok=0, n_cit=0, n_slot_ok=0, n_claim_sum=0.0,
+        n_cover_sum=0.0, n_nonabst=0, n_abst=60, n_eps=60, seed=0,
+    )
+    assert any("precision" in ln for ln in lines)
+    assert any("recall" in ln for ln in lines)
+    for ln in lines:
+        if "precision" in ln or "recall" in ln:
+            assert "abstain_rate" in ln, f"unpaired metric line: {ln!r}"
+    # Zero-denominator prints undefined, never 0.000-as-failure.
+    assert any("undefined (0 non-abstain)" in ln for ln in lines)

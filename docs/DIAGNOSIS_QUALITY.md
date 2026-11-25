@@ -96,12 +96,18 @@ on `VERDANDI_MNLI_PATH`, skipped honestly without it.
 |---|---|---|
 | template citation precision | undefined (0 non-abstain cards) | 0/60 |
 | template slot recall | undefined (0 non-abstain cards) | 0/60 |
+| template per-claim recall (required-cited/required) | undefined (0 non-abstain cards) | 0/60 |
 | template trace-coverage recall | undefined (0 non-abstain cards) | 0/60 |
 | abstain rate | 1.000 (60/60) | 60 |
 | NLI faithfulness | SKIPPED (no local MNLI model) | — |
 
+Pairing rule (2026-11-25): precision/recall are only emitted via
+`scripts/eval_jev.py::format_report`, which always appends `abstain_rate`
+to the metric line — enforced by `test_precision_never_reported_without_abstain_rate`.
+
 Lineage: `src/faithfulness.py` (`NliUnavailable`-gated 3-run x 2-order
-aggregator, flip-kill 0.20) + `requirements-eval-nli.txt` (eval-only deps;
+aggregator, flip-kill 0.20; `claim_recall` fractional required-cited/required
+slice beside the binary slot gate) + `requirements-eval-nli.txt` (eval-only deps;
 `requirements.txt` stays CPU-only/no-torch). Fixture recall is 1.0 by
 construction (`tests/test_eval_faithfulness.py`, stub clients only).
 Verdict: without a Jev decision client every card abstains by design, so
