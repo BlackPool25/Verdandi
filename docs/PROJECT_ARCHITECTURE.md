@@ -49,7 +49,7 @@ The operator's problem: the screen flashes at ASM0/A7/INSP0; the cause is at A2.
 
 - **Stage-1 teacher** (majority vote over window posteriors): top-1 0.654 rerun (n=2712; 0.671–0.674 pre-regen). **Stage-2 LambdaRank** (26 candidates/episode, 3-fold episode-grouped CV): votable top-1 **0.667 rerun** vs bar ≥0.70 — V1 calibrated 0.667, V2 trunc-2 0.665 → **STRUCK after max 2 variants** (Tasks 2/5). Pooled (silent-as-misses) 0.458–0.461; silence concentrates in loss + quality.
 - **Rerank plan (max 2 variants, then strike):** (1) calibration-aware rerank on stage2-oof (post-hoc, minutes); (2) only if needed, per-family heads or pairwise/truncation config. Identical episodes/CV/groups; votable + pooled dual reporting. Struck: soft vote 0.672, weighted 0.663, vote-free 0.355, hybrid +flow +0.000 (57.8% nonzero flow cols, identical to 3 decimals — row-form is the wrong carrier).
-- **v2 physics firing:** CONFIRMED on full 7-family mix (Task 3, 2026-11-25): obs+flow ON 0.719 vs obs-only OFF 0.680 @ clean-fire 0.063 vs 0.080, thr 0.7 (same direction @ 0.5; n=700+300/arm, seed-identical grids, `docs/SIM_BASELINE.md` full-mix verdict). Focused quality+loss win (+0.185) was the precedent; general firing-head claim now kept. Ship/abstain dispositions unchanged.
+- **v2 physics firing:** SCOPED to quality/loss-only (production-ambient rerun 2026-11-25: obs+flow ON 0.733 vs obs-only OFF 0.694 BUT clean-fire 0.117 > 0.093 → KEEP condition fails nominally; gaps unpowered though sign-consistent). The breakdown-free KEEP (0.719 vs 0.680) is superseded — that battery lacked ambient breakdowns. Focused quality+loss win (+0.185) stands as the only v2 claim.
 - **Tev decider (local `tev1:4b`, temp 0, think off):** machine 0.094 (5/53) / family 0.132, n=60 pinned seed — **STRUCK as decider** (Task 4; SC confirms, B7S-default bias documented); kept for phrasing only, never piped into ranker.
 
 ## 8. Causal paths (diagnostic-only)
@@ -71,7 +71,7 @@ Single `EventSource` per mount (`streamController` + `?from_step` resume), one s
 
 ## 12. Measured state (branch-current, honest)
 
-Retrieval 0.800@0.032 · rerank 0.665 max (STRUCK after 2 variants) · paths 0.072 diagnostic-only (teleport Δ+0) · T=2.58/ECE −86% (gate live, VERIFY 0.044) · transfer forced 0.327 (abstain 66%) · tev 0.094 STRUCK (phrasing-only) · v2 full-mix +0.039 @ matched-or-better clean-fire (KEEP, Task 3) · AC@1/flip/wall green on genuine probes · full suite blocked on Windows by pre-existing `fcntl` import (fails on main too — environmental, not a regression).
+Retrieval 0.800@0.032 · rerank 0.665 max (STRUCK after 2 variants) · paths 0.072 diagnostic-only (teleport Δ+0) · T=2.58/ECE −86% (gate live, VERIFY 0.044) · transfer forced 0.327 (abstain 66%) · tev 0.094 STRUCK (phrasing-only) · v2 scoped to quality/loss (production-ambient cf worse) · AC@1/flip/wall green on genuine probes · full suite blocked on Windows by pre-existing `fcntl` import (fails on main too — environmental, not a regression).
 
 ## 13. Struck / killed (do not revive without L1 reclassification)
 

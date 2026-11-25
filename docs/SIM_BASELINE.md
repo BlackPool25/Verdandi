@@ -66,6 +66,77 @@ quality/loss. Scope note: this confirms the experimental firing head only;
 shipped detector (frozen sentinel), ranker, and §8 ship/abstain dispositions
 are unchanged (no PROJECT_REPORT §8 amendment — no Task 1 scope change).
 
+## W-v2naturals74 audit (2026-11-25, PRISSUE-74 follow-up — production-ambient + power + knob-freeze)
+
+Scope: full-mix OFF/ON arms (`docs/m0b_mass_v2_full_{off,on}.json`, seed 1,
+700 fault + 300 clean/arm). Eval reproduced exactly on existing caches
+(`eval_fire_flow` thr-0.7 rows match the table above, all 8 rows).
+
+- (1) Natural breakdowns ON? **FAIL.** `scripts/gen_mass_battery.py`
+  hardcoded `enable_natural_breakdown=False`; both arms generated
+  breakdown-free. `export_v6` default is True (production); the script
+  overrode it. Production condition per `M0B_FREEZE_INPUT:29` /
+  `TEST_CASES:241` / `SIM_SPEC:184` is naturals ON. (Breakdown *fault
+  family* present in grid = injected faults, not ambient MTTF/MTTR.)
+  Manifests record no ambient flag — provenance gap.
+- (2) Clean-fire power @ n=300/arm? **FAIL (state the limit).** Exact counts
+  from reproduced eval: ON 19/300 = 0.063 vs OFF 24/300 = 0.080,
+  Δ=-0.0167, two-sample SE=0.0210, 95% CI (-0.058,+0.025) — includes 0.
+  MDE@80% ≈ 0.059 >> observed 0.017. Retrieval likewise: 503/700 vs 476/700,
+  Δ=+0.0386, SE=0.0245, z=1.57, two-sided p≈0.12, 95% CI (-0.009,+0.087) —
+  includes 0 (the "≈2.2σ" in the verdict section used single-arm SE;
+  two-sample z≈1.6). Sign consistent across all 4 ON-vs-OFF comparisons, but
+  neither gap is powered at 95%. Powering Δcf=0.017 needs ~4300 clean/arm —
+  infeasible; the KEEP rule stays a nominal non-inferiority read.
+- (3) Gain knobs frozen per protocol E? **PASS.** Row diff OFF↔ON ignoring
+  `extra`: 0. `extra` diffs exactly 200: 100 loss `couple_loss` + 100
+  quality `sink_all` — the two v2 flags, nothing else. Grids, seeds (1),
+  mag/sev/dur/t0 all identical. No gain/volume knob moved.
+
+Rerun demanded by (1): both arms (grid-identity forces the pair),
+`--natural-breakdowns` (new passthrough flag on the existing script,
+default off — gate `test_battery_v2` still 6/6), seed 1, same 50/300
+density, NEW paths `docs/m0b_mass_v2_fullnat_{off,on}.json` +
+`artifacts/cache_v2_fullnat_{off,on}`. (2)'s limit stands by arithmetic at
+this density — rerun fixes ambient, not power. Verdict/SHIP_STATUS: KEEP
+stands as measured-under-breakdown-free-ambient, caveated; production
+confirmation pending rerun. SHIP_STATUS untouched (W-docs69-owned;
+controller/Task 11 on flip).
+
+## W-v2naturals74 rerun results (production ambient, naturals ON — SCOPE)
+
+Reran both arms seed-1, 50/300, `--natural-breakdowns`, grid-identity
+re-verified (eps equal, only the 200 v2-flag `extra` diffs). n=20000
+windows/arm. Measured `eval_fire_flow`:
+
+| arm | tag | thr | retrieval | clean-fire | med-err | n |
+|---|---|---|---|---|---|---|
+| OFF | obs-only | 0.5 | 0.771 | 0.263 | 8.0 | 700/300 |
+| OFF | obs-only | 0.7 | 0.694 | 0.093 | 0.0 | 700/300 |
+| OFF | obs+flow | 0.5 | 0.789 | 0.290 | 8.0 | 700/300 |
+| OFF | obs+flow | 0.7 | 0.709 | 0.123 | 0.0 | 700/300 |
+| ON | obs-only | 0.5 | 0.789 | 0.227 | 0.0 | 700/300 |
+| ON | obs-only | 0.7 | 0.726 | 0.083 | 0.0 | 700/300 |
+| ON | obs+flow | 0.5 | 0.804 | 0.217 | 0.0 | 700/300 |
+| ON | obs+flow | 0.7 | 0.733 | 0.117 | 0.0 | 700/300 |
+
+Pre-registered primary (thr 0.7, `obs+flow ON` vs `obs-only OFF`): ON
+0.733 > OFF 0.694 BUT ON clean-fire 0.117 > OFF 0.093 → KEEP condition
+**NOT met** nominally. thr 0.5 passes (0.804 > 0.771 @ 0.217 ≤ 0.263);
+same-tag readings pass both (obs-only 0.726 vs 0.694 @ 0.083 vs 0.093;
+obs+flow 0.733 vs 0.709 @ 0.117 vs 0.123). Stats: Δret=+0.039
+(513/700 vs 486/700), z=1.61, 95% CI includes 0; Δcf=+0.023 (35/300 vs
+28/300), 95% CI (-0.026,+0.072) includes 0 — the cf "regression" is
+noise, but the rule is nominal, so the primary fails as written.
+**Verdict update: SCOPE** — general (7-family) v2 firing claim NOT
+confirmed under production ambient; win stays quality/loss-only (focused
+precedent untouched). The `## v2 full-mix verdict` KEEP above stands only
+as measured-under-breakdown-free-ambient. New manifests:
+`docs/m0b_mass_v2_fullnat_{off,on}.json`; caches
+`artifacts/cache_v2_fullnat_{off,on}` (gitignored). FLAGGED for
+W-docs69/controller: SHIP_STATUS:45 tripwire + PROJECT_ARCHITECTURE
+firing bullet need revert to scoped wording (not edited by this lane).
+
 ## Task 4 hybrid ranker (MEASURED 2026-11-10, focused ON arm — STRUCK)
 
 Teacher OOF retrained on the focused ON cache (`artifacts/focused_on_oof.parquet`,
