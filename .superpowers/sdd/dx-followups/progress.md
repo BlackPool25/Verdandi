@@ -40,3 +40,10 @@ F5-TAKEOVER (user-ordered 20 lanes): 1 implementer (src/possibility.py only) + 1
 F5-20lane: F5-linear draft filed.
 F5-20lane: style review filed — notes file convention (never-raise, non-assert names) CONFLICTS with test contract (raise + assert_ name). RULING: tests win (pinned executable contract); implementer follows tests.
 F5-20lane: 19/20 back. Noted: SUMMARY.md:39 F5 line goes stale on GREEN (fix in F5 commit); naming needs-rename overruled (tests pin the name); num hazards = wiring-time only; spec 2/5 synthetic (fence/counterfactual cases, acceptable). Await F5-review.
+LEFTOVER-10 (user-authorized Linear posts for 66/74/64; merge NOT authorized — dry-run only): 3 post, 1 verify, wire impl+review, mergeprep, cleanup, docsync, shipdoc.
+LEFTOVER-10: PRISSUE-64 follow-up POSTED (872eb152). Awaiting 66/74 posts, verify, wire+review, mergeprep, cleanup, docsync, shipdoc.
+LEFTOVER-10: all 3 Linear follow-ups POSTED (64:872eb152, 66:b262d560, 74:f12c4d42). Awaiting verify, wire+review, mergeprep, cleanup, docsync, shipdoc.
+LEFTOVER-10: docsync CLEAN (0 issues; DQ record matches committed signature; pointers hold). Awaiting verify, wire+review, mergeprep, cleanup, shipdoc.
+LEFTOVER-10: cleanup 0 stray (probe_delay.py = original-lane leftover, expected); shipdoc no-change-needed. Awaiting verify, wire+review, mergeprep.
+LEFTOVER-10: HEAD 9fd75f0 GREEN (pytest 94/0 + tsc clean). Awaiting wire+review, mergeprep.
+LEFTOVER-10: wire-impl mid-TDD (tests/test_diagnose.py M, RED step; session unmessageable after host restart — DO NOT redispatch; fix loop on return via wirereview CONDITIONAL: new reason code + C1-C5). Mergeprep: target main, 44 ahead, origin/main possibly stale (fetch when authorized); dirty = progress.md + classified untracked only.
