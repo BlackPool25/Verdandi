@@ -1,5 +1,5 @@
 /**
- * T11 demo tour: seed 777 + F-21 (drift@B5 t0=150 dur=12 mag 5.2) on /sim.
+ * T11 demo tour: seed 777 + F-21 (drift@B2 t0=150 dur=12 mag 5.2) on /sim.
  * Autoplay 1x -> pause at t=160 -> step -> screenshot.
  * Run via demo/frontend.sh (owns servers, video dir, evidence paths).
  */
@@ -43,17 +43,17 @@ console.log(`auto-seed streaming: ${await page.getByTestId("cursor").textContent
 console.log(`live-eventsource-after-autoseed=${await liveSources()}`);
 if ((await liveSources()) !== 1) throw new Error("expected exactly 1 live EventSource after auto-seed");
 
-// 2. Inject F-21 through the fault form (drift@B5 t0=150 dur=12 mag 5.2).
+// 2. Inject F-21 through the fault form (drift@B2 t0=150 dur=12 mag 5.2).
 await page.getByTestId("fault-class").selectOption("drift");
-await page.getByTestId("fault-origin").selectOption("B5");
+await page.getByTestId("fault-origin").selectOption("B2");
 await page.getByTestId("fault-t0").fill("150");
 await page.getByTestId("fault-dur").fill("12");
 await page.getByTestId("fault-extra").fill('{"mag_sigma": 5.2}');
 await page.getByTestId("fault-add").click();
-await expect(page.getByTestId("fault-list")).toContainText("B5");
+await expect(page.getByTestId("fault-list")).toContainText("B2");
 await page.getByTestId("new-episode").click();
 await expect(page.getByTestId("episode-id")).not.toHaveText("none", { timeout: 60_000 });
-await expect(page.getByTestId("episode-faults")).toContainText("B5", { timeout: 60_000 });
+await expect(page.getByTestId("episode-faults")).toContainText("B2", { timeout: 60_000 });
 await expect(page.getByTestId("row-count")).toHaveText("300", { timeout: 60_000 });
 console.log(`f21 episode=${await page.getByTestId("episode-id").textContent()}`);
 console.log(`digest=${await page.getByTestId("episode-digest").textContent()}`);
@@ -94,9 +94,9 @@ await page.getByTestId("step-fwd").click();
 await expect(page.getByTestId("cursor")).toHaveText("Step 161 / 300");
 const tickJson = await page.getByTestId("tick-json").textContent();
 if (tickJson === null || tickJson === "null") throw new Error("step 161 has no tick row");
-await page.getByTestId("select-B5").click();
+await page.getByTestId("select-B2").click();
 await expect(page.getByTestId("machine-panel-state")).not.toBeEmpty({ timeout: 30_000 });
-console.log(`b5-state-at-161=${await page.getByTestId("machine-panel-state").textContent()}`);
+console.log(`b2-state-at-161=${await page.getByTestId("machine-panel-state").textContent()}`);
 await page.screenshot({ path: PNG, fullPage: true });
 console.log(`screenshot=${PNG}`);
 
