@@ -48,7 +48,8 @@ evidence fields (they are measurements, not verdicts).
   output, never computed by the phraser. Schema-constrained decoding;
   temperature 0. Template fallback when API unreachable (deterministic).
 - Eval (fixed episode set): faithfulness (claims entailed by cited IDs),
-  citation precision/recall, category accuracy vs GBM 0.671 baseline,
+  citation precision/recall, category accuracy vs GBM 0.671 pre-regen
+  baseline (0.654 rerun; `PROJECT_REPORT.md` §3),
   null rate vs coverage. LLM-judge aggregated over runs.
 
 ## 5. What this kills / keeps

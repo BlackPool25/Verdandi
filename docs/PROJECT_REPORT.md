@@ -45,6 +45,9 @@ VOIDED (leak-contaminated, struck): identity classifier 0.606,
 stacked 0.608/0.610, dense retrieval 1.000 (root-anchored
 stale_hold_run/reject_flag_count/down_run features). Clean identity
 0.674 stands. Frozen v7 exposure bounded −3.4pp.
+v6 digests: none pinned in this report; per `docs/SIM_SPEC.md` the v3-era
+digests are NON_COMPARABLE and no v6 replacement digest is pinned until
+PRISSUE-30 re-measures at battery (explicitly unpinned, not missing).
 
 ## 4. Root causes established (with evidence)
 1. **Retrieval wall = physics + missing features.** f·√W/σ law (Zhao

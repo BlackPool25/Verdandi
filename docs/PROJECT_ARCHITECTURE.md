@@ -67,7 +67,7 @@ Single `EventSource` per mount (`streamController` + `?from_step` resume), one s
 ## 11. Bridge, Docker, replay, testing
 
 - **Bridge** (`services/sim_bridge`): `POST /episode`, `GET /stream`, `GET /schema`, frozen v6 validation. **Docker:** `api:8000` (healthy-gated) + `web:19104`, `verdandi-artifacts` volume. Verified live: schema intact, episode+stream round-trip, viewer 200.
-- **Replay:** subgraph-only, version-pinned RNG, 5× same-seed 0-diverge (K4). **Testing:** 300+ pytest (markers k1–k5/battery/adversarial/mutation), 61+25 frontend vitest/playwright, brutal gates (`check_gates.py`), 10/10 hostile-input rejection, mutation non-vacuity, PR/FAQ failure-reason ledger.
+- **Replay:** subgraph-only, version-pinned RNG, 5× same-seed 0-diverge (K4). **Testing:** 696 test functions across 116 `test_*.py` files (branch-measured 2026-11-25 via `Select-String 'def test'`; pytest-collected count may differ), markers k1–k5/battery/adversarial/mutation; 61+25 frontend vitest/playwright; brutal gates (`check_gates.py`); 10/10 hostile-input rejection; mutation non-vacuity; PR/FAQ failure-reason ledger. (README §Testing still shows 34 files/300+ — stale, predates this branch.)
 
 ## 12. Measured state (branch-current, honest)
 
