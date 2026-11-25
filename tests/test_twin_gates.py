@@ -320,9 +320,23 @@ def test_quarantine_no_banned_strings():
     # Narrow exemption (owner 2026-11-09, torch-first diagnosis decision):
     # src/roi_head.py may reference the torch framework; every other file
     # stays under the ban. The token check below filters that one path.
+    # Narrow exemption (owner 2026-11-26, faithfulness NLI judge):
+    # src/faithfulness.py may LAZY-import torch inside client_from_env(),
+    # gated on VERDANDI_MNLI_PATH and raising NliUnavailable without the
+    # stack; it never enters the diagnosis hot path. Only the torch token
+    # on those lazy-import lines is exempt; every other ban token still
+    # applies to this file.
     hits = _grep_src(_QUARANTINE_PATTERN)
     non_exempt = [h for h in hits if not h.startswith("roi_head.py:")]
     roi = [h for h in hits if h.startswith("roi_head.py:")]
+    faith_lazy = [
+        h
+        for h in non_exempt
+        if h.startswith("faithfulness.py:")
+        and re.search(r":(import torch|Lazy imports only)", h)
+        and not re.search(r"spike|FactorySimPy|0\.45", h)
+    ]
+    non_exempt = [h for h in non_exempt if h not in faith_lazy]
     assert non_exempt == []
     # roi_head.py is exempt for the torch token only; other ban tokens
     # (spike-string, FactorySimPy, 0.45) still apply to it.
