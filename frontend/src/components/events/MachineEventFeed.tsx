@@ -5,9 +5,11 @@ export interface MachineEventFeedProps {
   readonly events: readonly TwinEvent[];
   readonly machineId: string;
   readonly cap?: number | undefined;
+  /** FE-11 covered steps forwarded for gap rows (see EventFeed). */
+  readonly steps?: readonly number[] | undefined;
 }
 
 /** Per-machine feed: thin pin of the global feed to one machine id. */
 export function MachineEventFeed(props: MachineEventFeedProps): React.JSX.Element {
-  return <EventFeed events={props.events} machineId={props.machineId} cap={props.cap} />;
+  return <EventFeed events={props.events} machineId={props.machineId} cap={props.cap} steps={props.steps} />;
 }
