@@ -57,6 +57,31 @@ def neighborhood(
     return base | extra
 
 
+def flow_teleport(
+    rank_probs: dict[str, float],
+    flow_mass: dict[str, float],
+    alpha: float = 0.85,
+) -> dict[str, float]:
+    """Flow-teleport blend (task 64): personalized-teleport PPR pattern.
+
+    teleport(m) = ranker_softmax(m) x flow_mass(m), normalized;
+    out(m) = alpha x ranker(m) + (1 - alpha) x teleport(m), normalized.
+    Uniform flow mass -> teleport == ranker (identity); all-zero flow ->
+    ranker fallback (never NaN). Flow mass = trapped WIP around m
+    (upstream + downstream edge-buffer occupancy); unmapped machines
+    contribute 0 and keep their ranker share via the alpha branch.
+    """
+    ms = sorted(rank_probs)
+    tot_r = sum(max(float(rank_probs[m]), 0.0) for m in ms) or 1.0
+    r = {m: max(float(rank_probs[m]), 0.0) / tot_r for m in ms}
+    raw_t = {m: r[m] * max(float(flow_mass.get(m, 0.0)), 0.0) for m in ms}
+    tot_t = sum(raw_t.values())
+    t = {m: (raw_t[m] / tot_t if tot_t > 0 else r[m]) for m in ms}
+    out = {m: alpha * r[m] + (1.0 - alpha) * t[m] for m in ms}
+    tot = sum(out.values()) or 1.0
+    return {m: v / tot for m, v in out.items()}
+
+
 def best_cause_path(
     evidence: dict[str, dict],
     edges: dict[str, list[str]],

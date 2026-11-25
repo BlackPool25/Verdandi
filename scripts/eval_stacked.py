@@ -206,15 +206,33 @@ def build_rows_hybrid(oof: pd.DataFrame, machines: list[str], fired=None, onsets
     return np.hstack([np.asarray(Xb, dtype=float), flow]), y, groups, fam
 
 
-def _run_lambdarank(X, y, groups, fam):
-    """Shared 3-fold episode-grouped LambdaRank CV → OOF scores."""
+def _run_lambdarank(X, y, groups, fam, seed: int = 0, return_folds: bool = False):
+    """Shared 3-fold episode-grouped LambdaRank CV → OOF scores.
+
+    Seed-pinned: StratifiedGroupKFold has no shuffle (deterministic splits);
+    LightGBM gets an explicit seed + deterministic flag (task 2 lineage).
+    Identical episodes/CV to the unseeded run by construction.
+    Baseline params: truncation_level=5, num_leaves=7, min_data_in_leaf=20
+    (variant runners must pass splits through this core unchanged).
+    """
+    return _lambdarank_cv(
+        X, y, groups, fam, seed,
+        {"truncation_level": 5, "num_leaves": 7, "min_data_in_leaf": 20},
+        return_folds=return_folds,
+    )
+
+
+def _lambdarank_cv(X, y, groups, fam, seed, params, return_folds=False):
+    """LambdaRank CV core: splits fixed here, ranker params vary by variant."""
     import lightgbm as lgb
     from sklearn.model_selection import StratifiedGroupKFold
 
     famids = np.array([hash(f) % (2**31) for f in fam])
     oof_pred = np.zeros(len(y))
+    fold_eps = []
     cv = StratifiedGroupKFold(n_splits=3)
     for tr, te in cv.split(X, famids, groups):
+        fold_eps.append(tuple(sorted(set(np.asarray(groups)[te].tolist()))))
         order_tr = np.argsort(groups[tr], kind="stable")
         order_te = np.argsort(groups[te], kind="stable")
         _, gtr = np.unique(groups[tr][order_tr], return_counts=True)
@@ -224,15 +242,100 @@ def _run_lambdarank(X, y, groups, fam):
         dte = lgb.Dataset(X[te][order_te], label=y[te][order_te],
                           group=[int(v) for v in gte])
         bst = lgb.train(
-            {"objective": "lambdarank", "lambdarank_truncation_level": 5,
-             "lambdarank_norm": True, "num_leaves": 7, "min_data_in_leaf": 20,
-             "learning_rate": 0.05, "verbose": -1},
+            {"objective": "lambdarank",
+             "lambdarank_truncation_level": params["truncation_level"],
+             "lambdarank_norm": True, "num_leaves": params["num_leaves"],
+             "min_data_in_leaf": params["min_data_in_leaf"],
+             "learning_rate": 0.05, "verbose": -1,
+             "seed": seed, "deterministic": True},
             dtr, num_boost_round=200, valid_sets=[dte],
             callbacks=[lgb.early_stopping(20, verbose=False)],
         )
         te_idx = np.asarray(te)[order_te]
         oof_pred[te_idx] = bst.predict(X[te][order_te])
+    if return_folds:
+        return {"oof_pred": oof_pred, "fold_eps": fold_eps}
     return oof_pred
+
+
+def run_variant_lambdarank(X, y, groups, fam, seed: int = 0,
+                           truncation_level: int = 5,
+                           num_leaves: int = 7,
+                           min_data_in_leaf: int = 20):
+    """Task 5 variant runner: identical splits/episodes, ranker params vary.
+
+    Variant 2 (63): truncation_level=2 (loss focuses on top positions,
+    the principled direction for a top-1 bar). Splits flow through the
+    shared _lambdarank_cv core — never changed mid-stream.
+    """
+    return _lambdarank_cv(
+        X, y, groups, fam, seed,
+        {"truncation_level": truncation_level, "num_leaves": num_leaves,
+         "min_data_in_leaf": min_data_in_leaf},
+        return_folds=True,
+    )
+
+
+def votable_episodes():
+    """Episodes where the teacher voted (same mask as main's _votable)."""
+    import pandas as _pd
+
+    _oof = _pd.read_parquet("artifacts/oof_identity.parquet")
+    return {ep for ep, g in _oof.groupby("ep") if (g["pred"] != "none").any()}
+
+
+def rerank_top1(oof_pred, y, groups, temperature: float = 1.0, votable=None):
+    """Post-hoc calibrated rerank: per-episode softmax(s/T) argmax.
+
+    Same episodes as _report; votable + pooled dual reporting. T-scaling
+    is monotonic per episode so forced top-1 is preserved by construction
+    (Guo 2017) — variant 1 measures exactly this null.
+    """
+    import numpy as _np
+
+    s_all = _np.asarray(oof_pred, dtype=float)
+    y = _np.asarray(y)
+    groups = _np.asarray(groups)
+    hits, n, vhits, vn = 0, 0, 0, 0
+    for ep in _np.unique(groups):
+        m = groups == ep
+        # Identical computation to _report (argsort tie-breaking included):
+        # T-scaling is a positive per-episode scale, so all comparisons —
+        # hence every quicksort decision — are unchanged (Guo 2017).
+        s = s_all[m] / max(temperature, 1e-12)
+        order = _np.argsort(-s)
+        hit = int(order[0] == int(_np.argmax(y[m])))
+        hits += hit
+        n += 1
+        if votable is not None and ep in votable:
+            vhits += hit
+            vn += 1
+    return {"votable_top1": vhits / max(1, vn), "votable_n": vn,
+            "pooled_top1": hits / max(1, n), "pooled_n": n}
+
+
+def main_rerank():
+    """Variant 1 (63): calibrated rerank on stage2-oof.npz, post-hoc."""
+    import json as _json
+
+    import pandas as _pd
+
+    z = np.load("artifacts/stage2-oof.npz", allow_pickle=True)
+    oof_pred, y, groups = z["oof_pred"], z["y"], z["groups"]
+    votable = votable_episodes()
+    base = rerank_top1(oof_pred, y, groups, temperature=1.0, votable=votable)
+    print(f"rerank T=1.0 votable={base['votable_top1']:.3f} (n={base['votable_n']}) "
+          f"pooled={base['pooled_top1']:.3f} (n={base['pooled_n']}) (MEASURED)", flush=True)
+    try:
+        with open("artifacts/ranker-calibration.json", encoding="utf-8") as f:
+            T = float(_json.load(f)["T"])
+    except FileNotFoundError:
+        T = 1.0
+    cal = rerank_top1(oof_pred, y, groups, temperature=T, votable=votable)
+    print(f"rerank T={T:.3f} votable={cal['votable_top1']:.3f} (n={cal['votable_n']}) "
+          f"pooled={cal['pooled_top1']:.3f} (n={cal['pooled_n']}) (MEASURED)", flush=True)
+    _ = _pd  # keep import shape parallel to main
+    return {"T": T, "uncalibrated": base, "calibrated": cal}
 
 
 def _report(oof_pred, y, groups, tag, votable, fired_eps):
@@ -261,7 +364,7 @@ def _report(oof_pred, y, groups, tag, votable, fired_eps):
     return hits, n
 
 
-def main():
+def main(seed: int = 0):
     from src.twin import _MACHINE_ORDER
 
     oof = pd.read_parquet("artifacts/oof_identity.parquet")
@@ -282,7 +385,8 @@ def main():
     onsets = load_onsets()
     print(f"onset features {'ON' if onsets is not None else 'OFF'}", flush=True)
     X, y, groups, fam = build_rows(oof, machines, fired, onsets)
-    oof_pred = _run_lambdarank(X, y, groups, fam)
+    oof_pred = _run_lambdarank(X, y, groups, fam, seed=seed)
+    print(f"eval_stacked seed={seed} (MEASURED lineage)", flush=True)
     import pandas as _pd
 
     _oof = _pd.read_parquet("artifacts/oof_identity.parquet")
@@ -308,8 +412,45 @@ def main():
             base_hits += 1
         base_n += 1
     print(f"stage-1 majority-vote top1={base_hits/max(1,base_n):.3f} (MEASURED, n={base_n})")
-    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups)
+    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups,
+             fam=np.asarray(fam, dtype=str), seed=np.asarray([seed], dtype=int))
     print("saved artifacts/stage2-oof.npz (ranker-level calibration input)", flush=True)
+
+
+def main_variant2(seed: int = 0):
+    """Variant 2 (63): truncation_level=2, identical episodes/splits/seed.
+
+    Same X construction as main() (onset + sentinel features); only the
+    LambdaRank truncation changes. Dual votable + pooled reporting.
+    """
+    from src.twin import _MACHINE_ORDER
+
+    oof = pd.read_parquet("artifacts/oof_identity.parquet")
+    machines = list(_MACHINE_ORDER)
+    foof = oof.sort_values(["ep"])
+    try:
+        frz = pd.read_parquet("artifacts/frozen_oof.parquet")
+        ffrz = frz.sort_values(["ep", "start"])
+        fired = None
+        if (foof.groupby("ep").size() == ffrz.groupby("ep").size()).all():
+            fired = pd.Series((ffrz["p"].to_numpy() >= 0.6), index=foof.index)
+            print("sentinel-agreement features ON", flush=True)
+        else:
+            print("grid mismatch: sentinel features off", flush=True)
+    except FileNotFoundError:
+        fired = None
+        print("no sentinel OOF: sentinel features off", flush=True)
+    onsets = load_onsets()
+    print(f"onset features {'ON' if onsets is not None else 'OFF'}", flush=True)
+    X, y, groups, fam = build_rows(oof, machines, fired, onsets)
+    res = run_variant_lambdarank(X, y, groups, fam, seed=seed,
+                                 truncation_level=2)
+    print(f"eval_stacked variant2 trunc=2 seed={seed} (MEASURED lineage)",
+          flush=True)
+    votable = votable_episodes()
+    fired_eps = set(foof.loc[fired[fired].index, "ep"]) if fired is not None else set()
+    _report(res["oof_pred"], y, groups, "variant2-trunc2", votable, fired_eps)
+    return res
 
 
 def main_free():
@@ -357,4 +498,11 @@ def main_free():
 
 
 if __name__ == "__main__":
-    main()
+    import sys as _sys
+
+    if "--rerank" in _sys.argv:
+        main_rerank()
+    elif "--variant2" in _sys.argv:
+        main_variant2()
+    else:
+        main()
