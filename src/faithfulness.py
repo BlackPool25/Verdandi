@@ -69,6 +69,28 @@ def precision_card(card: dict, packet: dict) -> float | None:
     return hits / len(card["claims"])
 
 
+def claim_recall(card: dict, packet: dict) -> float | None:
+    """Fractional required-claim recall: required-claims-cited / required-claims.
+
+    Partial-credit sibling of the binary slot_recall gate (spec task-6-spec.md
+    sec 2): template cards (exactly REQUIRED_SLOTS) score cited/3; cards with
+    extra claims (future LLM path) score over the card's own claim list.
+    None for abstain cards (excluded from denominators, counted separately).
+    """
+    if _is_abstain(card):
+        return None
+    claims = card.get("claims", [])
+    if not claims:
+        return None
+    if {c.get("text") for c in claims} == set(REQUIRED_SLOTS):
+        required = [c for c in claims if c.get("text") in REQUIRED_SLOTS]
+    else:
+        required = list(claims)
+    valid = _ids(packet)
+    cited = sum(1 for c in required if c.get("evidence_id") in valid)
+    return cited / len(required)
+
+
 def coverage_recall(card: dict, packet: dict) -> float | None:
     """Fraction of packet trace (ev-*) IDs cited by >=1 claim. None if abstain."""
     if _is_abstain(card):
@@ -277,13 +299,14 @@ def client_from_env():
 
 def aggregate(items: list[tuple[dict, dict]], client=None) -> dict:
     """Deterministic P/R over non-abstain cards + gated NLI arm."""
-    slots, covers, precs = [], [], []
+    slots, claims, covers, precs = [], [], [], []
     n_abstain = 0
     for card, packet in items:
         if _is_abstain(card):
             n_abstain += 1
             continue
         slots.append(slot_recall(card, packet))
+        claims.append(claim_recall(card, packet))
         covers.append(coverage_recall(card, packet))
         precs.append(precision_card(card, packet))
     n = len(slots)
@@ -292,6 +315,7 @@ def aggregate(items: list[tuple[dict, dict]], client=None) -> dict:
         "n": n,
         "n_abstain": n_abstain,
         "recall_slot": mean(slots),
+        "recall_claim": mean(claims),
         "recall_cover": mean(covers),
         "precision": mean(precs),
         "nli": corpus_nli(items, client=client),
