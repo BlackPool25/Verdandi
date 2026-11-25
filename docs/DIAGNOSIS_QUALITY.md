@@ -17,9 +17,9 @@ quiet families; integration horizon + per-family features are the levers.
 ## Rerank (attribution given retrieval)
 | config | top-1 | n | bar |
 |---|---|---|---|
-| stage-2 LambdaRank, votable-only | 0.673 | 2665 | ≥0.7 FAIL (gap 0.027) |
-| stage-1 majority vote (teacher) | 0.671 | 2665 | — |
-| stage-2 pooled (silent count as misses) | 0.455–0.456 | 4200 | — |
+| stage-2 LambdaRank, votable-only (pre-regen 11-10) | 0.673 | 2665 | ≥0.7 FAIL (gap 0.027) |
+| stage-1 majority vote (teacher, pre-regen 11-10) | 0.671 | 2665 | — |
+| stage-2 pooled, pre-regen 11-10 (silent count as misses) | 0.455–0.456 | 4200 | — |
 | RERUN 2026-11-25 seed=0: stage-2 votable-only | 0.667 | 2712 | ≥0.7 FAIL (gap 0.033) |
 | RERUN 2026-11-25 seed=0: stage-2 pooled | 0.461 | 4200 | — |
 | RERUN 2026-11-25 seed=0: stage-1 majority vote | 0.654 | 2712 | — |
@@ -98,15 +98,18 @@ path cannot reach it; the eval uses an eval-only CLI transport
 timeout). Per-call latency ~0.1 s (model GPU-resident).
 | metric | value | n |
 |---|---|---|
-| tev machine top-1 | 0.094 (5/53) | 53 |
-| tev family top-1 | 0.132 (7/53) | 53 |
+| tev machine top-1 (canonical: shuffle fixed-arm rerun 2026-11-25) | 0.113 (6/53) | 53 |
+| tev family top-1 (Task-4 + both shuffle arms agree) | 0.132 (7/53) | 53 |
 | null/abstain rate | 0.000 | 53 |
 | teacher stage-1 ref | 0.671 | 2712 |
 
-Pathology: default-choice bias — machine answer B7S on 49/53, family `loss`
-on 51/53. Gated self-consistency (machine-only, 5 votes, same 53 episodes):
-0.094 (5/53) — unchanged, still < 0.3.
-Verdict: **KILL as decider** (0.094 << 0.671 teacher; SC confirms < 0.3).
+Drift note: Task-4 baseline machine was 0.094 (5/53); the seed-0 shuffle
+fixed-arm rerun measures 0.113 (6/53) — one-episode drift under the ids-first
+loader change (episode set verified identical between fixed/shuffled arms;
+vs-baseline drift unexplained). Verdict-robust: both << 0.671. Baseline
+pathology stands: default-choice bias (machine B7S on 49/53, family `loss`
+on 51/53); baseline gated SC 0.094 (5/53).
+Verdict: **KILL as decider** (0.113 << 0.671 teacher; SC confirms < 0.3).
 Disposition: tev kept for phrasing only; ranker stays decider. Never piped
 into ranker.
 
@@ -207,10 +210,10 @@ unknown-reject behavior (abstain ≈0.51 at this operating point).
 
 Old pooled bar ≥0.5: NOT MET (superseded by decomposed bars).
 
-## Routes (MEASURED 2026-11-11, n=167, same seed)
+## Routes (MEASURED 2026-11-11, n=167, same seed — SUPERSEDED by 11-25 regen rows in Rerank section above; retained as pre-regen record)
 Heuristic evidence: root-hit@1 0.132 / subseq@3 0.413 / mean-k 1.5.
 Ranker evidence (fresh 38-col artifact): root-hit@1 **0.162** / subseq@3 0.413 / mean-k 1.5.
-Keep bar: root-hit beats (+0.030, ~noise edge at n=167), subseq ties → **path layer KEPT** (ranker evidence strictly better, no regression) but absolute quality stays diagnostic-only, non-ship.
+Keep bar: root-hit beats (+0.030, ~noise edge at n=167), subseq ties → **path layer KEPT** (ranker evidence strictly better, no regression) but absolute quality stays diagnostic-only, non-ship. (Superseded 2026-11-25: regen baseline 0.072/0.287/k1.8, teleport Δ+0 → diagnostic-only stands.)
 
 ## Family typing (invariant windows, GroupKFold)
 Overall 0.502. breakdown 0.752 / delay 0.753 / loss 0.810 vs bias 0.226 /
@@ -294,3 +297,17 @@ abstention — raw-margin gate abstains 0.510 at risk 0.413 on held-5
 Identity classifier 0.606, stacked 0.608/0.610, dense retrieval 1.000
 (GT-anchored `stale_hold_run`/`reject_flag_count`/`down_run` features).
 Clean identity 0.674 stands. Frozen v7 exposure bounded at -3.4pp.
+
+## Follow-up measurement records (2026-11-25 wave)
+
+### Gate input-shape + served-artifact verify (F16/F20, PRISSUE-61)
+Teacher features (`X_identity`, shape `(96000, 134)` = 5x26 obs stats + 4 timing): width **134, not 138** — the banned four never enter fit features (`src/window_dataset.py:24-30`). Served artifact `artifacts/calibration.json`: T=2.58, tau=0.739 frozen; VERIFY coverage **0.232** @ risk **0.044** (budget 0.3), n=8582 exclude-held windows. Poison immunity: window-feature poison leaves X byte-identical; 999-valued banned cols change gate conf + abstain outputs not at all. Tests: `tests/test_calibration_gate.py` (gate I/O shapes), committed.
+
+### Measured selective E2E (66, PRISSUE-66)
+`scripts/eval_e2e_selective.py`, seeds 0+1, n=400, live gate tau=0.739: pooled coverage **0.020** (8/400) @ selective accuracy **0.625** (selective risk 0.375). Seed splits: s0 coverage 0.015 (3/200) @ acc 0.333; s1 coverage 0.025 (5/200) @ acc 0.800. Abstain mix: single-node 233 / silent-clean 72 / low_conf 87 — single-node attrition dominates and was never modeled in the derived number. Derived ~0.214 coverage @ ~0.70 accuracy STRUCK (do not cite). Scope unchanged. Lineage: `artifacts/e2e-selective-n200-s0/s1.json`.
+
+### v2 naturals-ON rerun (74, PRISSUE-74)
+Production-ambient rerun (both arms `--natural-breakdowns`, seed 1, 700/300): ON retrieval **0.733** vs OFF **0.694** BUT clean-fire **0.117 > 0.093** → KEEP condition fails nominally → verdict **SCOPED** to quality/loss-only (focused win stands). Gaps underpowered (ret z=1.61, cf CI incl. 0); knob-freeze PASS (200 v2-flag diffs only). Lineage: `docs/m0b_mass_v2_fullnat_{off,on}.json`, `docs/SIM_BASELINE.md` rerun table.
+
+### Void / superseded source audit (69, PRISSUE-69)
+SHIP_STATUS + PROJECT_REPORT: no citable occurrences of void numbers (v1 single-origin 0.963, PR#31 collision battery). Void set lives only labeled: `docs/WINDOW_GBM_V1_MODEL_CARD.md:55` (0.963 as superseded reference), `docs/NEXT_AGENT_BRIEF.md:63` (A0-only 0.963 origin memorization). PR identities: #29 = v1 0.963 source (merged, 48 files); PR#30-only-vs-main set EMPTY. F13: v6 digest references explicitly unpinned.

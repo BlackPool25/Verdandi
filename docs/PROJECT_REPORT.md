@@ -29,11 +29,11 @@ detect (frozen v7 GBM, 23 invariant feats, 2-of-3 confirm → anchor)
 |---|---|---|---|---|
 | Detection (v7 frozen) | window-F1 / hit / clean-FP | 0.89 / 0.92 / 0.01 | — | SHIPS |
 | Detection (v7, frozen battery, thr sweep) | retrieval / clean-fire | 0.507–0.568 / 0.000 | — | flat (thresholds don't move it) |
-| Detection (retrain on frozen, thr 0.6) | retrieval / clean-fire | **0.800 / 0.032** | ≥0.75 @ ≤0.5 | PASS |
+| Detection (retrain on frozen, thr 0.6) | retrieval / clean-fire | **0.800 / 0.032** | ≥0.75 @ ≤0.05 | PASS |
 | Rerank (stage-2 LambdaRank, votable) | top-1 / MRR | rerun 0.667 / V2 0.665 max (teacher 0.654, n=2712) | ≥0.7 | STRUCK after 2 variants; gate ships without it |
 | Rerank teacher (26-way GBM vote) | top-1 | 0.654 rerun (0.671–0.674 pre-regen) | — | ranker == teacher (capped) |
 | E2E pooled | top-1 | 0.432–0.436 | old 0.5 | decomposed bars apply |
-| Routes (ranker evidence, re-baselined on regen) | root-hit@1 / subseq@3 / mean-k | 0.072 / 0.287 / 1.1 | — | diagnostic-only stands; teleport Δ+0, flips wash out |
+| Routes (ranker evidence, re-baselined on regen) | root-hit@1 / subseq@3 / mean-k | 0.072 / 0.287 / 1.8 | — | diagnostic-only stands; teleport Δ+0, flips wash out |
 | Family typing | pooled / 3 strong / 4 weak | 0.502 / 0.75+ / 0.23–0.41 | — | split confirmed |
 | Sensor attribution | top-1 | 0.26–0.33 | ≥0.4 | FAIL (stack unbuilt) |
 | Onset | process med-err / sensor | 2.0 / ~90 | ≤25 | process PASS, sensor FAIL |
@@ -81,7 +81,7 @@ PRISSUE-30 re-measures at battery (explicitly unpinned, not missing).
 - **[65-B signed 2026-11-24]:** sensor attribution ABSTAINS BY DESIGN
   (option B). Evidence: D-PCA(10)+RBC-T2+EBF(paper params) top-1
   bias 0.050 / drift 0.067 / spike 0.033 (n=60 each, script default
-  seed=0, lineage `docs/SIM_BASELINE.md:107-113`) vs bar ≥0.4 —
+  seed=0, lineage `docs/SIM_BASELINE.md:215-221`) vs bar ≥0.4 —
   missed by an order of magnitude; clean-FA ~0 shows EBF works but
   there is nothing to accumulate (contributions never concentrate:
   small amplitudes + no redundancy). Plus auditor dual-obs Goodhart
@@ -102,7 +102,7 @@ variation block; closed-set transfer eval (structural 0.0);
 per-machine F1 thresholds (0.697 vs 0.715); masked teacher alignment
 (0.377); uncalibrated margins; invariant-window features for ranker.
 Sensor stack program: D-PCA+RBC-T2+EBF 0.033–0.067 vs 0.4 bar
-(`docs/SIM_BASELINE.md:107-113`); sensor attribution ships as
+(`docs/SIM_BASELINE.md:215-221`); sensor attribution ships as
 `abstain_sensor` only (65-B, §5).
 
 ## 7. Remaining work (in order) — all DONE (Tasks 2–5, 7; see SHIP_STATUS.md close-out)
@@ -125,19 +125,19 @@ Everything else abstains with a reason code, never a guess.
 | Detection (retrained frozen sentinel, thr 0.6 + 2-of-3) | SHIP | — | retrieval 0.800 @ clean-fire 0.032, n=4200 fault + 600 clean, battery MASTER_SEED=777 (`scripts/freeze_m0b_battery.py:22`), lineage `docs/DIAGNOSIS_QUALITY.md:10` |
 | Process attribution (stage-2 LambdaRank, votable) | SHIP (gated) | `abstain_rerank` (ranker struck: V2 max 0.665 <0.70) | rerun votable 0.667 (teacher 0.654, n=2712); calibration-aware + trunc-2 tried, struck after 2 |
 | Calibration gate (T=2.58 + Platt, τ=0.739 held-5) | SHIP (gate live in `diagnose_incident`, VERIFY risk 0.044 exclude-held) | `abstain_low_conf` when conf < τ | ECE 0.246→0.034, NLL 2.465→1.366, n=96000 teacher OOF windows; artifact `artifacts/calibration.json` |
-| Strong-family episodes (breakdown/delay/loss) | SHIP (gated) | — | family top-1 0.752/0.753/0.810, lineage `docs/DIAGNOSIS_QUALITY.md:40-43` |
-| Weak-family episodes (bias/drift/quality/spike) | ABSTAIN | `abstain_weak_family` | family top-1 0.226/0.313/0.412/0.247, lineage `docs/DIAGNOSIS_QUALITY.md:40-43` |
-| Unseen-machine (held-5 type) episodes | ABSTAIN unless conf ≥ τ | `abstain_transfer` | forced 0.327, coverage 0.337 @ risk 0.300, n=8945 windows (seed unrecorded — provenance incomplete), lineage `docs/DIAGNOSIS_QUALITY.md:56-65` |
+| Strong-family episodes (breakdown/delay/loss) | SHIP (gated) | — | family top-1 0.752/0.753/0.810, lineage `docs/DIAGNOSIS_QUALITY.md:215-218` |
+| Weak-family episodes (bias/drift/quality/spike) | ABSTAIN | `abstain_weak_family` | family top-1 0.226/0.313/0.412/0.247, lineage `docs/DIAGNOSIS_QUALITY.md:215-218` |
+| Unseen-machine (held-5 type) episodes | ABSTAIN unless conf ≥ τ | `abstain_transfer` | forced 0.327, coverage 0.337 @ risk 0.300, n=8945 windows (seed unrecorded — provenance incomplete), lineage `docs/DIAGNOSIS_QUALITY.md:268-272` |
 | Path layer (ranker evidence) | ABSTAIN (diagnostic-only) | `abstain_paths` | re-baselined root-hit@1 0.072 / subseq@3 0.287, n=167 (regen moved it; old 0.162 stale); teleport Δ+0, flips wash out |
-| Tev-as-decider | STRUCK as decider (phrasing-only) | `abstain_tev` | machine 0.094 (5/53) / family 0.132, n=60 pinned seed; SC confirms kill; ranker stays decider |
-| Sensor attribution | ABSTAIN BY DESIGN (65-B) | `abstain_sensor` | 0.033–0.067 vs bar ≥0.4, n=60 each (script default seed=0), lineage `docs/SIM_BASELINE.md:107-113` |
+| Tev-as-decider | STRUCK as decider (phrasing-only) | `abstain_tev` | machine 0.113 (6/53, shuffle fixed-arm rerun 2026-11-25; Task-4 baseline 0.094 — one-episode drift under ids-first loader, verdict-robust) / family 0.132, n=60 pinned seed; SC fixed-arm 0.113 confirms kill; ranker stays decider |
+| Sensor attribution | ABSTAIN BY DESIGN (65-B) | `abstain_sensor` | 0.033–0.067 vs bar ≥0.4, n=60 each (script default seed=0), lineage `docs/SIM_BASELINE.md:215-221` |
 
 `ship` marks shipped predictions; all other codes render reason + coverage
 in-product (Tasks 7–10) and never a guess.
 
 ### Pooled E2E recomputed under abstain-gated scoring (66)
 - Forced pooled (MEASURED): top-1 0.432–0.436, lineage
-  `docs/DIAGNOSIS_QUALITY.md:27-33` (frozen sentinel + stage-2; decomposed
+  `docs/DIAGNOSIS_QUALITY.md:202-206` (frozen sentinel + stage-2; decomposed
   bars supersede the old ≥0.5 pooled bar).
 - Abstain-gated (MEASURED 2026-11-25, `scripts/eval_e2e_selective.py`, seeds 0+1, n=400, live gate τ=0.739): pooled coverage **0.020** (8/400), selective accuracy 0.625 (selective risk 0.375). Seed splits: s0 coverage 0.015 @ acc 0.333 (3/200), s1 coverage 0.025 @ acc 0.800 (5/200). Abstain mix: single-node 233, silent-clean 72, low_conf 87 — single-node attrition dominates and was never modeled in the derived number.
 - Abstain-gated (DERIVED — STRUCK 2026-11-25 by the measured run above): predicted ~0.214 coverage @ ~0.70 selective accuracy. Struck because the window-factor arithmetic never modeled single-node attrition; do not cite. Superseded by the measured row.

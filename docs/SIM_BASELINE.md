@@ -23,13 +23,13 @@ Code: HEAD at plan start (`git log --oneline -1` at commit time).
 
 Confirms audit: silence concentrated in loss + quality-off-sink + incipient sensor rungs.
 
-## Diagnosis numbers on this battery (MEASURED, unchanged by sim work)
-- Retrieval 0.800 @ 0.032; rerank 0.685 votable; paths root@1 0.132 / subseq@3 0.413 (k 1.5);
+## Diagnosis numbers on this battery (MEASURED, unchanged by sim work; refreshed to regen-current 2026-11-25)
+- Retrieval 0.800 @ 0.032; rerank 0.667 votable rerun; paths root@1 0.072 / subseq@3 0.287 (k 1.8);
   family 0.502; sensor 0.26–0.33; onset proc 2.0 / sensor ~90; e2e pooled 0.432–0.436.
 
 ## v2 firing comparison (MEASURED 2026-11-10, focused quality+loss battery)
 
-## v2 full-mix verdict (MEASURED 2026-11-25, PRISSUE-74 — KEEP general claim)
+## v2 full-mix verdict (MEASURED 2026-11-25, PRISSUE-74 — KEEP under breakdown-free ambient; SCOPED under production ambient, rerun section below)
 
 Arms: 7 families × 2 rungs, `--n-per-cell 50 --n-clean 300 --seed 1` →
 700 fault + 300 clean = 1000 eps/arm, 2000 eps total, seed-identical grids
@@ -61,8 +61,8 @@ Effect size is modest (Δret +0.039 ≈ 2.2σ, se≈1.7pp @ n=700; Δcf −0.017
 but the sign is consistent across both thrs and both ON tags (ON obs-only
 also beats OFF obs-only: 0.724 vs 0.680 @ 0.050 vs 0.080 — same mediated
 routing effect seen in the focused run). General (7-family) v2 firing claim
-is therefore CONFIRMED for the `eval_fire_flow` head — not scoped to
-quality/loss. Scope note: this confirms the experimental firing head only;
+is therefore CONFIRMED for the `eval_fire_flow` head - not scoped to
+quality/loss. Scope note: this confirms the experimental firing head only (under breakdown-free ambient — see rerun section below for the production-ambient scoping);
 shipped detector (frozen sentinel), ranker, and §8 ship/abstain dispositions
 are unchanged (no PROJECT_REPORT §8 amendment — no Task 1 scope change).
 
@@ -98,10 +98,13 @@ Rerun demanded by (1): both arms (grid-identity forces the pair),
 default off — gate `test_battery_v2` still 6/6), seed 1, same 50/300
 density, NEW paths `docs/m0b_mass_v2_fullnat_{off,on}.json` +
 `artifacts/cache_v2_fullnat_{off,on}`. (2)'s limit stands by arithmetic at
-this density — rerun fixes ambient, not power. Verdict/SHIP_STATUS: KEEP
-stands as measured-under-breakdown-free-ambient, caveated; production
-confirmation pending rerun. SHIP_STATUS untouched (W-docs69-owned;
-controller/Task 11 on flip).
+this density — rerun fixes ambient, not power. Footgun: the flag defaults
+off (preserves Task-3 ambient for `test_battery_v2`); any production-ambient
+regen MUST pass `--natural-breakdowns` or it silently reproduces the
+breakdown-free battery. Verdict/SHIP_STATUS: KEEP stands as
+measured-under-breakdown-free-ambient (section above), caveated; production
+confirmation in the rerun section below (SCOPE). SHIP_STATUS v2 row updated
+in this commit for the flip (scoped wording + manifest sha256 pins).
 
 ## W-v2naturals74 rerun results (production ambient, naturals ON — SCOPE)
 
@@ -134,8 +137,9 @@ precedent untouched). The `## v2 full-mix verdict` KEEP above stands only
 as measured-under-breakdown-free-ambient. New manifests:
 `docs/m0b_mass_v2_fullnat_{off,on}.json`; caches
 `artifacts/cache_v2_fullnat_{off,on}` (gitignored). FLAGGED for
-W-docs69/controller: SHIP_STATUS:45 tripwire + PROJECT_ARCHITECTURE
-firing bullet need revert to scoped wording (not edited by this lane).
+W-docs69/controller: SHIP_STATUS v2-row tripwire updated in this commit
+(scoped wording + sha pins restored above); PROJECT_ARCHITECTURE firing
+bullet verified already scoped — no change needed.
 
 ## Task 4 hybrid ranker (MEASURED 2026-11-10, focused ON arm — STRUCK)
 
