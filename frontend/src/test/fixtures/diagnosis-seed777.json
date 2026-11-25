@@ -1,0 +1,84 @@
+{
+  "decision": {
+    "family_prob": 0.940342449817933,
+    "fault_family": "breakdown",
+    "machine": "A0",
+    "machine_prob": 0.940342449817933,
+    "packet_id": "det-777-190",
+    "severity": "SEV3",
+    "severity_prob": 0.940342449817933,
+    "spec": "template-v1",
+    "verdict": "decided"
+  },
+  "meta": {
+    "seed": 777,
+    "source": "scripts/report_incident.py run_report(seed=777)",
+    "trigger": 190
+  },
+  "packet": {
+    "confidence": {
+      "T": 2.58,
+      "risk_target": 0.3,
+      "tau": 0.739,
+      "top1": 0.940342449817933
+    },
+    "fault_family": "breakdown",
+    "flow": {
+      "A0": {
+        "mean": 7.773329,
+        "n": 8
+      },
+      "B9": {
+        "mean": -0.105388,
+        "n": 8
+      },
+      "n_trace": 2,
+      "trigger": 190
+    },
+    "id": "det-777-190",
+    "onset": 185,
+    "onset_kind": "state",
+    "own_state": "DOWN",
+    "paths": [
+      {
+        "id": "path-0",
+        "nodes": [
+          "A0",
+          "B9"
+        ],
+        "prob": 0.7892941941258825
+      },
+      {
+        "id": "path-1",
+        "nodes": [
+          "B9"
+        ],
+        "prob": 0.21070580587411744
+      }
+    ],
+    "root": "A0",
+    "sensor_verdict": "sensor",
+    "trace": [
+      {
+        "evidence": "",
+        "hop_est": 0,
+        "id": "ev-A0",
+        "machine": "A0",
+        "onset": 185,
+        "onset_kind": "state",
+        "own_state": "DOWN"
+      },
+      {
+        "evidence": "",
+        "hop_est": -1,
+        "id": "ev-B9",
+        "machine": "B9",
+        "onset": 195,
+        "onset_kind": "state",
+        "own_state": "STARVED"
+      }
+    ],
+    "trigger": 190,
+    "verdict": "diagnosed"
+  }
+}

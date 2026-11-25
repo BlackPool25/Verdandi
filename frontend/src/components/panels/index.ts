@@ -12,3 +12,4 @@ export {
   type SbufPanel,
   type TailPath,
 } from "./selectors";
+export type { DiagnosisCardData, DiagnosisDossier, DiagnosisPacket } from "../diagnosis/types";

@@ -9,6 +9,13 @@ import { StripChart } from "../charts/StripChart";
 import type { TwinStore } from "../../store/twinStore";
 import type { FaultSpec } from "../events/types";
 import { CausalProofCard } from "./CausalProofCard";
+import { DiagnosisCard } from "../diagnosis/DiagnosisCard";
+import { DossierView } from "../diagnosis/DossierView";
+import type {
+  DiagnosisCardData,
+  DiagnosisDossier,
+  DiagnosisPacket,
+} from "../diagnosis/types";
 
 // L4 faceplate probes: one id per machine class (9 classes).
 export const FACEPLATE_IDS: readonly string[] = [
@@ -37,6 +44,10 @@ export interface MachinePanelProps {
   readonly store?: TwinStore | null;
   readonly faults?: readonly FaultSpec[];
   readonly onStepTo?: (step: number) => void;
+  // ADDITIVE (Task 9): diagnosis card mount (below CausalProofCard).
+  readonly diagnosis?: DiagnosisPacket | null;
+  readonly diagnosisCard?: DiagnosisCardData | null;
+  readonly diagnosisDossier?: DiagnosisDossier | null;
 }
 
 const WRAP: React.CSSProperties = { overflowWrap: "anywhere" };
@@ -290,6 +301,14 @@ export function MachinePanel(props: MachinePanelProps): React.JSX.Element {
         onStepTo={onStepTo}
         onSelect={onSelect}
       />
+      {props.diagnosisCard && props.diagnosis && (
+        <DiagnosisCard card={props.diagnosisCard} packet={props.diagnosis}
+          onSelect={onSelect} onStepTo={onStepTo} />
+      )}
+      {props.diagnosisDossier && props.diagnosis && (
+        <DossierView dossier={props.diagnosisDossier} packet={props.diagnosis}
+          onSelect={onSelect} onStepTo={onStepTo} />
+      )}
       <details className="raw-json-details">
         <summary>raw JSON</summary>
         <pre data-testid="machine-panel-raw" style={{ ...WRAP, whiteSpace: "pre-wrap" }}>{panel.rawJson}</pre>
