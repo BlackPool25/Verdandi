@@ -3,5 +3,6 @@
 # machine only when running the NLI faithfulness arm of scripts/eval_jev.py:
 #   pip install -r requirements-eval-nli.txt
 #   VERDANDI_MNLI_PATH=/path/to/local-mnli python scripts/eval_jev.py
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 transformers>=4.40
-torch --index-url https://download.pytorch.org/whl/cpu

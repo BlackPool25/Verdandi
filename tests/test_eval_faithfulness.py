@@ -145,3 +145,75 @@ def test_real_model_gated():
     path = os.environ["VERDANDI_MNLI_PATH"]
     assert os.path.exists(path)
     corpus_nli([], client=path)
+
+
+# --- Fix loop round 1 (task-6-review.md findings F1-F3) ---
+
+
+def test_local_mnli_client_honors_order():
+    """F2: rev must swap premise/hypothesis positions (order-bias test).
+
+    A client whose rev-runs duplicate fwd-runs makes swap_agree vacuously
+    True and flip_rate always 0 — the gate would be dead where it matters.
+    """
+    from src.faithfulness import LocalMnliClient
+
+    seen = []
+
+    def fake_encode(premise, hypothesis):
+        seen.append((premise, hypothesis))
+        return {"label": "entailment", "prob": 0.9}
+
+    client = LocalMnliClient(fake_encode)
+    client.entails("PREMISE", "HYPOTHESIS", order="fwd")
+    client.entails("PREMISE", "HYPOTHESIS", order="rev")
+    assert seen[0] == ("PREMISE", "HYPOTHESIS")
+    assert seen[1] == ("HYPOTHESIS", "PREMISE"), (
+        f"rev must swap positions, got {seen[1]}"
+    )
+
+
+def test_nli_swap_gate_fires_through_local_client():
+    """F2 end-to-end: order-sensitive encode flip → unjudged claim."""
+    from src.faithfulness import LocalMnliClient, nli_entails
+
+    def order_biased(premise, hypothesis):
+        # Entails only in fwd position order; contradicts when swapped.
+        if premise.startswith("Machine"):
+            return {"label": "entailment", "prob": 0.9}
+        return {"label": "contradiction", "prob": 0.9}
+
+    r = nli_entails("Machine B2 DOWN at tick 150 (state).",
+                    "The fault originated at B2.",
+                    client=LocalMnliClient(order_biased))
+    assert r["swap_agree"] is False and r["label"] == "unjudged"
+
+
+def test_eval_nli_requirements_parse():
+    """F3: every entry must be valid pip requirements syntax (no inline flags)."""
+    import re
+
+    with open("requirements-eval-nli.txt") as f:
+        lines = f.read().splitlines()
+    assert any(l.strip() and not l.strip().startswith("#") for l in lines)
+    for raw in lines:
+        ln = raw.strip()
+        if not ln or ln.startswith("#"):
+            continue
+        if ln.startswith("-"):
+            continue  # pip option line (--index-url / --extra-index-url)
+        assert "--" not in ln and "://" not in ln, (
+            f"invalid requirements entry: {ln!r}"
+        )
+        assert re.match(r"^[A-Za-z0-9_.\-\[\]]", ln), (
+            f"invalid requirements entry: {ln!r}"
+        )
+
+
+def test_fmt_rate_undefined_on_empty_denominator():
+    """F1: zero-denominator rates print as undefined, never 0.000."""
+    from src.faithfulness import fmt_rate
+
+    assert fmt_rate(0, 0) == "undefined (0 non-abstain)"
+    assert fmt_rate(3, 4) == "0.750"
+    assert fmt_rate(0, 5) == "0.000"
