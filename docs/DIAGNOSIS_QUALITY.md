@@ -32,6 +32,33 @@ episode-grouped CV seed=0 deterministic. Input: `artifacts/stage2-oof.npz`
 Verdict: ranker == teacher (three feature sets, aligned measurement).
 Remaining rerank levers: onset/state row features, per-family rankers.
 
+## Tev decider (MEASURED 2026-11-25, n=60 seed=0)
+`scripts/eval_tev.py` (defaults n=60/seed=0, `--transport cli|http`) over the
+frozen T=300 battery (`artifacts/m0b_mass_*.parquet`, 48 shards). 60 episodes
+sampled seed=0, 53 measurable (7 skipped: clean truth or no onset entries).
+Rich per-candidate criteria (onset tick/kind/state + `evidence_for` channel
+bits) present. Transport lineage: `tev1:4b` (7954dce22bc6) in this Ollama
+build (v0.40.16) is a decision-model runner — `/api/generate` returns HTTP
+400 and `/api/chat` reports "does not support chat", so `TevClient`'s HTTP
+path cannot reach it; the eval uses an eval-only CLI transport
+(`CliDecisionClient` in `scripts/eval_tev.py`: one
+`ollama run tev1:4b --ask/--choice` per question, 60 s per-ask cap).
+`TevClient`'s 300 s class default is untouched (fix is an explicit eval-side
+timeout). Per-call latency ~0.1 s (model GPU-resident).
+| metric | value | n |
+|---|---|---|
+| tev machine top-1 | 0.094 (5/53) | 53 |
+| tev family top-1 | 0.132 (7/53) | 53 |
+| null/abstain rate | 0.000 | 53 |
+| teacher stage-1 ref | 0.671 | 2712 |
+
+Pathology: default-choice bias — machine answer B7S on 49/53, family `loss`
+on 51/53. Gated self-consistency (machine-only, 5 votes, same 53 episodes):
+0.094 (5/53) — unchanged, still < 0.3.
+Verdict: **KILL as decider** (0.094 << 0.671 teacher; SC confirms < 0.3).
+Disposition: tev kept for phrasing only; ranker stays decider. Never piped
+into ranker.
+
 ## Ranker calibration (MEASURED 2026-11-25, ranker-level T+Platt)
 Fit on OOF-val episodes only (fam-stratified 50/50 split, split_seed=0;
 n_fit=2100 eps), all numbers below on disjoint EVAL episodes (n=2100) —
