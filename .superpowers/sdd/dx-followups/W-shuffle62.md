@@ -7,6 +7,7 @@
 | shuffled | 0.113 (6/53) | 0.170 (9/53) | 0.000 | 53 | 0 | 1 |
 
 Fixed-arm gated self-consistency (machine-only, 5 votes, same 53 eps): 0.113 — unchanged, < 0.3.
+Shuffled-arm gated self-consistency: 0.094 — also < 0.3.
 
 ## Bias verdict
 Shuffle neither rescues nor collapses the decider: machine score identical
