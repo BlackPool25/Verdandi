@@ -139,19 +139,9 @@ in-product (Tasks 7–10) and never a guess.
 - Forced pooled (MEASURED): top-1 0.432–0.436, lineage
   `docs/DIAGNOSIS_QUALITY.md:27-33` (frozen sentinel + stage-2; decomposed
   bars supersede the old ≥0.5 pooled bar).
-- Abstain-gated (DERIVED — arithmetic combination of measured components,
-  UNMEASURED as an E2E run): detection silence 1535/4200 = 0.365 already
-  abstains (`docs/SIM_BASELINE.md:10-12`); of votable episodes the held-5
-  gate predicts on 0.337 @ risk 0.300. Overall coverage ≈
-  (2665/4200) × 0.337 ≈ 0.214 of fault episodes predicted; selective
-  accuracy ≈ 1 − 0.300 = 0.70. I.e. **~21% coverage @ ~0.70 selective
-  accuracy on unseen-machine-type episodes** (DERIVED, unmeasured).
-  In-distribution (all-windows τ=0.080): coverage 1.000 @ risk 0.300 —
-  gates nothing; serve held-5 τ=0.739 only.
-- Caveat (unmeasured mapping): transfer numbers are window-level,
-  retrieval/silence are episode-level; the window→episode mapping is
-  unvalidated. Tasks 75/11 must confirm with a held-out episode-level run
-  before any general claim.
+- Abstain-gated (MEASURED 2026-11-25, `scripts/eval_e2e_selective.py`, seeds 0+1, n=400, live gate τ=0.739): pooled coverage **0.020** (8/400), selective accuracy 0.625 (selective risk 0.375). Seed splits: s0 coverage 0.015 @ acc 0.333 (3/200), s1 coverage 0.025 @ acc 0.800 (5/200). Abstain mix: single-node 233, silent-clean 72, low_conf 87 — single-node attrition dominates and was never modeled in the derived number.
+- Abstain-gated (DERIVED — STRUCK 2026-11-25 by the measured run above): predicted ~0.214 coverage @ ~0.70 selective accuracy. Struck because the window-factor arithmetic never modeled single-node attrition; do not cite. Superseded by the measured row.
+- Caveat (measured mapping): transfer numbers are window-level, retrieval/silence are episode-level; the window→episode mapping is unvalidated. Held-out episode-level confirmation still owed before any general claim.
 
 ### Signatures
 - 66 scope + E2E recomputation: signed 2026-11-24, m0b-t-build.

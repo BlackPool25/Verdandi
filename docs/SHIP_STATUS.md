@@ -28,9 +28,7 @@ unmeasured. Battery lineage unless noted: frozen `m0b_mass` T=300
 | Sensor attribution | ABSTAIN BY DESIGN (65-B) | `abstain_sensor` | 0.033–0.067 vs bar ≥0.4, n=60 each, `SIM_BASELINE.md:107-113` |
 | Cost-weighted metric | PERMANENTLY DEFERRED (70) | — | no build; accuracy-only bars stand |
 
-Abstain-gated pooled E2E (DERIVED, unmeasured as E2E): ~0.214 coverage @
-~0.70 selective accuracy on unseen-machine-type episodes; forced pooled
-(MEASURED) 0.432–0.436. Derivation + caveats in `PROJECT_REPORT.md` §8.
+Abstain-gated pooled E2E (MEASURED 2026-11-25, `scripts/eval_e2e_selective.py`, live gate τ=0.739, oracle trigger, n=200+200 seeds 0+1): pooled coverage **0.020** (8/400), selective accuracy 0.625 (risk 0.375); per-seed 0.015@0.333 / 0.025@0.800. Abstain mix dominated by single-node (233), then silent-clean (72), low_conf (87) — single-node attrition was never modeled, which is why the DERIVED 0.214 below is struck, not adjusted. Forced pooled (MEASURED) 0.432–0.436. Lineage: `artifacts/e2e-selective-n200-s{0,1}.json`.
 
 ## 2. Struck ledger (bar misses + tripwires)
 
@@ -61,7 +59,7 @@ frozen v7 exposure bounded −3.4pp (`PROJECT_REPORT.md` §3).
 | PRISSUE-63 | Rerank +0.033 → 0.7 votable | CLOSED — struck after 2 variants (max 0.665) | Task 5 |
 | PRISSUE-64 | Path layer teleport lever | CLOSED — teleport Δ+0, diagnostic-only stands | Task 5 |
 | PRISSUE-65 | Sensor decision | CLOSED by this doc (option B signed) | — |
-| PRISSUE-66 | Ship decision / abstain-gated scope | CLOSED by this doc (scope signed) | — |
+| PRISSUE-66 | Ship decision / abstain-gated scope | CLOSED by this doc (scope signed; E2E re-measured 0.020, derived 0.214 struck — scope unchanged, single-node abstain is now the next lever) | - |
 | PRISSUE-67 | Operator card UI | CLOSED — DiagnosisCard panel in /sim, gates green | Task 9 |
 | PRISSUE-68 | Engineer dossier view | CLOSED — DossierView tabs + fixture smoke test, gates green | Task 9 |
 | PRISSUE-69 | Consolidate reports | CLOSED by this doc | — |
