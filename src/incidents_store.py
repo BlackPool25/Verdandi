@@ -39,12 +39,26 @@ CREATE TABLE IF NOT EXISTS symptoms(
 """
 
 
+def _ensure_calibration_columns(conn) -> None:
+    """Migration: incidents gains nullable conf/tau (Task 7/61).
+
+    Portable check-then-ALTER (works on sqlite + postgres); old rows read
+    back as NULL. No changes to predicted_cascade/symptoms.
+    """
+    cur = conn.execute("SELECT * FROM incidents LIMIT 0")
+    names = {d[0] for d in (cur.description or [])}
+    for col in ("conf", "tau"):
+        if col not in names:
+            conn.execute(f"ALTER TABLE incidents ADD COLUMN {col} REAL")
+
+
 class IncidentStore:
     def __init__(self, conn):
         self.conn = conn
         for stmt in _SCHEMA.split(";"):
             if stmt.strip():
                 conn.execute(stmt)
+        _ensure_calibration_columns(conn)
         conn.commit()
 
     @classmethod
@@ -55,11 +69,12 @@ class IncidentStore:
     def from_env(cls):
         return cls(_connect())
 
-    def create_incident(self, root: str, fault_family: str, t0_est: int, seed: int) -> int:
+    def create_incident(self, root: str, fault_family: str, t0_est: int, seed: int,
+                        conf: float | None = None, tau: float | None = None) -> int:
         cur = self.conn.execute(
-            "INSERT INTO incidents(root_machine,fault_family,t0_est,seed,status,created_at)"
-            " VALUES(?,?,?,?, 'open',?)",
-            (root, fault_family, t0_est, seed, time.time()),
+            "INSERT INTO incidents(root_machine,fault_family,t0_est,seed,status,created_at,conf,tau)"
+            " VALUES(?,?,?,?, 'open',?,?,?)",
+            (root, fault_family, t0_est, seed, time.time(), conf, tau),
         )
         self.conn.commit()
         return int(cur.lastrowid)
