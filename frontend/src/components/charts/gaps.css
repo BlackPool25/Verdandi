@@ -1,0 +1,23 @@
+/* FE-11 gap badge: explicit discontinuity state for StripChart. Shape +
+   text carry the signal (dashed outline + ⚠ glyph + "gap" wording) so
+   color is never the only channel. Static by construction: no animation. */
+
+.strip-gap-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 4px;
+  font-weight: bold;
+  color: #1c2127;
+  background: #faf7f0;
+  border: 1px dashed #8a6d00;
+  outline: 1px solid #8a6d00;
+  outline-offset: 1px;
+}
+
+/* Reduced motion: gap badge stays static, zero blink. */
+@media (prefers-reduced-motion: reduce) {
+  .strip-gap-badge {
+    animation: none;
+    transition: none;
+  }
+}
