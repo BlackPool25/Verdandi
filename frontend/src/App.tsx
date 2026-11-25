@@ -4,7 +4,12 @@ import { TwinStreamProvider } from "./sim/TwinStreamProvider";
 import { AppShell } from "./components/shell/AppShell";
 import { SimPage } from "./sim/SimPage";
 import { AnomalyPage } from "./components/anomalies/AnomalyPage";
+import { lazy, Suspense } from "react";
 import { MetricsPage } from "./components/metrics/MetricsPage";
+
+const DiagnosisDemo = lazy(() =>
+  import("./demo/DiagnosisDemo").then((m) => ({ default: m.DiagnosisDemo })),
+);
 
 function SimRedirect(): React.JSX.Element {
   const location = useLocation();
@@ -22,6 +27,16 @@ export function App(): React.JSX.Element {
               <Route path="/sim" element={<SimRedirect />} />
               <Route path="/anomalies" element={<AnomalyPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
+              {import.meta.env.DEV && (
+                <Route
+                  path="/demo/diagnosis"
+                  element={
+                    <Suspense fallback={null}>
+                      <DiagnosisDemo />
+                    </Suspense>
+                  }
+                />
+              )}
               <Route path="*" element={<SimRedirect />} />
             </Routes>
           </AppShell>
