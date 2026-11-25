@@ -19,6 +19,9 @@ structural counters), fold-fit clean normalization. 3-fold GroupKFold OOF.
 - Per-origin window recall: **0.82 - 1.00** (worst C7 0.820)
 - Runtime: 6.8 ms/window, ~119k windows/s, reload-identical
 - Streaming delay: p50 0 ticks (early-fire on wide windows inflates this)
+  [SUPERSEDED 2026-11-25 W-onsetgrid: measured on w=32 grid via
+  `bench_windows.py:142` (hardcoded) vs artifact w=128 — see
+  `docs/DIAGNOSIS_QUALITY.md` grid audit for corrected numbers; line kept, not deleted]
 - Artifact: 23 feats, `artifacts/window-gbm-w128-v2/`
 - Wide-battery check (rug=wide: 3x noise floors, drift/gain, 1% dropouts):
   tuned F1 **0.818** (vs 0.846 dense, -0.036), episode-hit 0.986, per-family

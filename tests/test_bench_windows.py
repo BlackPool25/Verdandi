@@ -55,7 +55,8 @@ def test_bench_reports_latency_throughput_and_delay(tmp_path):
     sw, sy, sfam, sg = build_windows(tiny, w=16, stride=16)
     r = bench(art, n_windows=64, stream=(sw, sy, sg, sfam))
     assert r["single_ms_p50"] > 0 and r["windows_per_sec"] > 0
-    assert r["peak_ram_mb"] > 0 and r["reload_identical"] is True
+    assert r["peak_ram_mb"] is None or r["peak_ram_mb"] > 0  # None: no `resource` (Windows)
+    assert r["reload_identical"] is True
     assert set(r) >= {
         "single_ms_p50",
         "windows_per_sec",
