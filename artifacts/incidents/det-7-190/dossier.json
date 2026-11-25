@@ -1,0 +1,64 @@
+{
+  "confidence": {
+    "T": 2.58,
+    "risk_target": 0.3,
+    "tau": 0.739,
+    "top1": 0.9712434355966543
+  },
+  "decision": {
+    "family_prob": 0.9712434355966543,
+    "fault_family": "breakdown",
+    "machine": "A0",
+    "machine_prob": 0.9712434355966543,
+    "packet_id": "det-7-190",
+    "severity": "SEV3",
+    "severity_prob": 0.9712434355966543,
+    "spec": "template-v1",
+    "verdict": "decided"
+  },
+  "flow": {
+    "A0": {
+      "mean": 8.433649,
+      "n": 8
+    },
+    "B9": {
+      "mean": -0.107968,
+      "n": 8
+    },
+    "n_trace": 2,
+    "trigger": 190
+  },
+  "nodes": [
+    {
+      "evidence_id": "ev-A0",
+      "machine": "A0",
+      "onset": 185,
+      "onset_kind": "state"
+    },
+    {
+      "evidence_id": "ev-B9",
+      "machine": "B9",
+      "onset": 195,
+      "onset_kind": "state"
+    }
+  ],
+  "packet_id": "det-7-190",
+  "paths": [
+    {
+      "id": "path-0",
+      "nodes": [
+        "A0",
+        "B9"
+      ],
+      "prob": 0.8232448820639636
+    },
+    {
+      "id": "path-1",
+      "nodes": [
+        "B9"
+      ],
+      "prob": 0.17675511793603646
+    }
+  ],
+  "verdict": "decided"
+}

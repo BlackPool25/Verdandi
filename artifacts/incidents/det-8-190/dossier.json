@@ -1,0 +1,22 @@
+{
+  "confidence": {},
+  "decision": {
+    "family_prob": null,
+    "fault_family": null,
+    "machine": null,
+    "machine_prob": null,
+    "packet_id": "det-8-190",
+    "severity": null,
+    "severity_prob": null,
+    "spec": "template-v1",
+    "verdict": "abstain"
+  },
+  "flow": {
+    "n_trace": 0,
+    "trigger": 190
+  },
+  "nodes": [],
+  "packet_id": "det-8-190",
+  "paths": [],
+  "verdict": "abstain"
+}
