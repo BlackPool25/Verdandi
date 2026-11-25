@@ -42,7 +42,7 @@ Abstain-gated pooled E2E (DERIVED, unmeasured as E2E): ~0.214 coverage @
 | Sensor stack program | top-1 ≥0.4, FA cut ≥30% | 0.033–0.067, n=60 each | missed by ~10×; EBF accumulates nothing — program struck, `abstain_sensor` by design (65-B) |
 | Family specialists v1/v2/v3 | +0.10 over 0.226–0.412 @ FAR 0.05 | 0.000–0.062 chance-level | three variants dead; program struck, weak families abstain |
 | Hybrid flow ranker rows | flow adds gain | 0.070/0.087 identical both arms | struck; v2 physics converts silence→flow evidence for firing head only |
-| v2 general retrieval claim | ON beats OFF @ matched clean-fire, FULL mix | +0.185 focused quality+loss only (n=200+100/arm) | scoped to quality/loss until full-mix run (Task 3); claiming general = tripwire |
+| v2 general retrieval claim | ON beats OFF @ matched clean-fire, FULL mix | CONFIRMED full-mix: obs+flow ON 0.719 vs obs-only OFF 0.680 @ cf 0.063 vs 0.080, thr 0.7 (same direction @ 0.5; n=700+300/arm, seed-identical) | firing-head claim kept (Task 3); ship/abstain dispositions unchanged; manifests `docs/m0b_mass_v2_full_{off,on}.json` carry no embedded checksum (generator emits none) — file sha256 at audit 2026-11-25: off `a076ed0df107cf93c3a1e8daf8fac53b6cefa18febd07b437d5675e5b954a518`, on `958c0b8c4da0ada005f7d98f477ad62c112f0e8f17d24106168ed8c309da5258` |
 | τ=0.080 (all-windows) as serving gate | — | coverage 1.000 @ risk 0.300 | gates nothing; serving τ = held-5 0.739 only |
 | Closed-set transfer eval | structural transfer | 0.0 | struck; open-set retrain owed (Task 2/75) |
 | Same-grid tuning cited as general evidence | — | — | held-out seeds owed before general claims (global tripwire) |
