@@ -23,6 +23,8 @@
   "reason": "silent-clean",
   "root": null,
   "scope": "abstain_sensor",
+  "scores_n": 0,
+  "scores_source": "measured-z",
   "seed": 8,
   "trigger": 190,
   "via": "template"

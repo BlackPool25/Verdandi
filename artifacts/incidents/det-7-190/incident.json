@@ -23,6 +23,8 @@
   "reason": null,
   "root": "A0",
   "scope": "ship",
+  "scores_n": 2,
+  "scores_source": "measured-z",
   "seed": 7,
   "trigger": 190,
   "via": "template"

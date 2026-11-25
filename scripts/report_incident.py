@@ -252,6 +252,8 @@ def run_report(seed: int = 7, trigger: int = TRIGGER_DEFAULT, clean: bool = Fals
         "scope": scope,
         "reason": reason,
         "via": via,
+        "scores_source": "measured-z" if use_scores else "heuristic-eweight",
+        "scores_n": len(scores or {}),
         "coverage": {
             "covered": bool(covered),
             "conf": confidence.get("top1"),
