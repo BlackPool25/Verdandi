@@ -47,3 +47,4 @@ LEFTOVER-10: docsync CLEAN (0 issues; DQ record matches committed signature; poi
 LEFTOVER-10: cleanup 0 stray (probe_delay.py = original-lane leftover, expected); shipdoc no-change-needed. Awaiting verify, wire+review, mergeprep.
 LEFTOVER-10: HEAD 9fd75f0 GREEN (pytest 94/0 + tsc clean). Awaiting wire+review, mergeprep.
 LEFTOVER-10: wire-impl mid-TDD (tests/test_diagnose.py M, RED step; session unmessageable after host restart — DO NOT redispatch; fix loop on return via wirereview CONDITIONAL: new reason code + C1-C5). Mergeprep: target main, 44 ahead, origin/main possibly stale (fetch when authorized); dirty = progress.md + classified untracked only.
+LEFTOVER-10: wire committed 76a6d76 (decoupled-delay, 25/110+17 green). All 10 lanes closed.
