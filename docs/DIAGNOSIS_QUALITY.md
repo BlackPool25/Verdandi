@@ -217,8 +217,45 @@ Overall 0.502. breakdown 0.752 / delay 0.753 / loss 0.810 vs bias 0.226 /
 drift 0.313 / quality 0.412 / spike 0.247. Provisional: invariant path
 keeps frozen struct cols (leak bounded small per v7 ablation).
 
-## Sensor / onset (prior handoff numbers, not re-measured here)
+## Sensor / onset (prior handoff numbers — SUPERSEDED by grid audit below, 2026-11-25)
 Sensor top-1 0.26–0.33, onset err ~90 ticks. Process top-1 0.76, onset err 2.0.
+SUPERSEDED: grid provenance unverified ("not re-measured here"); tick-level
+errors are grid-N/A by construction (sensor stack is tick-level,
+`scripts/eval_sensor_stack.py`; ROI head anchors on w128 triggers,
+`scripts/train_roi_head.py:36,55-59`) — but the numbers themselves are
+un-reproduced handoff claims. Do not cite without the audit row.
+
+## Onset/delay grid audit (MEASURED 2026-11-25, W-onsetgrid, seed=0)
+Grid verdict: DELAY claim was on the wrong grid (CONFIRMED); ONSET path was
+already on the artifact grid (claim refuted with evidence — no re-measure).
+- Delay: `scripts/bench_windows.py:142` rebuilt the stream at hardcoded w=32
+  (v1 grid) while the shipped detector grid is w=128/stride 8 (model card v2,
+  `scripts/cache_windows.py:65`, all `scripts/eval_*.py`). Fixed: stream grid
+  now resolves from the artifact's own `model.joblib` w/stride (`--w/--stride`
+  override). The model-card line "Streaming delay: p50 0 ticks" is SUPERSEDED
+  (wrong grid, no operating point / n / seed) — corrected below.
+- Onset: `scripts/evaluate_localize.py:35,43-44` hardcodes w=128/stride-8/center-64
+  with triggers from w128 OOF — artifact grid already. Localizer verdict numbers
+  (loss/breakdown |err| 13/15 → calibrated 2/0; delay 123; obs 111-184) stand
+  on their grid. Locked by `tests/test_onset_grid.py::test_evaluate_localize_is_w128_grid`.
+- Corrected streaming delay, `scripts/eval_localize.py` (new canonical path) on
+  frozen `artifacts/window_cache` (96000 w128/s8 windows, 4800 eps; stride
+  asserted at runtime; builder lineage `cache_windows.py:64-66`): seed-pinned
+  HistGBM(300) + sigmoid calibration, train 3200 eps / report held-out 1600 eps
+  (1400 fault + 200 clean; finalize split rule `finalize_window_model.py:68-69`;
+  caveat per split audit: every-3rd, not fam-stratified):
+  thresholds global-maxF1=0.602, score med pos/neg 0.700/0.475 (n=15735/16265).
+  | operating point | delay p50 | delay max | pre-fault-fire frac | fired | missed |
+  |---|---|---|---|---|---|
+  | global 0.8 (locked) | 0 | 128 | 0.00 | 739/1400 | 661/1400 |
+  | global 0.5 | −32 | 144 | 0.65 | 1399/1400 | 1/1400 |
+  | per-family tuned | 0 | 32 | 0.49 | 1389/1400 | 11/1400 |
+  Delay def: (first firing window − first fault-overlap window) × 8
+  (`bench_windows.stream_delays`); negative = clean-window fire ahead of the
+  fault ("early-fire on wide windows", now quantified). Note: locked-0.8 p50=0
+  matches the old headline numerically but pairs with a 0.47 miss rate on this
+  seed/split (card operating table claimed epHit 0.753 @0.8 — gap recorded,
+  detector seed unrecorded in card, not reconcilable here).
 
 ## Calibration (MEASURED 2026-11-11, teacher OOF windows, n=96000)
 T=2.58 (strongly overconfident — consistent with hard-vote findings).

@@ -12,7 +12,10 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import resource
+try:
+    import resource
+except ImportError:  # Windows: no resource module; peak-RAM metric unavailable
+    resource = None
 import sys
 import time
 
@@ -22,7 +25,9 @@ import joblib
 import numpy as np
 
 
-def _rss_mb() -> float:
+def _rss_mb() -> float | None:
+    if resource is None:
+        return None
     return float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) / 1024.0
 
 
@@ -105,7 +110,7 @@ def bench(
     row = {
         "single_ms_p50": float(np.median(ts)),
         "windows_per_sec": float(n_windows / wall) if wall > 0 else 0.0,
-        "peak_ram_mb": float(peak),
+        "peak_ram_mb": float(peak) if peak is not None else None,
         "reload_identical": bool(np.array_equal(p1, p2)),
         "stream_delay_ticks_p50": float(np.median(delays)) if delays else None,
         "stream_delay_ticks_max": int(np.max(delays)) if delays else None,
@@ -121,6 +126,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--n-windows", type=int, default=2000)
     ap.add_argument("--parquet", default="artifacts/m0b_mass_*.parquet")
     ap.add_argument("--no-stream", action="store_true")
+    ap.add_argument("--w", type=int, default=None,
+                    help="stream window width (default: artifact's own w)")
+    ap.add_argument("--stride", type=int, default=None,
+                    help="stream stride (default: artifact's own stride)")
     args = ap.parse_args(argv)
     stream = None
     if not args.no_stream:
@@ -132,14 +141,21 @@ def main(argv: list[str] | None = None) -> int:
 
         art0 = joblib.load(args.artifact + "/model.joblib")
         inv = bool(art0.get("invariant", False))
+        # Grid integrity (W-onsetgrid): the stream MUST be rebuilt on the
+        # artifact's own grid. The old hardcoded w=32 measured v2 (w=128)
+        # delays on the v1 grid — see docs/DIAGNOSIS_QUALITY.md grid audit.
+        w = int(args.w) if args.w is not None else int(art0["w"])
+        stride = int(args.stride) if args.stride is not None else int(art0["stride"])
+        print(f"stream grid w={w} stride={stride} (artifact {args.artifact})", flush=True)
         paths = sorted(_glob.glob(args.parquet))
         df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-        sw, sy, sfam, sg = build_windows(df, w=32, stride=8, invariant=inv)
+        sw, sy, sfam, sg = build_windows(df, w=w, stride=stride, invariant=inv)
         stream = (sw, sy, sg, sfam)
     r = bench(args.artifact, n_windows=args.n_windows, stream=stream)
+    ram = f"{r['peak_ram_mb']:.0f}MB" if r["peak_ram_mb"] is not None else "ram=n/a"
     print(
         f"single={r['single_ms_p50']:.3f}ms batch={r['windows_per_sec']:.0f}/s "
-        f"ram={r['peak_ram_mb']:.0f}MB reload_identical={r['reload_identical']} "
+        f"{ram} reload_identical={r['reload_identical']} "
         f"delay_p50={r['stream_delay_ticks_p50']} delay_max={r['stream_delay_ticks_max']}"
     )
     return 0
