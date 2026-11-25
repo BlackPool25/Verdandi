@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ControlsBar } from "../components/controls/ControlsBar";
 import { EventFeed } from "../components/events/EventFeed";
 import {
@@ -5,6 +6,7 @@ import {
   Legends,
   MachinePanel,
 } from "../components/panels";
+import { DiagnosisLoader } from "../components/diagnosis/DiagnosisLoader";
 import { KpiStrip } from "../components/kpi/KpiStrip";
 import { NarrationBar } from "../components/narration/NarrationBar";
 import { TopologyView } from "../topology/TopologyView";
@@ -39,6 +41,21 @@ export function SimPage(): React.JSX.Element {
   } = useTwinStream();
 
   const showSeedError = episodeId === null && seedError;
+
+  // ADDITIVE (Task 9): diagnosis artifact is episode-level, parsed once per
+  // episode inside DiagnosisLoader (useMemo on the artifact JSON, never on
+  // tick/cursor). Null until the artifact fetch lands: default-off, the
+  // loader renders nothing and subscribes to nothing. TwinStreamProvider
+  // value is untouched (no new keys: rail consumers never re-render).
+  const diagnosisArtifact = useMemo(
+    () => ({
+      packetJson: null as unknown,
+      decisionJson: null as unknown,
+      verdict: null as "decided" | "abstain" | null,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [episodeId],
+  );
 
   return (
     <div className="sim-shell" data-testid="sim-shell">
@@ -89,6 +106,13 @@ export function SimPage(): React.JSX.Element {
                 faults={faults}
                 onStepTo={source.stepTo}
               />
+              <DiagnosisLoader
+                packetJson={diagnosisArtifact.packetJson}
+                decisionJson={diagnosisArtifact.decisionJson}
+                selectedId={selectedId ?? undefined}
+                onSelect={setSelectedId}
+                onStepTo={source.stepTo}
+              />
             </aside>
           </>
         )}
@@ -97,6 +121,7 @@ export function SimPage(): React.JSX.Element {
         tick={source.panelTick}
         faults={faults}
         onSelectMachine={setSelectedId}
+        diagnosisVerdict={diagnosisArtifact.verdict}
       />
       <footer className="sim-shell__dock sim-box" data-testid="sim-dock" aria-label="control dock">
         <ControlsBar external={{ source, onEpisode: setEpisodeId }} />

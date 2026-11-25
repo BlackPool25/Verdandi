@@ -1,0 +1,35 @@
+{
+  "decision": {
+    "family_prob": null,
+    "fault_family": null,
+    "machine": null,
+    "machine_prob": null,
+    "packet_id": "det-777-190",
+    "severity": null,
+    "severity_prob": null,
+    "spec": "template-v1",
+    "verdict": "abstain"
+  },
+  "meta": {
+    "clean": true,
+    "seed": 777,
+    "source": "scripts/report_incident.py run_report(seed=777, clean=True)",
+    "trigger": 190
+  },
+  "packet": {
+    "confidence": {},
+    "fault_family": null,
+    "flow": {
+      "n_trace": 0,
+      "trigger": 190
+    },
+    "id": "det-777-190",
+    "onset": null,
+    "paths": [],
+    "root": null,
+    "sensor_verdict": "abstain",
+    "trace": [],
+    "trigger": 190,
+    "verdict": "abstain"
+  }
+}
