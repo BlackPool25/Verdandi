@@ -56,8 +56,8 @@ def main(n_eps=60, seed=0):
         for c in card["claims"]:
             n_cit += 1
             n_cit_ok += c["evidence_id"] in ({t["id"] for t in pkt["trace"]} | {p["id"] for p in pkt["paths"]} | {pkt["id"]})
-    print(f"template citation precision={n_cit_ok/max(1,n_cit):.3f} abstain_rate={n_abst/n_eps:.3f} (MEASURED, n={n_eps})", flush=True)
-    print(f"template recall_slot={n_slot_ok/max(1,n_nonabst):.3f} recall_cover={n_cover_sum/max(1,n_nonabst):.3f} n_nonabst={n_nonabst} (MEASURED, n={n_eps}, seed={seed})", flush=True)
+    print(f"template citation precision={fh.fmt_rate(n_cit_ok, n_cit)} abstain_rate={n_abst/n_eps:.3f} (MEASURED, n={n_eps})", flush=True)
+    print(f"template recall_slot={fh.fmt_rate(n_slot_ok, n_nonabst)} recall_cover={fh.fmt_rate(n_cover_sum, n_nonabst)} n_nonabst={n_nonabst} (MEASURED, n={n_eps}, seed={seed})", flush=True)
     try:
         nli_client = fh.client_from_env()
     except fh.NliUnavailable as e:

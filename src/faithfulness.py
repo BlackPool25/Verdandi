@@ -126,6 +126,36 @@ def _majority(labels: list[str]) -> str:
     return Counter(labels).most_common(1)[0][0]
 
 
+def fmt_rate(n_ok: float, n_total: int) -> str:
+    """Rate for operator-visible MEASURED lines.
+
+    Zero denominator (e.g. 100%-abstain corpus) prints as undefined —
+    never 0.000, which would read as measured failure.
+    """
+    if n_total == 0:
+        return "undefined (0 non-abstain)"
+    return f"{n_ok / n_total:.3f}"
+
+
+class LocalMnliClient:
+    """Local MNLI client with an injectable encode step.
+
+    `encode(premise, hypothesis)` runs the model and returns
+    {"label", "prob"}. `order="rev"` swaps premise/hypothesis positions
+    before encoding, so the 3-run x 2-order swap gate actually tests
+    order bias (a rev that duplicates fwd would make swap_agree
+    vacuously True and flip_rate always 0).
+    """
+
+    def __init__(self, encode):
+        self._encode = encode
+
+    def entails(self, premise, hypothesis, order="fwd"):
+        if order == "rev":
+            premise, hypothesis = hypothesis, premise
+        return self._encode(premise, hypothesis)
+
+
 def _call_client(client, premise: str, hypothesis: str, order: str) -> dict:
     """Call client.entails, signalling order when the client accepts it."""
     try:
@@ -228,22 +258,21 @@ def client_from_env():
     mdl = AutoModelForSequenceClassification.from_pretrained(path, local_files_only=True)
     mdl.eval()
 
-    class _LocalMnli:
-        def entails(self, premise, hypothesis, order="fwd"):
-            import torch as _t
+    def _encode(premise, hypothesis):
+        import torch as _t
 
-            enc = tok(premise, hypothesis, return_tensors="pt", truncation=True)
-            with _t.no_grad():
-                logits = mdl(**enc).logits
-            probs = _t.softmax(logits, dim=-1)[0].tolist()
-            # MNLI label order: contradiction / neutral / entailment.
-            idx = max(range(3), key=lambda i: probs[i])
-            return {
-                "label": ("contradiction", "neutral", "entailment")[idx],
-                "prob": probs[idx],
-            }
+        enc = tok(premise, hypothesis, return_tensors="pt", truncation=True)
+        with _t.no_grad():
+            logits = mdl(**enc).logits
+        probs = _t.softmax(logits, dim=-1)[0].tolist()
+        # MNLI label order: contradiction / neutral / entailment.
+        idx = max(range(3), key=lambda i: probs[i])
+        return {
+            "label": ("contradiction", "neutral", "entailment")[idx],
+            "prob": probs[idx],
+        }
 
-    return _LocalMnli()
+    return LocalMnliClient(_encode)
 
 
 def aggregate(items: list[tuple[dict, dict]], client=None) -> dict:
