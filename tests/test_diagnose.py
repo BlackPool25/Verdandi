@@ -250,3 +250,76 @@ def test_starved_only_sorts_below_residual_run():
     )
     out = diagnose_from_trigger(g, ["obs_A0", "obs_B9"], trigger=190, back=64)
     assert out and out[0]["machine"] == "A0"
+
+
+def _decoupled_delay_df(n=300, t0=200):
+    """Ep 41242 pattern: 12 injected delay steps at C2, 3+3 STARVED steps at
+    C6/C7, empty buffers. Calibrator held open isolates the mass gate."""
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(7)
+    tput = np.zeros(n)
+    tput[t0 : t0 + 12] = 4.0  # 12 injected delay steps at C2
+    s_c6 = ["RUN"] * n
+    s_c7 = ["RUN"] * n
+    for i in range(t0 + 2, t0 + 5):
+        s_c6[i] = "STARVED"  # 3 starved steps at C6
+    for i in range(t0 + 5, t0 + 8):
+        s_c7[i] = "STARVED"  # 3 starved steps at C7
+    return pd.DataFrame(
+        {
+            "episode_id": [1] * n,
+            "step": list(range(n)),
+            "obs_C2": rng.normal(0, 1, size=n),
+            "obs_C6": rng.normal(0, 1, size=n),
+            "obs_C7": rng.normal(0, 1, size=n),
+            "state_C2": ["RUN"] * n,
+            "state_C6": s_c6,
+            "state_C7": s_c7,
+            "tputlag_C2": tput,
+        }
+    )
+
+
+_DECOUPLED_EDGES = {"C2": ["C6"], "C6": ["C7"], "C7": []}
+_DECOUPLED_COLS = ["obs_C2", "obs_C6", "obs_C7"]
+
+
+def test_delay_starved_mass_gate_abstains_on_decoupled_delay():
+    """Candidate #1 wiring (diagnose_incident upstream_paths trust point).
+
+    Ep 41242 pattern: injected delay mass at C2 vanishes downstream (tiny
+    STARVED at C6/C7, empty buffers) -> VISIBILITY trip -> path tuning must
+    distrust the episode via the new decoupled-delay abstain (distinct code
+    per FINAL-left-wirereview §3; downstream-safe via report_incident.py:247
+    fallback + eval_e2e_selective.py dynamic bucketing).
+    Calibrator held open so only the mass gate can abstain here.
+    """
+    from src.diagnose import diagnose_incident
+
+    rep = diagnose_incident(
+        _decoupled_delay_df(),
+        _DECOUPLED_COLS,
+        195,
+        _DECOUPLED_EDGES,
+        calibrator={"T": 1.0},
+    )
+    assert rep["abstain"] == "decoupled-delay" and rep["root"] is None
+    assert rep["note"].startswith("delay-mass gate tripped: VISIBILITY")
+
+
+def test_delay_starved_mass_gate_skips_non_delay_family():
+    """C1 family gating: same decoupled frame under a non-delay family must
+    not trip the mass gate (assertion is meaningful only for delay faults)."""
+    from src.diagnose import diagnose_incident
+
+    rep = diagnose_incident(
+        _decoupled_delay_df(),
+        _DECOUPLED_COLS,
+        195,
+        _DECOUPLED_EDGES,
+        fault_family="breakdown",
+        calibrator={"T": 1.0},
+    )
+    assert rep["abstain"] is None and rep["root"] == "C2"
