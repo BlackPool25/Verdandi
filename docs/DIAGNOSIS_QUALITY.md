@@ -110,6 +110,27 @@ Verdict: **KILL as decider** (0.094 << 0.671 teacher; SC confirms < 0.3).
 Disposition: tev kept for phrasing only; ranker stays decider. Never piped
 into ranker.
 
+### Criteria-order shuffle (MEASURED 2026-11-25, PRISSUE-62, n=60 seed=0)
+`--order fixed|shuffled --order-seed 1`: shuffles every choice question's
+criteria dict (the `--choice` argv order the model sees); episode set pinned
+by seed=0 (identical 53 measurable episodes both arms; order uses a separate
+RNG stream). Same transport/model/lineage as above.
+| order | machine top-1 | family top-1 | null rate | n |
+|---|---|---|---|---|
+| fixed | 0.113 (6/53) | 0.132 (7/53) | 0.000 | 53 |
+| shuffled (order-seed=1) | 0.113 (6/53) | 0.170 (9/53) | 0.000 | 53 |
+
+Fixed-arm gated SC (machine-only, 5 votes): 0.113 — unchanged, still < 0.3.
+Machine score identical under shuffled option order: shuffling neither
+rescues nor collapses the decider, so the failure is not an option-order
+artifact (no position-bias rescue; default-choice pathology stands on its
+own). Family +0.038 under shuffle is noise at n=53, still << teacher.
+Verdict: **KILL stays** (0.113 << 0.671; kill lifts only at machine ≥ 0.671).
+Eval-side note: full-concat battery load OOMed under shared-machine pressure;
+loader now samples ids first (column-projected, episode-filtered per shard;
+same seed=0 episode set, verified identical).
+Logs: `artifacts/tev_shuffle62_fixed.log`, `artifacts/tev_shuffle62_shuffled.log`.
+
 ## Template faithfulness (MEASURED 2026-11-25, n=60 seed=0)
 `scripts/eval_jev.py` (defaults n=60/seed=0) over the frozen T=300 battery
 (`artifacts/m0b_mass_*.parquet`, 48 shards). Deterministic P/R from

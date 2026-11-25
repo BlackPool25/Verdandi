@@ -103,3 +103,96 @@ def test_cli_client_shape_and_timeout():
     assert "--ask" in seen["argv"] and "tev1:4b" in seen["argv"]
     assert any(a.startswith("M1=") for a in seen["argv"])
     assert seen["timeout"] < 300
+
+
+def test_shuffle_mode_params():
+    import inspect
+
+    mod, _ = _load()
+    sig = inspect.signature(mod.main)
+    assert sig.parameters["order"].default == "fixed"
+    assert sig.parameters["order_seed"].default == 0
+
+
+def test_shuffle_criteria_deterministic():
+    mod, _ = _load()
+    import numpy as np
+
+    crit = {m: f"desc {m}" for m in ["A", "B", "C", "D", "E"]}
+    r1 = mod.shuffled_criteria(crit, np.random.default_rng(1))
+    r2 = mod.shuffled_criteria(crit, np.random.default_rng(1))
+    assert list(r1) == list(r2)
+    assert sorted(r1) == sorted(crit)
+
+
+def test_shuffle_changes_order_for_some_seed():
+    mod, _ = _load()
+    import numpy as np
+
+    crit = {m: f"desc {m}" for m in ["A", "B", "C", "D", "E"]}
+    diffs = [s for s in range(10)
+             if list(mod.shuffled_criteria(crit, np.random.default_rng(s))) != list(crit)]
+    assert diffs, "shuffle must permute order for at least one seed in 0..9"
+
+
+def test_apply_order_fixed_preserves_insertion():
+    mod, _ = _load()
+    import numpy as np
+
+    qs = {"machine": {"type": "choice", "instructions": "m",
+                      "criteria": {"B": "x", "A": "y", "C": "z"}}}
+    out = mod.apply_order(qs, "fixed", np.random.default_rng(0))
+    assert list(out["machine"]["criteria"]) == ["B", "A", "C"]
+
+
+def test_apply_order_shuffled_deterministic_and_complete():
+    mod, _ = _load()
+    import numpy as np
+
+    qs = {"machine": {"type": "choice", "instructions": "m",
+                      "criteria": {m: f"d {m}" for m in ["A", "B", "C", "D", "E"]}},
+          "fault_family": {"type": "choice", "instructions": "f",
+                           "criteria": {f: f"d {f}" for f in
+                                        ["breakdown", "delay", "loss", "quality"]}}}
+    a = mod.apply_order(qs, "shuffled", np.random.default_rng(3))
+    b = mod.apply_order(qs, "shuffled", np.random.default_rng(3))
+    assert list(a["machine"]["criteria"]) == list(b["machine"]["criteria"])
+    assert sorted(a["machine"]["criteria"]) == ["A", "B", "C", "D", "E"]
+    assert sorted(a["fault_family"]["criteria"]) == ["breakdown", "delay", "loss", "quality"]
+
+
+def test_eval_stays_phrasing_only_no_ranker_import():
+    _, src = _load()
+    for token in ("eval_stacked", "LambdaRank", "stage2-oof", "from src.rank"):
+        assert token not in src, f"tev eval must not pipe into ranker: {token}"
+
+
+def test_order_cli_flags_present():
+    _, src = _load()
+    assert "--order" in src and "--order-seed" in src and "shuffled" in src
+
+
+def test_sample_episodes_deterministic_and_pinned(tmp_path):
+    import pandas as pd
+
+    mod, _ = _load()
+    for i in range(3):
+        pd.DataFrame({"episode_id": [i] * 4, "step": range(4),
+                      "obs_X": 1.0}).to_parquet(tmp_path / f"s{i}.parquet")
+    paths = sorted(str(p) for p in tmp_path.glob("*.parquet"))
+    assert list(mod.sample_episodes(paths, 2, seed=0)) == list(mod.sample_episodes(paths, 2, seed=0))
+    assert len(mod.sample_episodes(paths, 2, seed=0)) == 2
+
+
+def test_load_episodes_returns_only_sampled(tmp_path):
+    import pandas as pd
+
+    mod, _ = _load()
+    for i in range(3):
+        pd.DataFrame({"episode_id": [i] * 4, "step": range(4),
+                      "obs_X": 1.0}).to_parquet(tmp_path / f"s{i}.parquet")
+    paths = sorted(str(p) for p in tmp_path.glob("*.parquet"))
+    eps = mod.sample_episodes(paths, 2, seed=0)
+    df = mod.load_episodes(paths, eps)
+    assert sorted(df["episode_id"].unique()) == sorted(eps)
+    assert len(df) == 8
