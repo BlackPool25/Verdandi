@@ -12,7 +12,36 @@ def ranker_evidence(onsets: dict, scores: dict) -> dict:
             for m in onsets if m in scores}
 
 
-def main(n_eps: int = 200, k: int = 3, seed: int = 0, ranked: bool = False):
+def flow_mass_from_buffers(g, machines, edges) -> dict:
+    """Per-machine trapped WIP: max over steps of up+down buffer occupancy.
+
+    edges: src.twin._line_edges() map (machine -> (up, down) gap names).
+    Unmapped machines (no buffer edges) get 0.0 and keep ranker share.
+    """
+    def _codes(v):
+        if v is None:
+            return []
+        if isinstance(v, (list, tuple)):
+            out = []
+            for x in v:
+                out += _codes(x)
+            return out
+        return [v]
+
+    mass = {}
+    for m in machines:
+        up, down = edges.get(m, (None, None))
+        cols = [f"buffer_{c}" for c in _codes(up) + _codes(down)
+                if f"buffer_{c}" in g.columns]
+        if cols:
+            mass[m] = float(g[cols].to_numpy(dtype=float).sum(axis=1).max())
+        else:
+            mass[m] = 0.0
+    return mass
+
+
+def main(n_eps: int = 200, k: int = 3, seed: int = 0, ranked: bool = False,
+         teleport: bool = False, alpha: float = 0.85):
     from src.diagnose import diagnose_multi_origin
     from src.possibility import kbest_paths
     from src.route import extract_route
@@ -87,6 +116,15 @@ def main(n_eps: int = 200, k: int = 3, seed: int = 0, ranked: bool = False):
             tot = sum(np.exp(v["score"]) for v in ev.values()) or 1.0
             for m in ev:
                 ev[m]["score"] = float(np.exp(ev[m]["score"]) / tot)
+            if teleport:
+                from src.possibility import flow_teleport
+                from src.twin import _line_edges
+
+                fm = flow_mass_from_buffers(g, list(ev.keys()), _line_edges())
+                blended = flow_teleport(
+                    {m: ev[m]["score"] for m in ev}, fm, alpha=alpha)
+                for m in ev:
+                    ev[m]["score"] = blended[m]
         else:
             ev = {}
             for r in entries:
@@ -104,8 +142,21 @@ def main(n_eps: int = 200, k: int = 3, seed: int = 0, ranked: bool = False):
             subseq_hit += 1
     print(f"episodes={n} root-hit@1={root_hit/max(1,n):.3f} "
           f"route-subseq@{k}={subseq_hit/max(1,n):.3f} "
-          f"mean-k={float(np.mean(nk)) if nk else 0:.1f} (MEASURED)")
+          f"mean-k={float(np.mean(nk)) if nk else 0:.1f}"
+          f"{f' teleport(a={alpha:.2f})' if teleport else ''} (MEASURED)")
 
 
 if __name__ == "__main__":
-    main()
+    import sys as _sys
+
+    _kw: dict = {}
+    if "--ranked" in _sys.argv:
+        _kw["ranked"] = True
+    if "--teleport" in _sys.argv:
+        _kw["teleport"] = True
+        _kw["ranked"] = True
+    for _flag, _key, _typ in (("--n", "n_eps", int), ("--seed", "seed", int),
+                              ("--k", "k", int), ("--alpha", "alpha", float)):
+        if _flag in _sys.argv:
+            _kw[_key] = _typ(_sys.argv[_sys.argv.index(_flag) + 1])
+    main(**_kw)

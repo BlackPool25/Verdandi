@@ -32,6 +32,34 @@ episode-grouped CV seed=0 deterministic. Input: `artifacts/stage2-oof.npz`
 Verdict: ranker == teacher (three feature sets, aligned measurement).
 Remaining rerank levers: onset/state row features, per-family rankers.
 
+## Rerank variants + path teleport (MEASURED 2026-11-25, Task 5, seed=0)
+Variant 1 = post-hoc calibrated rerank on `stage2-oof.npz` (identical
+episodes/groups; `rerank_top1`, same argsort tie-breaking as `_report`):
+| variant | votable top-1 | pooled top-1 | n | bar ≥0.7 |
+|---|---|---|---|---|
+| baseline (rerun) | 0.667 | 0.461 | 2712/4200 | FAIL (gap 0.033) |
+| V1 calibrated (T=0.168 from `ranker-calibration.json`) | 0.667 | 0.461 | 2712/4200 | STRIKE (Δ 0.000 — T preserves argmax, Guo 2017) |
+| V2 truncation_level 5→2 (loss focuses top positions; identical splits via shared `_lambdarank_cv` core) | 0.665 | 0.458 | 2712/4200 | STRIKE (Δ −0.002/−0.003, noise; MRR 0.557 uncompared) |
+
+Max 2 variants reached — bar stays missed, no silent revivals. Ranker
+verdict: **STRUCK at 0.667** (abstain-gate ships without it).
+
+Path teleport (64): PPR `flow_teleport` in `src/possibility.py`
+(teleport = ranker-softmax × flow mass, α=0.85) wired into the ranked arm
+(`--teleport`; flow mass = max over steps of up+down `buffer_*`
+occupancy via `_line_edges`). Ranked-arm re-run moved with the 11-25
+battery regen (old 0.162/0.413 of 11-11 is stale data, not a code change):
+| arm (n=167, seed=0, k=3) | root-hit@1 | subseq@3 | mean-k |
+|---|---|---|---|
+| ranked re-run | 0.072 | 0.287 | 1.8 |
+| ranked + teleport α=0.85 | 0.072 | 0.287 | 1.8 |
+
+Keep rule: ≥ rerun+0.030 with subseq no-regress (absolute 0.192 assumed
+the stale 0.162 baseline). Measured Δ +0.000 → **diagnostic-only**.
+Mechanism: flow mass is non-degenerate (18/22 machines nonzero per ep)
+and teleport flips node-top1 in 28/167 eps (mean |Δp| 0.033) — wash
+flips with no truth direction; k-best ordering absorbs the rest.
+
 ## Tev decider (MEASURED 2026-11-25, n=60 seed=0)
 `scripts/eval_tev.py` (defaults n=60/seed=0, `--transport cli|http`) over the
 frozen T=300 battery (`artifacts/m0b_mass_*.parquet`, 48 shards). 60 episodes
