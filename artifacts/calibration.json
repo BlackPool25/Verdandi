@@ -1,0 +1,36 @@
+{
+  "T": 2.58,
+  "a": 6.420177725022796,
+  "b": -2.7236219677967335,
+  "tau": 0.739,
+  "risk_target": 0.3,
+  "coverage": 0.23164763458401305,
+  "margin_def": "top1-top2 of T-scaled candidate probs via p^(1/T) renormalization (src.calibration_artifact.scaled_margin); fit on teacher window probas, served on rank_nodes possibility probs",
+  "fit": {
+    "n": 38312,
+    "held": "ASM1/ASM2/B7P/B9/C6",
+    "tau_refit_at_budget": 0.10922172214990768,
+    "input": "artifacts/oof_identity.parquet",
+    "sha256": "44fd907777fff60dbef1ad2d723438eb149b832229bd1a3c5d8b52c6aac84ec0"
+  },
+  "lineage_11_11": {
+    "T": 2.58,
+    "tau": 0.739,
+    "coverage": 0.337,
+    "risk": 0.3,
+    "n": 8945,
+    "source": "docs/DIAGNOSIS_QUALITY.md transfer row (teacher windows)"
+  },
+  "verify": {
+    "slice": "exclude-held held-5 fault windows",
+    "n": 8582,
+    "tau_applied": 0.739,
+    "coverage": 0.23164763458401305,
+    "risk": 0.044265593561368166,
+    "n_covered": 1988,
+    "budget": 0.3,
+    "verdict": "SERVE"
+  },
+  "scope_note": "Platt is monotone in margin (a>0): the gate is exactly a margin threshold with a probabilistic reading. Incident-level absolute calibration on heuristic margins is not claimed (research R2). Never serve the ranker tau=0.187 here (different space, Task 75).",
+  "code_version": "twin-2.5.0-topology-A"
+}

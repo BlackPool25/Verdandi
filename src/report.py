@@ -13,6 +13,7 @@ def build_report(
     meta: dict[str, dict],
     linked: list[tuple[str, int]],
     paths: list[tuple[list[str], float]] | None = None,
+    confidence: dict | None = None,
 ) -> dict:
     """Assemble the operator-facing incident breakdown (pure function).
 
@@ -53,4 +54,5 @@ def build_report(
         "downstream": [m for m in path[1:] if m != root],
         "linked": list(linked),
         "abstain": None if len(path) > 1 else "single-node",
+        "confidence": dict(confidence or {}),
     }
