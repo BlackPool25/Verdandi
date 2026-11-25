@@ -175,8 +175,11 @@ def decide_packet(packet: dict) -> tuple[dict, str]:
                 return decision, "tev"
             decision = dict(decision, _tev_abstain=True)
             return decision, "tev"
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - offline guarantee: any tev
+            # failure (no route, timeout, bad payload) falls back to template.
+            print(f"report_incident: tev decision failed "
+                  f"({type(exc).__name__}: {exc}); falling back to template",
+                  file=sys.stderr)
     return template_decision(packet), "template"
 
 

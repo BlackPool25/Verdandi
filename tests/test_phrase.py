@@ -153,3 +153,41 @@ def test_ollama_path_disabled_by_default():
     out = phrase_with_ollama(_packet(), _decision())
     assert out["path"] == "template"
     assert "disabled" in out.get("reason", "")
+
+
+def test_verify_ignores_latency_extra():
+    """Minor 2 RED: open-schema `_latency_s` extra must not fail digit-run diff."""
+    from src.phrase import extract_facts, verify
+
+    facts = extract_facts(_packet(), _decision())
+    cand = dict(_good_candidate(), _latency_s=0.14159265)
+    ok, reason = verify(cand, facts)
+    assert ok, reason
+
+
+def test_ollama_path_latency_kept_out_of_verified_candidate(monkeypatch):
+    """Minor 2 RED: Ollama path ships llm; latency in out, not in candidate."""
+    import io
+    import json as _json
+    import urllib.request
+
+    from src.phrase import phrase_with_ollama
+
+    raw_candidate = _json.dumps(_good_candidate())
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return _json.dumps({"response": "prefix " + raw_candidate + " suffix"}).encode()
+
+    monkeypatch.setenv("VERDANDI_PHRASE_LLM", "1")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: _Resp())
+    out = phrase_with_ollama(_packet(), _decision())
+    assert out["path"] == "llm", out.get("reason")
+    assert "latency_s" in out
+    assert "_latency_s" not in (out.get("candidate") or {})

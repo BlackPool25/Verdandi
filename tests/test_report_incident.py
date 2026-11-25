@@ -123,3 +123,26 @@ def test_incident_records_scores_source():
     assert scored["incident"]["scores_source"] == "measured-z"
     heuristic = run_report(seed=7, use_scores=False)
     assert heuristic["incident"]["scores_source"] == "heuristic-eweight"
+
+
+def test_tev_failure_falls_back_to_template_with_warning(monkeypatch, capsys):
+    """Bare-except RED: tev blowup must fall back loudly, never silently."""
+    import sys
+
+    import src.jev as jev
+    from scripts.report_incident import decide_packet, template_decision
+
+    packet = {"id": "det-1-160", "verdict": "diagnosed", "root": "A0",
+              "confidence": {"top1": 0.9}, "fault_family": "breakdown"}
+
+    class _Boom:
+        def ask(self, *a, **k):
+            raise ConnectionError("simulated tev outage")
+
+    monkeypatch.setenv("JEV_API_KEY", "test-key")
+    monkeypatch.setattr(jev, "TevClient", lambda: _Boom())
+    decision, via = decide_packet(packet)
+    assert via == "template"
+    assert decision == template_decision(packet)
+    err = capsys.readouterr().err
+    assert "tev" in err.lower(), "tev fallback must log a warning to stderr"
