@@ -30,10 +30,10 @@ detect (frozen v7 GBM, 23 invariant feats, 2-of-3 confirm → anchor)
 | Detection (v7 frozen) | window-F1 / hit / clean-FP | 0.89 / 0.92 / 0.01 | — | SHIPS |
 | Detection (v7, frozen battery, thr sweep) | retrieval / clean-fire | 0.507–0.568 / 0.000 | — | flat (thresholds don't move it) |
 | Detection (retrain on frozen, thr 0.6) | retrieval / clean-fire | **0.800 / 0.032** | ≥0.75 @ ≤0.5 | PASS |
-| Rerank (stage-2 LambdaRank, votable) | top-1 / MRR | 0.673 / 0.56 | ≥0.7 | FAIL (−0.027) |
-| Rerank teacher (26-way GBM vote) | top-1 | 0.671–0.674 | — | ranker == teacher (capped) |
+| Rerank (stage-2 LambdaRank, votable) | top-1 / MRR | rerun 0.667 / V2 0.665 max (teacher 0.654, n=2712) | ≥0.7 | STRUCK after 2 variants; gate ships without it |
+| Rerank teacher (26-way GBM vote) | top-1 | 0.654 rerun (0.671–0.674 pre-regen) | — | ranker == teacher (capped) |
 | E2E pooled | top-1 | 0.432–0.436 | old 0.5 | decomposed bars apply |
-| Routes (heuristic evidence) | root-hit@1 / subseq@3 / mean-k | 0.126 / 0.413 / 1.1 | — | diagnostic; rerun w/ ranker pending |
+| Routes (ranker evidence, re-baselined on regen) | root-hit@1 / subseq@3 / mean-k | 0.072 / 0.287 / 1.1 | — | diagnostic-only stands; teleport Δ+0, flips wash out |
 | Family typing | pooled / 3 strong / 4 weak | 0.502 / 0.75+ / 0.23–0.41 | — | split confirmed |
 | Sensor attribution | top-1 | 0.26–0.33 | ≥0.4 | FAIL (stack unbuilt) |
 | Onset | process med-err / sensor | 2.0 / ~90 | ≤25 | process PASS, sensor FAIL |
@@ -105,18 +105,14 @@ Sensor stack program: D-PCA+RBC-T2+EBF 0.033–0.067 vs 0.4 bar
 (`docs/SIM_BASELINE.md:107-113`); sensor attribution ships as
 `abstain_sensor` only (65-B, §5).
 
-## 7. Remaining work (in order)
-1. **Rerank +0.027**: onset/state/buffer row features in stage-2
-   (columns exist in `meta` + `flow_features`; never combined).
-2. **Routes with ranker evidence**: re-run path eval on stage-2 scores;
-   decide path layer vs ranker-only.
-3. **Sensor stack**: DOS bank → RBC → EBF (bars: P@1 ≥0.5, FA cut ≥30%).
-4. **Calibration fit**: per-episode softmax + T + Platt; risk-coverage gate.
-5. **Transfer table**: id-backoff + shallow OT; held-5 ASM1/ASM2/B7P/B9/C6.
-6. **Cost metric**: elicit ops costs; re-rank under expected cost.
-7. **Per-family CUSUM retrieval**: heads built + tested; battery eval
-   pending clean-threshold tuning (raw-stream version killed on
-   clean-fire 1.0 — needs calibrated thresholds, not defaults).
+## 7. Remaining work (in order) — all DONE (Tasks 2–5, 7; see SHIP_STATUS.md close-out)
+1. **Rerank**: V1 calibrated 0.667, V2 trunc-2 0.665 → STRUCK (max 2).
+2. **Routes with ranker evidence**: re-baselined 0.072/0.287; teleport Δ+0 → diagnostic-only stands.
+3. **Sensor stack**: struck (65-B); ships as `abstain_sensor` only.
+4. **Calibration fit + gate**: live in `diagnose_incident` (τ=0.739, VERIFY risk 0.044 exclude-held).
+5. **Transfer table**: exclude-held retrain recorded (Task 2); held-5 risk 0.413 — transfer cited as abstain behavior, never as guarantee.
+6. **Cost metric**: permanently deferred (70).
+7. **Per-family CUSUM retrieval**: unchanged (needs calibrated thresholds).
 
 ## 8. Ship verdict: SIGNED CONDITIONAL SCOPE (66, 2026-11-24 — supersedes NOT YET)
 
@@ -127,13 +123,13 @@ Everything else abstains with a reason code, never a guess.
 | Component | Disposition | Code on abstain | Evidence (measured-only) |
 |---|---|---|---|
 | Detection (retrained frozen sentinel, thr 0.6 + 2-of-3) | SHIP | — | retrieval 0.800 @ clean-fire 0.032, n=4200 fault + 600 clean, battery MASTER_SEED=777 (`scripts/freeze_m0b_battery.py:22`), lineage `docs/DIAGNOSIS_QUALITY.md:10` |
-| Process attribution (stage-2 LambdaRank, votable) | SHIP (gated) | `abstain_rerank` while votable <0.70 | votable top-1 0.673 vs bar ≥0.70 (gap 0.027), n=2665, lineage `docs/DIAGNOSIS_QUALITY.md:20` |
-| Calibration gate (T=2.58 + Platt, τ=0.739 held-5) | SHIP (gate mechanism; wiring owed to Task 7) | `abstain_low_conf` when conf < τ | ECE 0.246→0.034, NLL 2.465→1.366, n=96000 teacher OOF windows (seed unrecorded — provenance incomplete), lineage `docs/DIAGNOSIS_QUALITY.md:48-53` |
+| Process attribution (stage-2 LambdaRank, votable) | SHIP (gated) | `abstain_rerank` (ranker struck: V2 max 0.665 <0.70) | rerun votable 0.667 (teacher 0.654, n=2712); calibration-aware + trunc-2 tried, struck after 2 |
+| Calibration gate (T=2.58 + Platt, τ=0.739 held-5) | SHIP (gate live in `diagnose_incident`, VERIFY risk 0.044 exclude-held) | `abstain_low_conf` when conf < τ | ECE 0.246→0.034, NLL 2.465→1.366, n=96000 teacher OOF windows; artifact `artifacts/calibration.json` |
 | Strong-family episodes (breakdown/delay/loss) | SHIP (gated) | — | family top-1 0.752/0.753/0.810, lineage `docs/DIAGNOSIS_QUALITY.md:40-43` |
 | Weak-family episodes (bias/drift/quality/spike) | ABSTAIN | `abstain_weak_family` | family top-1 0.226/0.313/0.412/0.247, lineage `docs/DIAGNOSIS_QUALITY.md:40-43` |
 | Unseen-machine (held-5 type) episodes | ABSTAIN unless conf ≥ τ | `abstain_transfer` | forced 0.327, coverage 0.337 @ risk 0.300, n=8945 windows (seed unrecorded — provenance incomplete), lineage `docs/DIAGNOSIS_QUALITY.md:56-65` |
-| Path layer (ranker evidence) | ABSTAIN (diagnostic-only) | `abstain_paths` | root-hit@1 0.162 / subseq@3 0.413, n=167 same-seed (script default seed=0), lineage `docs/DIAGNOSIS_QUALITY.md:35-38` |
-| Tev-as-decider | ABSTAIN (phrasing-only until n=60 verdict) | `abstain_tev` | UNMEASURED: zero tev numbers in `DIAGNOSIS_QUALITY.md`; teacher reference 0.671–0.674 cited from ranker baselines, not from a tev run |
+| Path layer (ranker evidence) | ABSTAIN (diagnostic-only) | `abstain_paths` | re-baselined root-hit@1 0.072 / subseq@3 0.287, n=167 (regen moved it; old 0.162 stale); teleport Δ+0, flips wash out |
+| Tev-as-decider | STRUCK as decider (phrasing-only) | `abstain_tev` | machine 0.094 (5/53) / family 0.132, n=60 pinned seed; SC confirms kill; ranker stays decider |
 | Sensor attribution | ABSTAIN BY DESIGN (65-B) | `abstain_sensor` | 0.033–0.067 vs bar ≥0.4, n=60 each (script default seed=0), lineage `docs/SIM_BASELINE.md:107-113` |
 
 `ship` marks shipped predictions; all other codes render reason + coverage
