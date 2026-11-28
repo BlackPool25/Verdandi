@@ -1,0 +1,8 @@
+# Eval-only NLI deps (PRISSUE-72). NOT installed in CI/runtime.
+# requirements.txt stays CPU-only/no-torch. Install manually on a quiet
+# machine only when running the NLI faithfulness arm of scripts/eval_jev.py:
+#   pip install -r requirements-eval-nli.txt
+#   VERDANDI_MNLI_PATH=/path/to/local-mnli python scripts/eval_jev.py
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+transformers>=4.40

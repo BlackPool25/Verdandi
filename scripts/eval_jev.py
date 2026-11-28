@@ -5,6 +5,26 @@ import numpy as np
 import pandas as pd
 
 
+def format_report(n_cit_ok, n_cit, n_slot_ok, n_claim_sum, n_cover_sum,
+                  n_nonabst, n_abst, n_eps, seed):
+    """Operator-visible MEASURED lines.
+
+    Pairing rule: precision/recall are only ever emitted by this function,
+    which always appends abstain_rate to a metric line — callers cannot
+    print a precision without its abstain rate.
+    """
+    from src import faithfulness as fh
+
+    abst = f"abstain_rate={n_abst / n_eps:.3f}"
+    line1 = (f"template citation precision={fh.fmt_rate(n_cit_ok, n_cit)} "
+             f"{abst} (MEASURED, n={n_eps})")
+    line2 = (f"template recall_slot={fh.fmt_rate(n_slot_ok, n_nonabst)} "
+             f"recall_claim={fh.fmt_rate(n_claim_sum, n_nonabst)} "
+             f"recall_cover={fh.fmt_rate(n_cover_sum, n_nonabst)} "
+             f"n_nonabst={n_nonabst} {abst} (MEASURED, n={n_eps}, seed={seed})")
+    return [line1, line2]
+
+
 def main(n_eps=60, seed=0):
     import sys
 
@@ -16,6 +36,8 @@ def main(n_eps=60, seed=0):
     from src.diagnose import diagnose_multi_origin
     from src.twin import _DOWNSTREAM_MACHINES
 
+    from src import faithfulness as fh
+
     edges = {k: list(v) for k, v in _DOWNSTREAM_MACHINES.items()}
     paths = sorted(glob.glob("artifacts/m0b_mass_*.parquet"))
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
@@ -23,6 +45,8 @@ def main(n_eps=60, seed=0):
     eps = rng.choice(sorted(df["episode_id"].unique()), size=n_eps, replace=False)
     obs = [c for c in df.columns if c.startswith("obs_")]
     n_cit_ok = n_cit = n_abst = 0
+    n_slot_ok = n_claim_sum = n_cover_sum = n_nonabst = 0
+    pairs = []
     for ep in eps:
         g = df[df["episode_id"] == ep].sort_values("step").reset_index(drop=True)
         entries = diagnose_multi_origin(g, obs)
@@ -44,10 +68,26 @@ def main(n_eps=60, seed=0):
         if card["verdict"] == "abstain":
             n_abst += 1
             continue
+        n_nonabst += 1
+        pairs.append((card, pkt))
+        if fh.slot_recall(card, pkt) == 1.0:
+            n_slot_ok += 1
+        n_claim_sum += fh.claim_recall(card, pkt) or 0.0
+        n_cover_sum += fh.coverage_recall(card, pkt) or 0.0
         for c in card["claims"]:
             n_cit += 1
             n_cit_ok += c["evidence_id"] in ({t["id"] for t in pkt["trace"]} | {p["id"] for p in pkt["paths"]} | {pkt["id"]})
-    print(f"template citation precision={n_cit_ok/max(1,n_cit):.3f} abstain_rate={n_abst/n_eps:.3f} (MEASURED, n={n_eps})", flush=True)
+    for line in format_report(n_cit_ok, n_cit, n_slot_ok, n_claim_sum,
+                            n_cover_sum, n_nonabst, n_abst, n_eps, seed):
+        print(line, flush=True)
+    try:
+        nli_client = fh.client_from_env()
+    except fh.NliUnavailable as e:
+        nli_client = None
+        print(f"NLI faithfulness: SKIPPED ({e})", flush=True)
+    if nli_client is not None:
+        res = fh.corpus_nli(pairs, client=nli_client)
+        print(f"NLI faithfulness: {res} (n={n_eps}, seed={seed})", flush=True)
     print("live Jev categorization: SKIPPED (no JEV_API_KEY)", flush=True)
 
 
