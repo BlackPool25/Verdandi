@@ -105,7 +105,8 @@ def verify(candidate: object, facts: dict) -> tuple[bool, str]:
             if eid not in valid:
                 return False, f"citation-unresolvable: {eid}"
     allowed = set(facts["numbers"])
-    for run in _numbers_of(candidate):
+    scrubbed = {k: v for k, v in candidate.items() if k != "_latency_s"}
+    for run in _numbers_of(scrubbed):
         if run not in allowed:
             return False, f"number-mismatch: {run} not in input"
     return True, "ok"
@@ -161,6 +162,8 @@ def phrase_with_ollama(packet: dict, decision: dict,
         return {"text": template, "path": "template", "attempts": 0,
                 "reason": "llm-disabled (set VERDANDI_PHRASE_LLM=1 to enable)"}
 
+    timing: dict = {}
+
     def _stylist(facts: dict) -> dict:
         schema_hint = (
             '{"title": str, "summary": [str], '
@@ -182,10 +185,14 @@ def phrase_with_ollama(packet: dict, decision: dict,
             raw = json.loads(resp.read().decode())["response"]
         latency = time.monotonic() - t0
         parsed = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
-        parsed["_latency_s"] = latency  # open-schema extra, ignored by verify
+        # Kept OUT of the verified dict: latency digits would always fail
+        # the digit-run diff (verify also defensively ignores _latency_s).
+        timing["latency_s"] = latency
         return parsed
 
     out = phrase(packet, decision, stylist=_stylist, allow_llm=True)
+    if "latency_s" in timing:
+        out["latency_s"] = timing["latency_s"]
     candidate = out.get("candidate") or {}
     if "_latency_s" in candidate:
         out["latency_s"] = candidate["_latency_s"]
