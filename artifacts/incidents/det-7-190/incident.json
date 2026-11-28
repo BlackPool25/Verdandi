@@ -1,0 +1,31 @@
+{
+  "calibrator": {
+    "T": 2.58,
+    "risk_target": 0.3,
+    "tau": 0.739
+  },
+  "clean": false,
+  "coverage": {
+    "conf": 0.9712434355966543,
+    "covered": true,
+    "tau": 0.739
+  },
+  "fault_family": "breakdown",
+  "files": [
+    "packet.json",
+    "decision.json",
+    "card.json",
+    "dossier.json",
+    "card.md",
+    "incident.json"
+  ],
+  "incident_id": "det-7-190",
+  "reason": null,
+  "root": "A0",
+  "scope": "ship",
+  "scores_n": 2,
+  "scores_source": "measured-z",
+  "seed": 7,
+  "trigger": 190,
+  "via": "template"
+}

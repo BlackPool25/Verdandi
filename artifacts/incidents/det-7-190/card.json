@@ -1,0 +1,30 @@
+{
+  "action": "inspect root machine",
+  "claims": [
+    {
+      "evidence_id": "ev-A0",
+      "text": "origin",
+      "value": "A0"
+    },
+    {
+      "evidence_id": "ev-A0",
+      "text": "onset",
+      "value": 185
+    },
+    {
+      "evidence_id": "path-0",
+      "text": "causal path",
+      "value": [
+        "A0",
+        "B9"
+      ]
+    }
+  ],
+  "confidence": 0.9712434355966543,
+  "fault_family": "breakdown",
+  "machine_prob": 0.9712434355966543,
+  "packet_id": "det-7-190",
+  "root": "A0",
+  "severity": "SEV3",
+  "verdict": "decided"
+}
