@@ -20,55 +20,9 @@ quiet families; integration horizon + per-family features are the levers.
 | stage-2 LambdaRank, votable-only | 0.673 | 2665 | ≥0.7 FAIL (gap 0.027) |
 | stage-1 majority vote (teacher) | 0.671 | 2665 | — |
 | stage-2 pooled (silent count as misses) | 0.455–0.456 | 4200 | — |
-| RERUN 2026-11-25 seed=0: stage-2 votable-only | 0.667 | 2712 | ≥0.7 FAIL (gap 0.033) |
-| RERUN 2026-11-25 seed=0: stage-2 pooled | 0.461 | 4200 | — |
-| RERUN 2026-11-25 seed=0: stage-1 majority vote | 0.654 | 2712 | — |
 
-Rerun lineage: battery m0b-mass-balanced-v1 regenerated seed=0 (4200 fault +
-600 clean, 48 shards), window cache n=96000, teacher OOF seed=0, onsets ON,
-sentinel features OFF (no frozen_oof producer in tree), LambdaRank 3-fold
-episode-grouped CV seed=0 deterministic. Input: `artifacts/stage2-oof.npz`
-(oof_pred/y/groups/fam, 4200×26 rows).
 Verdict: ranker == teacher (three feature sets, aligned measurement).
 Remaining rerank levers: onset/state row features, per-family rankers.
-
-## Ranker calibration (MEASURED 2026-11-25, ranker-level T+Platt)
-Fit on OOF-val episodes only (fam-stratified 50/50 split, split_seed=0;
-n_fit=2100 eps), all numbers below on disjoint EVAL episodes (n=2100) —
-never fit on the reporting split. Platt over isotonic (eval-scale n≈2100
-episodes is the small-n regime). tau picked on FIT at risk≤0.3, frozen,
-applied to EVAL.
-| split | T | ECE before→after | NLL before→after | tau | coverage | risk | forced | gated |
-|---|---|---|---|---|---|---|---|---|
-| ranker EVAL votable (n=1337) | 0.168 | 0.383→0.068 | 2.840→2.031 | 0.187 | 0.893 | 0.284 | 0.662 | 0.716 |
-| ranker EVAL pooled (n=2100) | 0.168 | same fit | same fit | 0.187 | 0.578 | 0.294 | 0.455 | 0.706 |
-
-Platt(a=4.355, b=-1.817); margin_def = top1−top2 of T-scaled ranker candidate
-softmax probs. Artifact: `artifacts/ranker-calibration.json` (T/a/b/tau +
-risk-coverage curve + lineage: battery_seed=0, stacked_seed=0, split_seed=0).
-Abstain-gated rerank keeps rank order (no re-ranking by calibrated prob);
-gate converts silence+low-conf to abstain at ~0.29 risk on pooled eval.
-
-## Open-set exclude-held-5 (MEASURED 2026-11-25, true unknown-reject)
-Held-5 machines: ASM1/ASM2/B7P/B9/C6. Teacher retrained excluding all
-held-5-rooted episodes (train_windows_n=80800, HistGBM max_iter=300 seed=0,
-same identity features/norm as train_origin) → eval on held-5 only:
-| metric | value | n |
-|---|---|---|
-| exclude-held window forced top-1 | 0.000 | 8582 |
-| exclude-held episode pooled top-1 | 0.000 | 760 |
-| exclude-held episode votable top-1 | 0.000 | 347 |
-| in-fleet teacher window forced top-1 on held-5 (leaky ref) | 0.296 | 8582 |
-
-Zero forced accuracy is the closed-set expectation (unseen labels cannot be
-named) — the shippable quantity is abstention, not forced accuracy.
-Gate transfer (raw-margin Platt a=5.657/b=-3.603 fit on 38312 non-held fault
-windows, tau=0.044 @risk≤0.3 frozen there → held-5 fault windows n=8582):
-coverage 0.490, risk 0.413, abstain 0.510.
-Transfer verdict: risk 0.413 EXCEEDS the 0.3 budget on truly unseen machines —
-the 11-11 T=2.58 row (cov 0.337 @ risk 0.300, different margin_def/battery)
-does not reproduce as a risk guarantee here; abstain-by-gate is the measured
-unknown-reject behavior (abstain ≈0.51 at this operating point).
 
 ## End-to-end pooled
 | config | pooled top-1 |
@@ -107,10 +61,8 @@ Ranker-level calibration input: `artifacts/stage2-oof.npz` (saved by `eval_stack
 
 Generalization gap is real (0.70→0.33 forced). The coverage gate converts it
 to abstention: on unseen machines it predicts on 34% at the same 0.30 risk.
-Open-set retrain (exclude-held, 2026-11-25): forced top-1 on truly unseen
-machines is 0.000 (closed-set expectation); the measured unknown-reject is
-abstention — raw-margin gate abstains 0.510 at risk 0.413 on held-5
-(n=8582), over the 0.3 budget. Forced-accuracy transfer is not claimed.
+Open-set retrain (exclude-held training) not run — the reject-by-abstain
+behavior above is the shippable half; forced-accuracy transfer is not claimed.
 - Per-hop delay calibration: bounds ASSUMED (0,60) pending histogram.
 - Cost-weighted metric: deferred per user (accuracy-only bars stand).
 
