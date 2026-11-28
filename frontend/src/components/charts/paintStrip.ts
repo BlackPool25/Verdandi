@@ -29,13 +29,20 @@ export function paintStrip(ctx: StripCtx, spec: PaintSpec): number {
   const stride = Math.max(1, spec.stride);
   ctx.beginPath();
   let segs = 0;
+  let penDown = false;
   let x = 0;
   for (let i = 0; i < n && x < w; i += stride, x += 1) {
     const v = spec.data[i];
-    if (v === undefined || !Number.isFinite(v)) continue;
+    // FE-11: lift the pen over missing samples so a hole renders as a
+    // break, never as a continuous line across discontinuous data.
+    if (v === undefined || !Number.isFinite(v)) {
+      penDown = false;
+      continue;
+    }
     const y = h - ((v - spec.min) / span) * h;
-    if (segs === 0) ctx.moveTo(x, y);
+    if (!penDown) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
+    penDown = true;
     segs += 1;
   }
   if (segs > 0) ctx.stroke();
@@ -81,13 +88,20 @@ export function paintMinMax(ctx: StripCtx, spec: MinMaxSpec): number {
 
   ctx.beginPath();
   let segs = 0;
+  let penDown = false;
   for (let i = 0; i < pairs.length; i += 1) {
     const v = pairs[i];
-    if (v === undefined || !Number.isFinite(v)) continue;
+    // FE-11: lift the pen over missing samples so a hole renders as a
+    // break, never as a continuous line across discontinuous data.
+    if (v === undefined || !Number.isFinite(v)) {
+      penDown = false;
+      continue;
+    }
     const x = Math.min(w, (i / Math.max(1, total - 1)) * w);
     const y = Math.max(0, Math.min(h, h - ((v - min) / span) * h));
-    if (segs === 0) ctx.moveTo(x, y);
+    if (!penDown) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
+    penDown = true;
     segs += 1;
   }
   if (segs > 0) ctx.stroke();

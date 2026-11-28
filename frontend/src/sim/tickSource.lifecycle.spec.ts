@@ -226,3 +226,66 @@ describe("wire order + patch mapping", () => {
     expect(parseLiveTick(row)).not.toBeNull();
   });
 });
+
+describe("dropped SSE frames (FE-9)", () => {
+  it("counts malformed tick JSON as dropped without moving the cursor", () => {
+    const { ctrl } = harness();
+    ctrl.connect(EP);
+    feedTicks(live(), 0, 10);
+    live().emit("tick", "{not json");
+    expect(ctrl.droppedFrames()).toBe(1);
+    expect(ctrl.cursor()).toBe(10);
+    expect(ctrl.rowCount()).toBe(11);
+  });
+
+  it("counts schema-invalid tick frames as dropped", () => {
+    const { ctrl } = harness();
+    ctrl.connect(EP);
+    feedTicks(live(), 0, 5);
+    live().emit("tick", JSON.stringify({ step: "x", states: [], throughput: [] }));
+    expect(ctrl.droppedFrames()).toBe(1);
+    live().emit("tick", JSON.stringify(mkTick(6)));
+    expect(ctrl.droppedFrames()).toBe(1);
+    expect(ctrl.rowCount()).toBe(7);
+  });
+
+  it("valid ticks never increment the drop counter", () => {
+    const { ctrl } = harness();
+    ctrl.connect(EP);
+    feedTicks(live(), 0, 299);
+    expect(ctrl.droppedFrames()).toBe(0);
+    expect(ctrl.complete()).toBe(true);
+  });
+
+  it("notifies existing subscribers on a drop via the existing emit path", () => {
+    const { ctrl } = harness();
+    ctrl.connect(EP);
+    let emits = 0;
+    const unsub = ctrl.subscribe(() => {
+      emits += 1;
+    });
+    live().emit("tick", "{not json");
+    expect(ctrl.droppedFrames()).toBe(1);
+    expect(emits).toBe(1);
+    unsub();
+  });
+
+  it("resets on episode switch and persists across resume", async () => {
+    const { ctrl } = harness();
+    ctrl.connect(EP);
+    feedTicks(live(), 0, 10);
+    live().emit("tick", "{not json");
+    live().emit("tick", "{not json");
+    expect(ctrl.droppedFrames()).toBe(2);
+    ctrl.connect("ep-2");
+    expect(ctrl.droppedFrames()).toBe(0);
+    feedTicks(live(), 0, 10);
+    live().emit("tick", "{not json");
+    expect(ctrl.droppedFrames()).toBe(1);
+    ctrl.disconnect();
+    ctrl.reconnect();
+    await flush();
+    expect(live().url).toBe("/stream?episode_id=ep-2&from_step=10");
+    expect(ctrl.droppedFrames()).toBe(1);
+  });
+});

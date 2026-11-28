@@ -182,6 +182,35 @@
   background: #f0f7f8;
 }
 
+/* FE-6: unknown-family rows are an explicit anomaly state (paired ! UNKNOWN
+   text glyph in the row; color never alone). */
+.evt-row.row-unknown {
+  border-left-color: #b13e53;
+  border-left-style: solid;
+  background: #fae4e8;
+}
+
+.evt-badge-unknown {
+  background: #fae4e8;
+  color: #7f2737;
+  border-color: #b13e53;
+}
+
+.evt-row .row-kind-unknown {
+  color: #7f2737;
+}
+
+[data-testid="feed-unknown"],
+[data-testid="feed-mismatch"] {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: bold;
+  color: #7f2737;
+  background: #fae4e8;
+  padding: 1px 4px;
+  border: 1px solid #b13e53;
+}
+
 .evt-col-step {
   font-weight: bold;
   color: var(--vd-text-accent, #1b4965);

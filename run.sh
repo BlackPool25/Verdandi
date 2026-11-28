@@ -9,6 +9,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEED=777
 PORT=19104
 BROWSER=1
+BRIDGE_PID=""
+WEB_PID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,7 +30,10 @@ python3 -c "import uvicorn, fastapi, simpy" 2>/dev/null || {
 }
 [[ -d "$REPO_ROOT/frontend/node_modules" ]] || { echo "run first: cd frontend && npm install"; exit 1; }
 
-cleanup() { kill "$BRIDGE_PID" "$WEB_PID" 2>/dev/null; }
+cleanup() {
+  [ -n "${BRIDGE_PID:-}" ] && kill "${BRIDGE_PID:-}" 2>/dev/null || true
+  [ -n "${WEB_PID:-}" ] && kill "${WEB_PID:-}" 2>/dev/null || true
+}
 trap cleanup EXIT
 
 cd "$REPO_ROOT"

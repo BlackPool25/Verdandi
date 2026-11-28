@@ -6,6 +6,16 @@ import type { FaultSpec } from "../components/events/types";
 import { parseFeedEvents } from "./streamCodec";
 import { bufferBarsFor, type PanelTick } from "../components/panels/selectors";
 import { PINNED_EDGES, bufferIdForEdge, widthForUtil } from "../topology/edges";
+import {
+  EDGE_COUNT,
+  FINAL_STEP,
+  FIRST_STEP,
+  LIVE_STEP,
+  MACHINE_COUNT,
+  SBUF_ID,
+  SBUF_KIT_EDGE_ID,
+  STORELESS_EDGE_IDS,
+} from "../test/testConstants";
 
 // Todo 7 bridge fixture shape (schema v6, twin-2.5.0-topology-A): header carries the buffer census
 // via flow_stats.store_final (26 buffers + _C7TAIL store); ticks is a sparse
@@ -79,18 +89,18 @@ function widthsAt(step: number): Map<string, number> {
 }
 
 describe("sim wiring: edge widths track live buffer util", () => {
-  it("topology-A fixture carries 26 machines x 26 buffers", () => {
-    expect(MACHINE_ORDER).toHaveLength(26);
-    expect(BUFFER_ORDER).toHaveLength(26);
+  it(`topology-A fixture carries ${MACHINE_COUNT} machines x ${MACHINE_COUNT} buffers`, () => {
+    expect(MACHINE_ORDER).toHaveLength(MACHINE_COUNT);
+    expect(BUFFER_ORDER).toHaveLength(MACHINE_COUNT);
     for (const t of F.ticks) {
-      expect(t.states).toHaveLength(26);
-      expect(t.buffers).toHaveLength(26);
+      expect(t.states).toHaveLength(MACHINE_COUNT);
+      expect(t.buffers).toHaveLength(MACHINE_COUNT);
     }
   });
 
-  it("all 31 widths stay in [1,4] at a live step", () => {
-    const widths = widthsAt(150);
-    expect(widths.size).toBe(31);
+  it(`all ${EDGE_COUNT} widths stay in [1,4] at a live step`, () => {
+    const widths = widthsAt(LIVE_STEP);
+    expect(widths.size).toBe(EDGE_COUNT);
     for (const w of widths.values()) {
       expect(w).toBeGreaterThanOrEqual(1);
       expect(w).toBeLessThanOrEqual(4);
@@ -98,7 +108,7 @@ describe("sim wiring: edge widths track live buffer util", () => {
   });
 
   it("higher util renders a wider stroke (monotonic over mapped edges)", () => {
-    const tick = panelTickAt(150);
+    const tick = panelTickAt(LIVE_STEP);
     const util = new Map(bufferBarsFor(tick).map((b) => [b.id, b.util] as const));
     const mapped = PINNED_EDGES.filter((e) => bufferIdForEdge(e) !== null);
     let lo = { u: Number.POSITIVE_INFINITY, id: "" };
@@ -109,21 +119,21 @@ describe("sim wiring: edge widths track live buffer util", () => {
       if (u > hi.u) hi = { u, id: e.id };
     }
     expect(hi.u).toBeGreaterThan(lo.u);
-    const widths = widthsAt(150);
+    const widths = widthsAt(LIVE_STEP);
     expect(widths.get(hi.id) ?? 0).toBeGreaterThan(widths.get(lo.id) ?? 0);
   });
 
   it("SBUF drain width equals widthForUtil of the live SBUF util", () => {
-    const tick = panelTickAt(150);
-    const sbuf = bufferBarsFor(tick).find((b) => b.id === "SBUF");
+    const tick = panelTickAt(LIVE_STEP);
+    const sbuf = bufferBarsFor(tick).find((b) => b.id === SBUF_ID);
     if (sbuf === undefined) throw new Error("SBUF bar missing");
-    expect(widthsAt(150).get("e-SBUF-kit")).toBeCloseTo(widthForUtil(sbuf.util), 9);
+    expect(widthsAt(LIVE_STEP).get(SBUF_KIT_EDGE_ID)).toBeCloseTo(widthForUtil(sbuf.util), 9);
   });
 
   it("storeless edges stay flat at 1 while mapped edges move across steps", () => {
-    const a = widthsAt(0);
-    const b = widthsAt(299);
-    for (const id of ["e-C7-tail", "e-RWK0-ASM0", "e-tail-kit"]) {
+    const a = widthsAt(FIRST_STEP);
+    const b = widthsAt(FINAL_STEP);
+    for (const id of STORELESS_EDGE_IDS) {
       expect(a.get(id)).toBe(1);
       expect(b.get(id)).toBe(1);
     }

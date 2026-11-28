@@ -9,6 +9,11 @@ export interface NarrationBarProps {
   readonly events?: readonly TwinEvent[];
   readonly faults: readonly FaultSpec[];
   readonly onSelectMachine?: (machineId: string) => void;
+  // ADDITIVE (Task 9): diagnosis abstain is priority 0 — renders only when
+  // nothing else claims the bar, never preempts fault/DOWN/buffer/starved/
+  // normal. Decided verdicts render nothing here (the card owns them).
+  readonly diagnosisVerdict?: "decided" | "abstain" | null;
+  readonly diagnosisRoot?: string | null;
 }
 
 interface NarrationState {
@@ -22,6 +27,8 @@ export function NarrationBar({
   tick,
   faults,
   onSelectMachine,
+  diagnosisVerdict,
+  diagnosisRoot,
 }: NarrationBarProps): React.JSX.Element {
   const [current, setCurrent] = useState<NarrationState>({
     text: "Factory initializing. Waiting for simulation stream…",
@@ -40,6 +47,20 @@ export function NarrationBar({
     let candidateText = `Step ${step}: Production running normally.`;
     let candidatePriority = 1;
     let candidateMachine: string | undefined = undefined;
+
+    // ADDITIVE (Task 9): abstain is priority 0 — only when the ladder still
+    // shows NORMAL (nothing claimed the bar) and the bar already shows
+    // NORMAL-or-lower (never preempts fault/DOWN/buffer/starved/normal).
+    if (
+      diagnosisVerdict === "abstain" &&
+      tick &&
+      candidatePriority === 1 &&
+      currentRef.current.priority <= 1
+    ) {
+      candidateText = `Step ${step}: Insufficient evidence — collect more evidence.`;
+      candidatePriority = 0; // below NORMAL(1): dwell gate keeps current message
+    }
+    void diagnosisRoot;
 
     // 1. Check for Active Faults (Priority 5)
     if (faults.length > 0) {
@@ -115,7 +136,7 @@ export function NarrationBar({
         timestamp: now,
       });
     }
-  }, [tick, faults]);
+  }, [tick, faults, diagnosisVerdict]);
 
   const handleClick = () => {
     if (current.targetMachine && onSelectMachine) {
@@ -123,9 +144,12 @@ export function NarrationBar({
     }
   };
 
+  // Priority 0 (diagnosis abstain) reuses the priority-1 bar styling: no
+  // new CSS, no new icon (icons above are untouched by the additive hunk).
+  const barPriority = current.priority === 0 ? 1 : current.priority;
   return (
     <div
-      className={`vd-narration-bar priority-${current.priority} ${current.targetMachine ? "is-clickable" : ""}`}
+      className={`vd-narration-bar priority-${barPriority} ${current.targetMachine ? "is-clickable" : ""}`}
       role="status"
       aria-live="polite"
       aria-atomic="true"

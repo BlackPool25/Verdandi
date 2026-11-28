@@ -11,11 +11,24 @@ import { toFaultSpec } from "../events/anomaly";
 import type { FaultSpec } from "../events/types";
 import { STREAM_MACHINE_ORDER, parseFeedEvents } from "../../sim/streamCodec";
 import { BUFFER_IDS } from "../../store/tick";
-import { SBUF_CAP, SBUF_HIGH } from "./machineMeta";
+import {
+  AGV_TAILS,
+  C7TAIL_ID,
+  FACEPLATE_IDS_EXPECTED,
+  FINAL_STEP,
+  LIVE_STEP,
+  NEVER_DIVERTS,
+  NO_SERIES_LABEL,
+  SBUF_CAP,
+  SBUF_ELIGIBLE_PROBES,
+  SBUF_HIGH,
+  SBUF_HIGH_LEVEL,
+  SBUF_ID,
+} from "../../test/testConstants";
 
 // L4 faceplate rail: the 9 class probes resolve against the live tick row
 // with verbatim config sections; SBUF/_C7TAIL specials stay honest.
-const EXPECTED_IDS = ["A0", "A2", "A8", "A9", "B2", "C7", "ASM1", "ASM2", "RWK0"];
+const EXPECTED_IDS = FACEPLATE_IDS_EXPECTED;
 
 interface FixtureShape {
   readonly header: {
@@ -79,14 +92,14 @@ describe("L4 faceplate rail", () => {
 
   it("each probe resolves live values + verbatim sections at step 150", () => {
     // Given: the live tick row
-    const tick = panelTickAt(150);
+    const tick = panelTickAt(LIVE_STEP);
     // When/Then: every faceplate id renders payload-equal values
     for (const id of FACEPLATE_IDS) {
       const panel = machinePanelFor(tick, id);
       expect(panel.found, `${id} found`).toBe(true);
       if (!panel.found || panel.kind !== "machine") continue;
       const i = STREAM_MACHINE_ORDER.indexOf(id);
-      const raw = tickAt(150);
+      const raw = tickAt(LIVE_STEP);
       expect(panel.state).toBe(raw?.states[i]);
       expect(panel.obs).toBe(raw?.obs[i]);
       expect(panel.tput).toBe(raw?.throughput[i]);
@@ -104,30 +117,34 @@ describe("L4 faceplate rail", () => {
   });
 
   it("tails ride AGV, feed never diverts (faceplate routing)", () => {
-    expect(tailPathFor("A9")).toBe("AGV");
-    expect(tailPathFor("C7")).toBe("AGV");
-    expect(tailPathFor("A0")).toBe("never-diverts");
-    expect(tailPathFor("B2")).toBe("SBUF-eligible");
-    expect(tailPathFor("RWK0")).toBe("SBUF-eligible");
+    for (const tail of AGV_TAILS) {
+      expect(tailPathFor(tail)).toBe("AGV");
+    }
+    for (const feed of NEVER_DIVERTS) {
+      expect(tailPathFor(feed)).toBe("never-diverts");
+    }
+    for (const eligible of SBUF_ELIGIBLE_PROBES) {
+      expect(tailPathFor(eligible)).toBe("SBUF-eligible");
+    }
   });
 
   it("SBUF branch reads level/cap verbatim, high-util at ≥24", () => {
     // Given: the live tick row at step 150
-    const sbuf = sbufPanelFor(panelTickAt(150));
+    const sbuf = sbufPanelFor(panelTickAt(LIVE_STEP));
     // Then: level equals payload, cap 30, threshold ≥80%
-    expect(sbuf.id).toBe("SBUF");
-    expect(sbuf.level).toBe(tickAt(150).sbuf_level);
+    expect(sbuf.id).toBe(SBUF_ID);
+    expect(sbuf.level).toBe(tickAt(LIVE_STEP).sbuf_level);
     expect(sbuf.cap).toBe(SBUF_CAP);
-    expect(SBUF_HIGH).toBeGreaterThanOrEqual(24);
-    expect(sbuf.high).toBe(tickAt(150).sbuf_level >= 24);
-    expect(sbuf.noSeriesLabel).toBe("no per-step series");
+    expect(SBUF_HIGH).toBeGreaterThanOrEqual(SBUF_HIGH_LEVEL);
+    expect(sbuf.high).toBe(tickAt(LIVE_STEP).sbuf_level >= SBUF_HIGH_LEVEL);
+    expect(sbuf.noSeriesLabel).toBe(NO_SERIES_LABEL);
   });
 
   it("_C7TAIL special shows final + no-series label", () => {
-    const panel = machinePanelFor(panelTickAt(299), "_C7TAIL");
+    const panel = machinePanelFor(panelTickAt(FINAL_STEP), C7TAIL_ID);
     expect(panel.found).toBe(true);
     if (!panel.found || panel.kind !== "c7tail") return;
     expect(panel.c7tailFinal).toBe(F.header.c7tail_final);
-    expect(panel.noSeriesLabel).toBe("no per-step series");
+    expect(panel.noSeriesLabel).toBe(NO_SERIES_LABEL);
   });
 });
