@@ -330,6 +330,7 @@ def diagnose_incident(
     h: int = 150,
     forecast_fn=None,
     scores: dict[str, float] | None = None,
+    calibrator: dict | None = None,
 ) -> dict:
     """Full gated diagnosis: onsets → radius-2 candidates → rank → path → link → report.
 
@@ -337,6 +338,7 @@ def diagnose_incident(
     (no forecast branch). store: IncidentStore or None (no persistence).
     Silent-on-clean shape: empty kept entries -> abstain report, never a guess.
     """
+    from src.calibration_artifact import calibrated_conf, load_calibrator
     from src.incidents_store import IncidentStore  # noqa: F401 (re-export hint)
     from src.possibility import neighborhood, rank_nodes, upstream_paths
     from src.report import build_report
@@ -385,6 +387,23 @@ def diagnose_incident(
     ranked = upstream_paths(evidence, edges, anchor)
     path, path_prob = ranked[0]
     root = path[0]
+    # Calibration gate (Task 7/61): conf from T-scaled rank_nodes margin via
+    # Platt; rank/order untouched (gate-only, never re-rank). Below tau the
+    # incident abstains through the existing abstain-card path.
+    cal = calibrator if calibrator is not None else load_calibrator()
+    _T = float(cal.get("T", 1.0))
+    _tau = float(cal.get("tau", float("-inf")))
+    _conf, _margin = calibrated_conf(
+        probs, _T, float(cal.get("a", 0.0)), float(cal.get("b", 0.0)))
+    _confidence = {"top1": _conf, "T": _T, "tau": _tau,
+                   "risk_target": float(cal.get("risk_target", 0.3))}
+    if _conf < _tau:
+        return {
+            "root": None, "fault_family": fault_family, "path": path,
+            "path_prob": float(path_prob), "nodes": [], "upstream": "",
+            "downstream": [], "linked": [], "abstain": "low-confidence-calibrated",
+            "confidence": {"top1": _conf, "tau": _tau},
+        }
     t0 = next((r["onset"] for r in kept if r["machine"] == root), trigger)
     forecast = list(forecast_fn(root, t0)) if forecast_fn else []
     meta = {
@@ -396,7 +415,7 @@ def diagnose_incident(
     }
     linked: list = []
     if store is not None:
-        inc = store.create_incident(root, fault_family, t0, seed)
+        inc = store.create_incident(root, fault_family, t0, seed, conf=_conf, tau=_tau)
         if forecast:
             store.save_prediction(inc, forecast)
         for m in path:
@@ -408,5 +427,5 @@ def diagnose_incident(
     return build_report(
         root=root, fault_family=fault_family, scores=probs, edges=edges,
         anchor=anchor, forecast=forecast, meta=meta, linked=linked,
-        paths=ranked,
+        paths=ranked, confidence=_confidence,
     )

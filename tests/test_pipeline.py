@@ -35,6 +35,9 @@ def test_pipeline_reports_root_path_and_links():
 def store_and_report(edges, store):
     from src.diagnose import diagnose_incident
 
+    # Gated path (Task 7/61): flat heuristic margins abstain, so the
+    # pipeline contract (root/path/links) is exercised with decisive
+    # ranker-like scores, which is the evidence the gate passes.
     return diagnose_incident(
         _df(),
         ["obs_A0", "obs_A1"],
@@ -43,4 +46,5 @@ def store_and_report(edges, store):
         store=store,
         seed=7,
         forecast_fn=lambda root, t_det: [(root, t_det, 0), ("A1", t_det + 4, 1)],
+        scores={"A0": 5.0, "A1": 0.2},
     )

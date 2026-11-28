@@ -206,15 +206,39 @@ def build_rows_hybrid(oof: pd.DataFrame, machines: list[str], fired=None, onsets
     return np.hstack([np.asarray(Xb, dtype=float), flow]), y, groups, fam
 
 
-def _run_lambdarank(X, y, groups, fam):
-    """Shared 3-fold episode-grouped LambdaRank CV → OOF scores."""
-    import lightgbm as lgb
+def _episode_folds(groups, fam, n_splits: int = 3):
+    """Family-stratified episode-grouped fold indices (F12: never every-kth).
+
+    StratifiedGroupKFold over episode groups with family as the stratum:
+    every fold's eval side contains every fault family and no episode
+    appears on both sides of any fold boundary.
+    """
     from sklearn.model_selection import StratifiedGroupKFold
 
-    famids = np.array([hash(f) % (2**31) for f in fam])
+    groups = np.asarray(groups)
+    famids = np.array([hash(f) % (2**31) for f in np.asarray(fam, dtype=str)])
+    cv = StratifiedGroupKFold(n_splits=n_splits)
+    return list(cv.split(np.zeros(len(groups)), famids, groups))
+
+
+def _run_lambdarank(X, y, groups, fam, seed: int = 0, return_folds: bool = False):
+    """Shared 3-fold episode-grouped LambdaRank CV → OOF scores.
+
+    Seed-pinned: StratifiedGroupKFold has no shuffle (deterministic splits);
+    LightGBM gets an explicit seed + deterministic flag (task 2 lineage).
+    Identical episodes/CV to the unseeded run by construction.
+    """
+    import lightgbm as lgb
+
     oof_pred = np.zeros(len(y))
-    cv = StratifiedGroupKFold(n_splits=3)
-    for tr, te in cv.split(X, famids, groups):
+    fold_eps = []
+    # F9 embargo status: NONE REQUIRED. Rows here are per-(episode, machine)
+    # aggregates and groups are whole episodes; windows themselves are built
+    # strictly within episodes (build_windows groupbys episode_id, sliding
+    # g.iloc[s:s+w] inside one episode), so stride-8 overlap is intra-episode
+    # only. Episode-disjoint folds therefore share zero windows/samples.
+    for tr, te in _episode_folds(groups, fam):
+        fold_eps.append(tuple(sorted(set(np.asarray(groups)[te].tolist()))))
         order_tr = np.argsort(groups[tr], kind="stable")
         order_te = np.argsort(groups[te], kind="stable")
         _, gtr = np.unique(groups[tr][order_tr], return_counts=True)
@@ -226,12 +250,15 @@ def _run_lambdarank(X, y, groups, fam):
         bst = lgb.train(
             {"objective": "lambdarank", "lambdarank_truncation_level": 5,
              "lambdarank_norm": True, "num_leaves": 7, "min_data_in_leaf": 20,
-             "learning_rate": 0.05, "verbose": -1},
+             "learning_rate": 0.05, "verbose": -1,
+             "seed": seed, "deterministic": True},
             dtr, num_boost_round=200, valid_sets=[dte],
             callbacks=[lgb.early_stopping(20, verbose=False)],
         )
         te_idx = np.asarray(te)[order_te]
         oof_pred[te_idx] = bst.predict(X[te][order_te])
+    if return_folds:
+        return {"oof_pred": oof_pred, "fold_eps": fold_eps}
     return oof_pred
 
 
@@ -261,7 +288,7 @@ def _report(oof_pred, y, groups, tag, votable, fired_eps):
     return hits, n
 
 
-def main():
+def main(seed: int = 0):
     from src.twin import _MACHINE_ORDER
 
     oof = pd.read_parquet("artifacts/oof_identity.parquet")
@@ -282,7 +309,8 @@ def main():
     onsets = load_onsets()
     print(f"onset features {'ON' if onsets is not None else 'OFF'}", flush=True)
     X, y, groups, fam = build_rows(oof, machines, fired, onsets)
-    oof_pred = _run_lambdarank(X, y, groups, fam)
+    oof_pred = _run_lambdarank(X, y, groups, fam, seed=seed)
+    print(f"eval_stacked seed={seed} (MEASURED lineage)", flush=True)
     import pandas as _pd
 
     _oof = _pd.read_parquet("artifacts/oof_identity.parquet")
@@ -308,7 +336,8 @@ def main():
             base_hits += 1
         base_n += 1
     print(f"stage-1 majority-vote top1={base_hits/max(1,base_n):.3f} (MEASURED, n={base_n})")
-    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups)
+    np.savez("artifacts/stage2-oof.npz", oof_pred=oof_pred, y=y, groups=groups,
+             fam=np.asarray(fam, dtype=str), seed=np.asarray([seed], dtype=int))
     print("saved artifacts/stage2-oof.npz (ranker-level calibration input)", flush=True)
 
 
