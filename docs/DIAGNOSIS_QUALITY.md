@@ -17,12 +17,190 @@ quiet families; integration horizon + per-family features are the levers.
 ## Rerank (attribution given retrieval)
 | config | top-1 | n | bar |
 |---|---|---|---|
-| stage-2 LambdaRank, votable-only | 0.673 | 2665 | ≥0.7 FAIL (gap 0.027) |
-| stage-1 majority vote (teacher) | 0.671 | 2665 | — |
-| stage-2 pooled (silent count as misses) | 0.455–0.456 | 4200 | — |
+| stage-2 LambdaRank, votable-only (pre-regen 11-10) | 0.673 | 2665 | ≥0.7 FAIL (gap 0.027) |
+| stage-1 majority vote (teacher, pre-regen 11-10) | 0.671 | 2665 | — |
+| stage-2 pooled, pre-regen 11-10 (silent count as misses) | 0.455–0.456 | 4200 | — |
+| RERUN 2026-11-25 seed=0: stage-2 votable-only | 0.667 | 2712 | ≥0.7 FAIL (gap 0.033) |
+| RERUN 2026-11-25 seed=0: stage-2 pooled | 0.461 | 4200 | — |
+| RERUN 2026-11-25 seed=0: stage-1 majority vote | 0.654 | 2712 | — |
 
+Rerun lineage: battery m0b-mass-balanced-v1 regenerated seed=0 (4200 fault +
+600 clean, 48 shards), window cache n=96000, teacher OOF seed=0, onsets ON,
+sentinel features OFF (no frozen_oof producer in tree), LambdaRank 3-fold
+episode-grouped CV seed=0 deterministic. Input: `artifacts/stage2-oof.npz`
+(oof_pred/y/groups/fam, 4200×26 rows).
 Verdict: ranker == teacher (three feature sets, aligned measurement).
 Remaining rerank levers: onset/state row features, per-family rankers.
+
+Norm-matched family comparison (MEASURED 2026-11-25, W-normfam, seed=0):
+the published multiclass-vs-binary gap (multiclass window-F1 0.795 <
+binary 0.846, `WINDOW_GBM_V1_MODEL_CARD.md:71-76`) is NOT a normalization
+artifact. 2x2 OOF rerun (`scripts/eval_family_norm.py`, 5 tests green in
+`tests/test_eval_family_norm.py`) — {binary, multiclass}
+x {clean-only norm, all-row norm} on the same seed-pinned 240 episodes
+(24/family + 72 clean) of the dense-cut battery (`artifacts/m0b_mass_c*.parquet`,
+w=128/stride=8 invariant-23, n=4800 windows, 3-fold episode-grouped CV):
+| head | clean-norm F1 | all-norm F1 | norm effect |
+|---|---|---|---|
+| binary (fault vs window) | 0.7773 | 0.7773 | 0.0000 |
+| multiclass (8-class, fault = pred != none) | 0.7645 | 0.7645 | 0.0000 |
+Matched gaps: multi−binary = −0.0128 under clean norm and −0.0128 under all
+norm (published confounded gap −0.051 same sign). Mechanism: HistGBM trees
+are invariant to per-column affine rescaling (order-preserving transform →
+identical splits), so the norm protocol cannot move either head — verified
+exactly, not approximately. Multiclass attribution still collapses on obs
+families under matched norms (bias 0.303 / drift 0.048 / quality 0.066 /
+spike 0.075 vs breakdown 0.796 / loss 0.929), replicating the model-card
+kill basis. Verdict: the family-capped conclusion SURVIVES — multiclass stays
+killed, per-family thresholds on the binary head remain the family mechanism.
+Lineage: `artifacts/eval_family_norm.json` (episode_ids listed, seed=0).
+
+## Rerank variants + path teleport (MEASURED 2026-11-25, Task 5, seed=0)
+Variant 1 = post-hoc calibrated rerank on `stage2-oof.npz` (identical
+episodes/groups; `rerank_top1`, same argsort tie-breaking as `_report`):
+| variant | votable top-1 | pooled top-1 | n | bar ≥0.7 |
+|---|---|---|---|---|
+| baseline (rerun) | 0.667 | 0.461 | 2712/4200 | FAIL (gap 0.033) |
+| V1 calibrated (T=0.168 from `ranker-calibration.json`) | 0.667 | 0.461 | 2712/4200 | STRIKE (Δ 0.000 — T preserves argmax, Guo 2017) |
+| V2 truncation_level 5→2 (loss focuses top positions; identical splits via shared `_lambdarank_cv` core) | 0.665 | 0.458 | 2712/4200 | STRIKE (Δ −0.002/−0.003, noise; MRR 0.557 uncompared) |
+
+Max 2 variants reached — bar stays missed, no silent revivals. Ranker
+verdict: **STRUCK at 0.667** (abstain-gate ships without it).
+
+Path teleport (64): PPR `flow_teleport` in `src/possibility.py`
+(teleport = ranker-softmax × flow mass, α=0.85) wired into the ranked arm
+(`--teleport`; flow mass = max over steps of up+down `buffer_*`
+occupancy via `_line_edges`). Ranked-arm re-run moved with the 11-25
+battery regen (old 0.162/0.413 of 11-11 is stale data, not a code change):
+| arm (n=167, seed=0, k=3) | root-hit@1 | subseq@3 | mean-k |
+|---|---|---|---|
+| ranked re-run | 0.072 | 0.287 | 1.8 |
+| ranked + teleport α=0.85 | 0.072 | 0.287 | 1.8 |
+
+Keep rule: ≥ rerun+0.030 with subseq no-regress (absolute 0.192 assumed
+the stale 0.162 baseline). Measured Δ +0.000 → **diagnostic-only**.
+Mechanism: flow mass is non-degenerate (18/22 machines nonzero per ep)
+and teleport flips node-top1 in 28/167 eps (mean |Δp| 0.033) — wash
+flips with no truth direction; k-best ordering absorbs the rest.
+
+## Tev decider (MEASURED 2026-11-25, n=60 seed=0)
+`scripts/eval_tev.py` (defaults n=60/seed=0, `--transport cli|http`) over the
+frozen T=300 battery (`artifacts/m0b_mass_*.parquet`, 48 shards). 60 episodes
+sampled seed=0, 53 measurable (7 skipped: clean truth or no onset entries).
+Rich per-candidate criteria (onset tick/kind/state + `evidence_for` channel
+bits) present. Transport lineage: `tev1:4b` (7954dce22bc6) in this Ollama
+build (v0.40.16) is a decision-model runner — `/api/generate` returns HTTP
+400 and `/api/chat` reports "does not support chat", so `TevClient`'s HTTP
+path cannot reach it; the eval uses an eval-only CLI transport
+(`CliDecisionClient` in `scripts/eval_tev.py`: one
+`ollama run tev1:4b --ask/--choice` per question, 60 s per-ask cap).
+`TevClient`'s 300 s class default is untouched (fix is an explicit eval-side
+timeout). Per-call latency ~0.1 s (model GPU-resident).
+| metric | value | n |
+|---|---|---|
+| tev machine top-1 (canonical: shuffle fixed-arm rerun 2026-11-25) | 0.113 (6/53) | 53 |
+| tev family top-1 (Task-4 + both shuffle arms agree) | 0.132 (7/53) | 53 |
+| null/abstain rate | 0.000 | 53 |
+| teacher stage-1 ref | 0.671 | 2712 |
+
+Drift note: Task-4 baseline machine was 0.094 (5/53); the seed-0 shuffle
+fixed-arm rerun measures 0.113 (6/53) — one-episode drift under the ids-first
+loader change (episode set verified identical between fixed/shuffled arms;
+vs-baseline drift unexplained). Verdict-robust: both << 0.671. Baseline
+pathology stands: default-choice bias (machine B7S on 49/53, family `loss`
+on 51/53); baseline gated SC 0.094 (5/53).
+Verdict: **KILL as decider** (0.113 << 0.671 teacher; SC confirms < 0.3).
+Disposition: tev kept for phrasing only; ranker stays decider. Never piped
+into ranker.
+
+### Criteria-order shuffle (MEASURED 2026-11-25, PRISSUE-62, n=60 seed=0)
+`--order fixed|shuffled --order-seed 1`: shuffles every choice question's
+criteria dict (the `--choice` argv order the model sees); episode set pinned
+by seed=0 (identical 53 measurable episodes both arms; order uses a separate
+RNG stream). Same transport/model/lineage as above.
+| order | machine top-1 | family top-1 | null rate | n |
+|---|---|---|---|---|
+| fixed | 0.113 (6/53) | 0.132 (7/53) | 0.000 | 53 |
+| shuffled (order-seed=1) | 0.113 (6/53) | 0.170 (9/53) | 0.000 | 53 |
+
+Fixed-arm gated SC (machine-only, 5 votes): 0.113 — unchanged, still < 0.3.
+Shuffled-arm gated SC: 0.094 — also < 0.3.
+Machine score identical under shuffled option order: shuffling neither
+rescues nor collapses the decider, so the failure is not an option-order
+artifact (no position-bias rescue; default-choice pathology stands on its
+own). Family +0.038 under shuffle is noise at n=53, still << teacher.
+Verdict: **KILL stays** (0.113 << 0.671; kill lifts only at machine ≥ 0.671).
+Eval-side note: full-concat battery load OOMed under shared-machine pressure;
+loader now samples ids first (column-projected, episode-filtered per shard;
+same seed=0 episode set, verified identical).
+Logs: `artifacts/tev_shuffle62_fixed.log`, `artifacts/tev_shuffle62_shuffled.log`.
+
+## Template faithfulness (MEASURED 2026-11-25, n=60 seed=0)
+`scripts/eval_jev.py` (defaults n=60/seed=0) over the frozen T=300 battery
+(`artifacts/m0b_mass_*.parquet`, 48 shards). Deterministic P/R from
+`src/faithfulness.py` (slot recall + trace-coverage recall); NLI arm gated
+on `VERDANDI_MNLI_PATH`, skipped honestly without it.
+| metric | value | n |
+|---|---|---|
+| template citation precision | undefined (0 non-abstain cards) | 0/60 |
+| template slot recall | undefined (0 non-abstain cards) | 0/60 |
+| template per-claim recall (required-cited/required) | undefined (0 non-abstain cards) | 0/60 |
+| template trace-coverage recall | undefined (0 non-abstain cards) | 0/60 |
+| abstain rate | 1.000 (60/60) | 60 |
+| NLI faithfulness | SKIPPED (no local MNLI model) | — |
+
+Pairing rule (2026-11-25): precision/recall are only emitted via
+`scripts/eval_jev.py::format_report`, which always appends `abstain_rate`
+to the metric line — enforced by `test_precision_never_reported_without_abstain_rate`.
+
+Lineage: `src/faithfulness.py` (`NliUnavailable`-gated 3-run x 2-order
+aggregator, flip-kill 0.20; `claim_recall` fractional required-cited/required
+slice beside the binary slot gate) + `requirements-eval-nli.txt` (eval-only deps;
+`requirements.txt` stays CPU-only/no-torch). Fixture recall is 1.0 by
+construction (`tests/test_eval_faithfulness.py`, stub clients only).
+Verdict: without a Jev decision client every card abstains by design, so
+corpus P/R is vacuous — the slot-recall gate is in place as a regression
+gate and bites once a decider client exists. NLI numbers explicitly
+deferred: no MNLI weights cached (B1), no torch/transformers installed
+(B2); download + n=60 NLI run need a quiet machine / lane decision.
+
+## Ranker calibration (MEASURED 2026-11-25, ranker-level T+Platt)
+Fit on OOF-val episodes only (fam-stratified 50/50 split, split_seed=0;
+n_fit=2100 eps), all numbers below on disjoint EVAL episodes (n=2100) —
+never fit on the reporting split. Platt over isotonic (eval-scale n≈2100
+episodes is the small-n regime). tau picked on FIT at risk≤0.3, frozen,
+applied to EVAL.
+| split | T | ECE before→after | NLL before→after | tau | coverage | risk | forced | gated |
+|---|---|---|---|---|---|---|---|---|
+| ranker EVAL votable (n=1337) | 0.168 | 0.383→0.068 | 2.840→2.031 | 0.187 | 0.893 | 0.284 | 0.662 | 0.716 |
+| ranker EVAL pooled (n=2100) | 0.168 | same fit | same fit | 0.187 | 0.578 | 0.294 | 0.455 | 0.706 |
+
+Platt(a=4.355, b=-1.817); margin_def = top1−top2 of T-scaled ranker candidate
+softmax probs. Artifact: `artifacts/ranker-calibration.json` (T/a/b/tau +
+risk-coverage curve + lineage: battery_seed=0, stacked_seed=0, split_seed=0).
+Abstain-gated rerank keeps rank order (no re-ranking by calibrated prob);
+gate converts silence+low-conf to abstain at ~0.29 risk on pooled eval.
+
+## Open-set exclude-held-5 (MEASURED 2026-11-25, true unknown-reject)
+Held-5 machines: ASM1/ASM2/B7P/B9/C6. Teacher retrained excluding all
+held-5-rooted episodes (train_windows_n=80800, HistGBM max_iter=300 seed=0,
+same identity features/norm as train_origin) → eval on held-5 only:
+| metric | value | n |
+|---|---|---|
+| exclude-held window forced top-1 | 0.000 | 8582 |
+| exclude-held episode pooled top-1 | 0.000 | 760 |
+| exclude-held episode votable top-1 | 0.000 | 347 |
+| in-fleet teacher window forced top-1 on held-5 (leaky ref) | 0.296 | 8582 |
+
+Zero forced accuracy is the closed-set expectation (unseen labels cannot be
+named) — the shippable quantity is abstention, not forced accuracy.
+Gate transfer (raw-margin Platt a=5.657/b=-3.603 fit on 38312 non-held fault
+windows, tau=0.044 @risk≤0.3 frozen there → held-5 fault windows n=8582):
+coverage 0.490, risk 0.413, abstain 0.510.
+Transfer verdict: risk 0.413 EXCEEDS the 0.3 budget on truly unseen machines —
+the 11-11 T=2.58 row (cov 0.337 @ risk 0.300, different margin_def/battery)
+does not reproduce as a risk guarantee here; abstain-by-gate is the measured
+unknown-reject behavior (abstain ≈0.51 at this operating point).
 
 ## End-to-end pooled
 | config | pooled top-1 |
@@ -32,18 +210,55 @@ Remaining rerank levers: onset/state row features, per-family rankers.
 
 Old pooled bar ≥0.5: NOT MET (superseded by decomposed bars).
 
-## Routes (MEASURED 2026-11-11, n=167, same seed)
+## Routes (MEASURED 2026-11-11, n=167, same seed — SUPERSEDED by 11-25 regen rows in Rerank section above; retained as pre-regen record)
 Heuristic evidence: root-hit@1 0.132 / subseq@3 0.413 / mean-k 1.5.
 Ranker evidence (fresh 38-col artifact): root-hit@1 **0.162** / subseq@3 0.413 / mean-k 1.5.
-Keep bar: root-hit beats (+0.030, ~noise edge at n=167), subseq ties → **path layer KEPT** (ranker evidence strictly better, no regression) but absolute quality stays diagnostic-only, non-ship.
+Keep bar: root-hit beats (+0.030, ~noise edge at n=167), subseq ties → **path layer KEPT** (ranker evidence strictly better, no regression) but absolute quality stays diagnostic-only, non-ship. (Superseded 2026-11-25: regen baseline 0.072/0.287/k1.8, teleport Δ+0 → diagnostic-only stands.)
 
 ## Family typing (invariant windows, GroupKFold)
 Overall 0.502. breakdown 0.752 / delay 0.753 / loss 0.810 vs bias 0.226 /
 drift 0.313 / quality 0.412 / spike 0.247. Provisional: invariant path
 keeps frozen struct cols (leak bounded small per v7 ablation).
 
-## Sensor / onset (prior handoff numbers, not re-measured here)
+## Sensor / onset (prior handoff numbers — SUPERSEDED by grid audit below, 2026-11-25)
 Sensor top-1 0.26–0.33, onset err ~90 ticks. Process top-1 0.76, onset err 2.0.
+SUPERSEDED: grid provenance unverified ("not re-measured here"); tick-level
+errors are grid-N/A by construction (sensor stack is tick-level,
+`scripts/eval_sensor_stack.py`; ROI head anchors on w128 triggers,
+`scripts/train_roi_head.py:36,55-59`) — but the numbers themselves are
+un-reproduced handoff claims. Do not cite without the audit row.
+
+## Onset/delay grid audit (MEASURED 2026-11-25, W-onsetgrid, seed=0)
+Grid verdict: DELAY claim was on the wrong grid (CONFIRMED); ONSET path was
+already on the artifact grid (claim refuted with evidence — no re-measure).
+- Delay: `scripts/bench_windows.py:142` rebuilt the stream at hardcoded w=32
+  (v1 grid) while the shipped detector grid is w=128/stride 8 (model card v2,
+  `scripts/cache_windows.py:65`, all `scripts/eval_*.py`). Fixed: stream grid
+  now resolves from the artifact's own `model.joblib` w/stride (`--w/--stride`
+  override). The model-card line "Streaming delay: p50 0 ticks" is SUPERSEDED
+  (wrong grid, no operating point / n / seed) — corrected below.
+- Onset: `scripts/evaluate_localize.py:35,43-44` hardcodes w=128/stride-8/center-64
+  with triggers from w128 OOF — artifact grid already. Localizer verdict numbers
+  (loss/breakdown |err| 13/15 → calibrated 2/0; delay 123; obs 111-184) stand
+  on their grid. Locked by `tests/test_onset_grid.py::test_evaluate_localize_is_w128_grid`.
+- Corrected streaming delay, `scripts/eval_localize.py` (new canonical path) on
+  frozen `artifacts/window_cache` (96000 w128/s8 windows, 4800 eps; stride
+  asserted at runtime; builder lineage `cache_windows.py:64-66`): seed-pinned
+  HistGBM(300) + sigmoid calibration, train 3200 eps / report held-out 1600 eps
+  (1400 fault + 200 clean; finalize split rule `finalize_window_model.py:68-69`;
+  caveat per split audit: every-3rd, not fam-stratified):
+  thresholds global-maxF1=0.602, score med pos/neg 0.700/0.475 (n=15735/16265).
+  | operating point | delay p50 | delay max | pre-fault-fire frac | fired | missed |
+  |---|---|---|---|---|---|
+  | global 0.8 (locked) | 0 | 128 | 0.00 | 739/1400 | 661/1400 |
+  | global 0.5 | −32 | 144 | 0.65 | 1399/1400 | 1/1400 |
+  | per-family tuned | 0 | 32 | 0.49 | 1389/1400 | 11/1400 |
+  Delay def: (first firing window − first fault-overlap window) × 8
+  (`bench_windows.stream_delays`); negative = clean-window fire ahead of the
+  fault ("early-fire on wide windows", now quantified). Note: locked-0.8 p50=0
+  matches the old headline numerically but pairs with a 0.47 miss rate on this
+  seed/split (card operating table claimed epHit 0.753 @0.8 — gap recorded,
+  detector seed unrecorded in card, not reconcilable here).
 
 ## Calibration (MEASURED 2026-11-11, teacher OOF windows, n=96000)
 T=2.58 (strongly overconfident — consistent with hard-vote findings).
@@ -61,8 +276,20 @@ Ranker-level calibration input: `artifacts/stage2-oof.npz` (saved by `eval_stack
 
 Generalization gap is real (0.70→0.33 forced). The coverage gate converts it
 to abstention: on unseen machines it predicts on 34% at the same 0.30 risk.
-Open-set retrain (exclude-held training) not run — the reject-by-abstain
-behavior above is the shippable half; forced-accuracy transfer is not claimed.
+Open-set retrain (exclude-held, 2026-11-25): forced top-1 on truly unseen
+machines is 0.000 (closed-set expectation); the measured unknown-reject is
+abstention — raw-margin gate abstains 0.510 at risk 0.413 on held-5
+(n=8582), over the 0.3 budget. Forced-accuracy transfer is not claimed.
+- Split integrity (2026-11-25, PRISSUE-75 F12/F9): ranker CV
+  (`scripts/eval_stacked.py::_episode_folds`) is family-stratified episode-grouped
+  (StratifiedGroupKFold, every family in every fold — verified by
+  `tests/test_stacked_splits.py`); ranker T/Platt fit/eval split is likewise
+  fam-stratified (`fit_ranker_calibration.split_episodes`). NOTE for owner of
+  `scripts/finalize_window_model.py:69`: its `cal_eps = set(eps[2::3])` is
+  order-dependent every-3rd-episode, NOT family-stratified — out of scope here,
+  flagged not fixed. Embargo: NONE REQUIRED — windows are built strictly within
+  episodes (`build_windows` groupbys `episode_id`), so stride-8 overlap is
+  intra-episode only and episode-disjoint folds share zero samples.
 - Per-hop delay calibration: bounds ASSUMED (0,60) pending histogram.
 - Cost-weighted metric: deferred per user (accuracy-only bars stand).
 
@@ -70,3 +297,17 @@ behavior above is the shippable half; forced-accuracy transfer is not claimed.
 Identity classifier 0.606, stacked 0.608/0.610, dense retrieval 1.000
 (GT-anchored `stale_hold_run`/`reject_flag_count`/`down_run` features).
 Clean identity 0.674 stands. Frozen v7 exposure bounded at -3.4pp.
+
+## Follow-up measurement records (2026-11-25 wave)
+
+### Gate input-shape + served-artifact verify (F16/F20, PRISSUE-61)
+Teacher features (`X_identity`, shape `(96000, 134)` = 5x26 obs stats + 4 timing): width **134, not 138** — the banned four never enter fit features (`src/window_dataset.py:24-30`). Served artifact `artifacts/calibration.json`: T=2.58, tau=0.739 frozen; VERIFY coverage **0.232** @ risk **0.044** (budget 0.3), n=8582 exclude-held windows. Poison immunity: window-feature poison leaves X byte-identical; 999-valued banned cols change gate conf + abstain outputs not at all. Tests: `tests/test_calibration_gate.py` (gate I/O shapes), committed.
+
+### Measured selective E2E (66, PRISSUE-66)
+`scripts/eval_e2e_selective.py`, seeds 0+1, n=400, live gate tau=0.739: pooled coverage **0.020** (8/400) @ selective accuracy **0.625** (selective risk 0.375). Seed splits: s0 coverage 0.015 (3/200) @ acc 0.333; s1 coverage 0.025 (5/200) @ acc 0.800. Abstain mix: single-node 233 / silent-clean 72 / low_conf 87 — single-node attrition dominates and was never modeled in the derived number. Derived ~0.214 coverage @ ~0.70 accuracy STRUCK (do not cite). Scope unchanged. Lineage: `artifacts/e2e-selective-n200-s0/s1.json`.
+
+### v2 naturals-ON rerun (74, PRISSUE-74)
+Production-ambient rerun (both arms `--natural-breakdowns`, seed 1, 700/300): ON retrieval **0.733** vs OFF **0.694** BUT clean-fire **0.117 > 0.093** → KEEP condition fails nominally → verdict **SCOPED** to quality/loss-only (focused win stands). Gaps underpowered (ret z=1.61, cf CI incl. 0); knob-freeze PASS (200 v2-flag diffs only). Lineage: `docs/m0b_mass_v2_fullnat_{off,on}.json`, `docs/SIM_BASELINE.md` rerun table.
+
+### Void / superseded source audit (69, PRISSUE-69)
+SHIP_STATUS + PROJECT_REPORT: no citable occurrences of void numbers (v1 single-origin 0.963, PR#31 collision battery). Void set lives only labeled: `docs/WINDOW_GBM_V1_MODEL_CARD.md:55` (0.963 as superseded reference), `docs/NEXT_AGENT_BRIEF.md:63` (A0-only 0.963 origin memorization). PR identities: #29 = v1 0.963 source (merged, 48 files); PR#30-only-vs-main set EMPTY. F13: v6 digest references explicitly unpinned.

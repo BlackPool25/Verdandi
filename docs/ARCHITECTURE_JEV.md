@@ -6,7 +6,7 @@ API available, Jev decides full 26x7+null, null->abstain, layered card+dossier).
 ## 1. Pipeline
 
 ```
-detect (frozen v7, 0.800@0.032)
+detect (retrained frozen sentinel, 0.800@0.032)
   -> candidates (radius-2) + onsets + flow counters + calibrated confidence
   -> EVIDENCE PACKET (schema v1, every field has an id)
   -> Jev decider (API): {machine: choice[26+null], family: choice[7+null],
@@ -48,7 +48,8 @@ evidence fields (they are measurements, not verdicts).
   output, never computed by the phraser. Schema-constrained decoding;
   temperature 0. Template fallback when API unreachable (deterministic).
 - Eval (fixed episode set): faithfulness (claims entailed by cited IDs),
-  citation precision/recall, category accuracy vs GBM 0.671 baseline,
+  citation precision/recall, category accuracy vs GBM 0.671 pre-regen
+  baseline (0.654 rerun; `PROJECT_REPORT.md` §3),
   null rate vs coverage. LLM-judge aggregated over runs.
 
 ## 5. What this kills / keeps

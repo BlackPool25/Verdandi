@@ -23,11 +23,123 @@ Code: HEAD at plan start (`git log --oneline -1` at commit time).
 
 Confirms audit: silence concentrated in loss + quality-off-sink + incipient sensor rungs.
 
-## Diagnosis numbers on this battery (MEASURED, unchanged by sim work)
-- Retrieval 0.800 @ 0.032; rerank 0.685 votable; paths root@1 0.132 / subseq@3 0.413 (k 1.5);
+## Diagnosis numbers on this battery (MEASURED, unchanged by sim work; refreshed to regen-current 2026-11-25)
+- Retrieval 0.800 @ 0.032; rerank 0.667 votable rerun; paths root@1 0.072 / subseq@3 0.287 (k 1.8);
   family 0.502; sensor 0.26–0.33; onset proc 2.0 / sensor ~90; e2e pooled 0.432–0.436.
 
 ## v2 firing comparison (MEASURED 2026-11-10, focused quality+loss battery)
+
+## v2 full-mix verdict (MEASURED 2026-11-25, PRISSUE-74 — KEEP under breakdown-free ambient; SCOPED under production ambient, rerun section below)
+
+Arms: 7 families × 2 rungs, `--n-per-cell 50 --n-clean 300 --seed 1` →
+700 fault + 300 clean = 1000 eps/arm, 2000 eps total, seed-identical grids
+(verified: `fault_episodes` + `clean_episodes` equal across manifests; arms
+differ ONLY in `--sink-all-quality --couple-loss`). Manifests:
+`docs/m0b_mass_v2_full_{off,on}.json` (fault eps 40000..40699, clean from
+41700 — blocks never overlap). Caches: `artifacts/cache_v2_full_{off,on}`
+(n=20000 windows each = 20/ep effective). Head: `eval_fire_flow`
+GroupKFold(3) HistGBM(max_iter=100), firing = ≥thr on 2 of trailing 3
+windows; `scrapped_total` kept in F_flow aggregates (present in shard
+columns, flows into the vectorized flow block). Lineage: seed 1 both arms;
+clean n=300 (±~3pp noise vs ±~4pp in the focused run).
+
+| arm | tag | thr | retrieval | clean-fire | med-err | n |
+|---|---|---|---|---|---|---|
+| OFF | obs-only | 0.5 | 0.751 | 0.223 | 0.0 | 700/300 |
+| OFF | obs-only | 0.7 | 0.680 | 0.080 | 0.0 | 700/300 |
+| OFF | obs+flow | 0.5 | 0.766 | 0.253 | 0.0 | 700/300 |
+| OFF | obs+flow | 0.7 | 0.687 | 0.070 | 0.0 | 700/300 |
+| ON | obs-only | 0.5 | 0.781 | 0.153 | 0.0 | 700/300 |
+| ON | obs-only | 0.7 | 0.724 | 0.050 | 0.0 | 700/300 |
+| ON | obs+flow | 0.5 | 0.794 | 0.197 | 0.0 | 700/300 |
+| ON | obs+flow | 0.7 | 0.719 | 0.063 | 0.0 | 700/300 |
+
+Pre-registered rule (primary: thr-0.7 `obs+flow ON` vs `obs-only OFF`):
+ON 0.719 > OFF 0.680 at ON clean-fire 0.063 ≤ OFF 0.080 → **KEEP**;
+same direction at thr 0.5 (0.794 > 0.751 at 0.197 ≤ 0.223) → confirmed.
+Effect size is modest (Δret +0.039 ≈ 2.2σ, se≈1.7pp @ n=700; Δcf −0.017),
+but the sign is consistent across both thrs and both ON tags (ON obs-only
+also beats OFF obs-only: 0.724 vs 0.680 @ 0.050 vs 0.080 — same mediated
+routing effect seen in the focused run). General (7-family) v2 firing claim
+is therefore CONFIRMED for the `eval_fire_flow` head - not scoped to
+quality/loss. Scope note: this confirms the experimental firing head only (under breakdown-free ambient — see rerun section below for the production-ambient scoping);
+shipped detector (frozen sentinel), ranker, and §8 ship/abstain dispositions
+are unchanged (no PROJECT_REPORT §8 amendment — no Task 1 scope change).
+
+## W-v2naturals74 audit (2026-11-25, PRISSUE-74 follow-up — production-ambient + power + knob-freeze)
+
+Scope: full-mix OFF/ON arms (`docs/m0b_mass_v2_full_{off,on}.json`, seed 1,
+700 fault + 300 clean/arm). Eval reproduced exactly on existing caches
+(`eval_fire_flow` thr-0.7 rows match the table above, all 8 rows).
+
+- (1) Natural breakdowns ON? **FAIL.** `scripts/gen_mass_battery.py`
+  hardcoded `enable_natural_breakdown=False`; both arms generated
+  breakdown-free. `export_v6` default is True (production); the script
+  overrode it. Production condition per `M0B_FREEZE_INPUT:29` /
+  `TEST_CASES:241` / `SIM_SPEC:184` is naturals ON. (Breakdown *fault
+  family* present in grid = injected faults, not ambient MTTF/MTTR.)
+  Manifests record no ambient flag — provenance gap.
+- (2) Clean-fire power @ n=300/arm? **FAIL (state the limit).** Exact counts
+  from reproduced eval: ON 19/300 = 0.063 vs OFF 24/300 = 0.080,
+  Δ=-0.0167, two-sample SE=0.0210, 95% CI (-0.058,+0.025) — includes 0.
+  MDE@80% ≈ 0.059 >> observed 0.017. Retrieval likewise: 503/700 vs 476/700,
+  Δ=+0.0386, SE=0.0245, z=1.57, two-sided p≈0.12, 95% CI (-0.009,+0.087) —
+  includes 0 (the "≈2.2σ" in the verdict section used single-arm SE;
+  two-sample z≈1.6). Sign consistent across all 4 ON-vs-OFF comparisons, but
+  neither gap is powered at 95%. Powering Δcf=0.017 needs ~4300 clean/arm —
+  infeasible; the KEEP rule stays a nominal non-inferiority read.
+- (3) Gain knobs frozen per protocol E? **PASS.** Row diff OFF↔ON ignoring
+  `extra`: 0. `extra` diffs exactly 200: 100 loss `couple_loss` + 100
+  quality `sink_all` — the two v2 flags, nothing else. Grids, seeds (1),
+  mag/sev/dur/t0 all identical. No gain/volume knob moved.
+
+Rerun demanded by (1): both arms (grid-identity forces the pair),
+`--natural-breakdowns` (new passthrough flag on the existing script,
+default off — gate `test_battery_v2` still 6/6), seed 1, same 50/300
+density, NEW paths `docs/m0b_mass_v2_fullnat_{off,on}.json` +
+`artifacts/cache_v2_fullnat_{off,on}`. (2)'s limit stands by arithmetic at
+this density — rerun fixes ambient, not power. Footgun: the flag defaults
+off (preserves Task-3 ambient for `test_battery_v2`); any production-ambient
+regen MUST pass `--natural-breakdowns` or it silently reproduces the
+breakdown-free battery. Verdict/SHIP_STATUS: KEEP stands as
+measured-under-breakdown-free-ambient (section above), caveated; production
+confirmation in the rerun section below (SCOPE). SHIP_STATUS v2 row updated
+in this commit for the flip (scoped wording + manifest sha256 pins).
+
+## W-v2naturals74 rerun results (production ambient, naturals ON — SCOPE)
+
+Reran both arms seed-1, 50/300, `--natural-breakdowns`, grid-identity
+re-verified (eps equal, only the 200 v2-flag `extra` diffs). n=20000
+windows/arm. Measured `eval_fire_flow`:
+
+| arm | tag | thr | retrieval | clean-fire | med-err | n |
+|---|---|---|---|---|---|---|
+| OFF | obs-only | 0.5 | 0.771 | 0.263 | 8.0 | 700/300 |
+| OFF | obs-only | 0.7 | 0.694 | 0.093 | 0.0 | 700/300 |
+| OFF | obs+flow | 0.5 | 0.789 | 0.290 | 8.0 | 700/300 |
+| OFF | obs+flow | 0.7 | 0.709 | 0.123 | 0.0 | 700/300 |
+| ON | obs-only | 0.5 | 0.789 | 0.227 | 0.0 | 700/300 |
+| ON | obs-only | 0.7 | 0.726 | 0.083 | 0.0 | 700/300 |
+| ON | obs+flow | 0.5 | 0.804 | 0.217 | 0.0 | 700/300 |
+| ON | obs+flow | 0.7 | 0.733 | 0.117 | 0.0 | 700/300 |
+
+Pre-registered primary (thr 0.7, `obs+flow ON` vs `obs-only OFF`): ON
+0.733 > OFF 0.694 BUT ON clean-fire 0.117 > OFF 0.093 → KEEP condition
+**NOT met** nominally. thr 0.5 passes (0.804 > 0.771 @ 0.217 ≤ 0.263);
+same-tag readings pass both (obs-only 0.726 vs 0.694 @ 0.083 vs 0.093;
+obs+flow 0.733 vs 0.709 @ 0.117 vs 0.123). Stats: Δret=+0.039
+(513/700 vs 486/700), z=1.61, 95% CI includes 0; Δcf=+0.023 (35/300 vs
+28/300), 95% CI (-0.026,+0.072) includes 0 — the cf "regression" is
+noise, but the rule is nominal, so the primary fails as written.
+**Verdict update: SCOPE** — general (7-family) v2 firing claim NOT
+confirmed under production ambient; win stays quality/loss-only (focused
+precedent untouched). The `## v2 full-mix verdict` KEEP above stands only
+as measured-under-breakdown-free-ambient. New manifests:
+`docs/m0b_mass_v2_fullnat_{off,on}.json`; caches
+`artifacts/cache_v2_fullnat_{off,on}` (gitignored). FLAGGED for
+W-docs69/controller: SHIP_STATUS v2-row tripwire updated in this commit
+(scoped wording + sha pins restored above); PROJECT_ARCHITECTURE firing
+bullet verified already scoped — no change needed.
 
 ## Task 4 hybrid ranker (MEASURED 2026-11-10, focused ON arm — STRUCK)
 
