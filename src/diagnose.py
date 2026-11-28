@@ -318,6 +318,64 @@ def diagnose_from_trigger(
     return kept
 
 
+def _delay_starved_inputs(
+    g,
+    root: str,
+    evidence: dict[str, dict],
+    edges: dict[str, list[str]],
+    kept: list[dict],
+) -> tuple[float, float, int, float] | None:
+    """Derive (injected, starved, n_downstream, shield) for the delay mass gate.
+
+    Steps-to-steps, per FINAL-probeassist calibration notes: injected =
+    tputlag_{root} steps above the pre-onset max from the root onset onward;
+    starved = STARVED steps summed over downstream evidence machines from the
+    root onset onward; n_downstream = downstream evidence machines reachable
+    from root (2 for C2->C6/C7; 0 for sinks -> vacuous); shield = queued
+    buffer cover at root onset - 1 (0.0 when no buffer columns). Returns None
+    when the episode carries no delay signature (no tputlag column at the
+    root candidate): gate not applicable, pass through unchanged.
+    """
+    import numpy as np
+
+    t0 = next((r["onset"] for r in kept if r["machine"] == root), None)
+    cc = f"tputlag_{root}"
+    if t0 is None or cc not in g.columns:
+        return None
+    steps = (
+        g["step"].to_numpy() if "step" in g.columns else np.arange(len(g))
+    )
+    cv = g[cc].to_numpy(dtype=float)
+    pre = steps < t0
+    pmax = float(cv[pre].max(initial=0.0)) if pre.any() else 0.0
+    injected = float(((steps >= t0) & (cv > pmax)).sum())
+    if injected <= 0:
+        return None
+    seen = {root}
+    queue = [root]
+    while queue:
+        u = queue.pop(0)
+        for v in edges.get(u, []) or []:
+            if v not in seen:
+                seen.add(v)
+                queue.append(v)
+    down = sorted(m for m in evidence if m != root and m in seen)
+    starved = 0.0
+    for m in down:
+        sc = f"state_{m}"
+        if sc in g.columns:
+            starved += float(
+                ((steps >= t0) & (g[sc].to_numpy() == "STARVED")).sum()
+            )
+    shield = 0.0
+    buf_cols = [c for c in g.columns if c.startswith("buffer_")]
+    if buf_cols and "step" in g.columns:
+        prow = g[g["step"] == t0 - 1]
+        if len(prow):
+            shield = float(prow[buf_cols].to_numpy(dtype=float).sum())
+    return (injected, starved, len(down), shield)
+
+
 def diagnose_incident(
     g,
     obs_cols: list[str],
@@ -338,7 +396,12 @@ def diagnose_incident(
     Silent-on-clean shape: empty kept entries -> abstain report, never a guess.
     """
     from src.incidents_store import IncidentStore  # noqa: F401 (re-export hint)
-    from src.possibility import neighborhood, rank_nodes, upstream_paths
+    from src.possibility import (
+        assert_delay_starved_mass,
+        neighborhood,
+        rank_nodes,
+        upstream_paths,
+    )
     from src.report import build_report
 
     kept = diagnose_from_trigger(g, obs_cols, trigger, back=back)
@@ -382,6 +445,33 @@ def diagnose_incident(
         probs = probs[0]
     # Upstream path enumeration: anchor first, extend while the new head
     # was affected (score >= tau), rank all, choose the best.
+    # Delay STARVED-mass trust gate (candidate #1): the top-ranked root's
+    # injected delay mass must account for downstream STARVED mass (Twin F5
+    # conservation + visibility). A decoupled delay (ep 41242: injected mass
+    # vanishes with empty buffers) would otherwise promote a phantom path
+    # into root/path. Trip -> NEW distinct abstain code decoupled-delay
+    # (per FINAL-left-wirereview §3: all existing codes REJECTED; downstream-
+    # safe via report_incident.py:247 fallback + eval_e2e_selective.py:140-143
+    # dynamic bucketing), same pre-path shape as empty evidence.
+    # C1 (family gating): the assertion is meaningful only for delay faults,
+    # so non-delay families skip entirely. "unknown" + a positive tputlag
+    # signature at the top-ranked root counts as a positively identified
+    # delay origin. C4: inputs are integer step counts (float-typed), so the
+    # committed strict inequalities cannot flake at a boundary.
+    if fault_family in ("delay", "unknown"):
+        top1 = max(probs, key=lambda k: probs[k]) if probs else None
+        if top1 is not None:
+            _dm = _delay_starved_inputs(g, top1, evidence, edges, kept)
+            if _dm is not None:
+                try:
+                    assert_delay_starved_mass(*_dm)
+                except AssertionError as _exc:
+                    return {
+                        "root": None, "fault_family": fault_family, "path": [],
+                        "path_prob": 0.0, "nodes": [], "upstream": "",
+                        "downstream": [], "linked": [], "abstain": "decoupled-delay",
+                        "note": f"delay-mass gate tripped: {_exc}",
+                    }
     ranked = upstream_paths(evidence, edges, anchor)
     path, path_prob = ranked[0]
     root = path[0]

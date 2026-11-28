@@ -66,3 +66,52 @@ def test_unreachable_change_flagged_independent():
     assert (
         "C0" in indep
     )  # loud but unreachable-from-trigger => independent fault, not victim
+
+
+def test_delay_starved_mass_holds_on_visible_delay():
+    from src.possibility import assert_delay_starved_mass
+
+    # 4 extra busy-steps at the delay origin, 2 downstream machines starve
+    # 3 steps each (6 total), no buffer shielding: conservation 6 <= 4x2,
+    # visibility 6 >= 4 - 0.
+    out = assert_delay_starved_mass(4, 6, 2)
+    assert out["ok"] is True
+
+
+def test_delay_starved_mass_rejects_starvation_from_nothing():
+    import pytest
+
+    from src.possibility import assert_delay_starved_mass
+
+    # 2 injected steps cannot explain 9 starved steps over 2 machines.
+    with pytest.raises(AssertionError, match="CONSERVATION"):
+        assert_delay_starved_mass(2, 9, 2)
+
+
+def test_delay_starved_mass_flags_buffer_decoupled_delay():
+    import pytest
+
+    from src.possibility import assert_delay_starved_mass
+
+    # 6 injected steps but only 1 starved step with empty buffers: the delay
+    # went somewhere Twin F5 warns about (caps/backpressure/failover), so
+    # path tuning must not trust this episode.
+    with pytest.raises(AssertionError, match="VISIBILITY"):
+        assert_delay_starved_mass(6, 1, 2, buffer_shield_steps=0.0)
+
+
+def test_delay_starved_mass_shielded_delay_passes():
+    from src.possibility import assert_delay_starved_mass
+
+    # Same hidden delay, but stocked buffers explain the absorption.
+    out = assert_delay_starved_mass(6, 1, 2, buffer_shield_steps=6.0)
+    assert out["ok"] is True and out["side"] == "shielded"
+
+
+def test_delay_starved_mass_vacuous_without_downstream():
+    from src.possibility import assert_delay_starved_mass
+
+    # Sink origins (tails, PKG, ASM2) have no line-internal downstream:
+    # nothing to check.
+    out = assert_delay_starved_mass(6, 0, 0)
+    assert out["ok"] is True and out["side"] == "vacuous"
